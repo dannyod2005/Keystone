@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search, PlayCircle, CheckCircle2, Award, Calendar as CalendarIcon,
   Clock, BookOpen, MessageSquare, FileText, ChevronDown, X, Star,
@@ -1213,6 +1213,17 @@ export default function KeystonePrototype() {
   // form's role toggle; see AppSidebar's demo switch for the prototype-only
   // convenience of flipping it without a second account.
   const [role, setRole] = useState("learner");
+
+  useEffect(() => {
+    const titles = {
+      home: "Keystone Learning",
+      catalogue: "Catalogue — Keystone",
+      dashboard: "My Learning — Keystone",
+      learning: learningCourse ? `${learningCourse.title} — Keystone` : "Keystone",
+      trainer: "Trainer Studio — Keystone",
+    };
+    document.title = titles[screen] || "Keystone";
+  }, [screen, learningCourse]);
 
   const enrolledIds = enrolled.map((e) => e.courseId);
 
