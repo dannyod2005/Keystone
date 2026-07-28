@@ -8,6 +8,8 @@ import {
   Pencil, Plus, Trash2, Video, Save
 } from "lucide-react";
 
+import { INITIAL_COURSES, ENROLLED_DEFAULT, TESTIMONIALS, LEARNER } from "./data/courses";
+
 /* ---------------------------------------------------------------
    KEYSTONE LEARNING — clickable prototype
    Design tokens: see <style> block below.
