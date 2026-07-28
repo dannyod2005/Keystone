@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Search, PlayCircle, CheckCircle2, Award, Calendar as CalendarIcon,
-  Clock, BookOpen, MessageSquare, FileText, ChevronDown, X, Star,
+  Clock, BookOpen, MessageSquare, FileText, ChevronDown, X,
   ArrowRight, LogIn, LayoutGrid, GraduationCap, Bell, ChevronLeft,
   ChevronRight, Flame, Home as HomeIcon, HelpCircle, Menu,
   Mail, Lock, User, BookMarked, Eye, EyeOff,

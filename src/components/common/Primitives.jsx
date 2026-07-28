@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 /* ---------- small pieces ---------- */
 
 export function Stars({ rating }) {
