@@ -4,8 +4,12 @@ import {
 } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 
-import { INITIAL_COURSES, ENROLLED_DEFAULT } from "./data/courses";
+// NOTE: INITIAL_COURSES import removed — course data now comes from the
+// NestJS backend instead of this local mock file. ENROLLED_DEFAULT is
+// untouched for now (enrolment/user data isn't backed by the API yet).
+import { ENROLLED_DEFAULT } from "./data/courses";
 
+import { MarketingHeader } from "./components/layout/MarketingHeader";
 import { AppSidebar } from "./components/layout/AppSidebar";
 import { AppTopbar } from "./components/layout/AppTopbar";
 
@@ -102,8 +106,23 @@ function KeystonePrototype() {
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
-  const [courses, setCourses] = useState(INITIAL_COURSES);
+  // Starts empty rather than seeded with mock data — real courses arrive
+  // asynchronously from the backend once the fetch below completes.
+  const [courses, setCourses] = useState([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+  const [coursesError, setCoursesError] = useState(null);
   const [role, setRole] = useState("learner");
+
+  useEffect(() => {
+    fetch("http://localhost:4000/courses")
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => setCourses(data))
+      .catch((err) => setCoursesError(err.message))
+      .finally(() => setCoursesLoading(false));
+  }, []);
 
   const screen = screenKeyFromPath(location.pathname);
 
