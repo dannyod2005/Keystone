@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, BookMarked, Eye, EyeOff, Plus, Trash2, Save, Video } from "lucide-react";
+import { ChevronLeft, BookMarked, Plus, Trash2, Save, Video } from "lucide-react";
 
 const TRAINER_CATEGORIES = ["Technical", "Business", "Leadership"];
 const TRAINER_LEVELS = ["Beginner", "Intermediate", "Advanced"];

@@ -6,7 +6,6 @@ import { CheckCircle2 } from "lucide-react";
 
 import { INITIAL_COURSES, ENROLLED_DEFAULT } from "./data/courses";
 
-import { MarketingHeader } from "./components/layout/MarketingHeader";
 import { AppSidebar } from "./components/layout/AppSidebar";
 import { AppTopbar } from "./components/layout/AppTopbar";
 

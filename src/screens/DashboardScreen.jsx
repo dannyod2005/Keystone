@@ -1,4 +1,4 @@
-import { PlayCircle, CheckCircle2, Award, X, ChevronLeft, ChevronRight, Flame } from "lucide-react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame } from "lucide-react";
 
 import { LEARNER } from "../data/courses";
 import { KeystoneArch } from "../components/common/Primitives";
