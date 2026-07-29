@@ -4,9 +4,20 @@ import { PlayCircle, CheckCircle2, ChevronLeft} from "lucide-react";
 
 export function LearningScreen({ course, onBack }) {
   const [tab, setTab] = useState("video");
-  const [activeModule, setActiveModule] = useState(2);
+  // FIX: was `useState(2)`, which silently assumed every course has at
+  // least 3 agenda entries (true for the original demo data, but not for
+  // a freshly created course from Trainer Studio with a short/empty
+  // agenda). Always start at the first module instead.
+  const [activeModule, setActiveModule] = useState(0);
 
   if (!course) return null;
+
+  // Guard against a course with no agenda at all (e.g. a brand-new,
+  // not-yet-populated course) instead of letting every course.agenda[i]
+  // access below throw.
+  const agenda = course.agenda ?? [];
+  const hasModules = agenda.length > 0;
+  const currentModuleTitle = agenda[activeModule];
 
   return (
     <div style={{ padding: "22px 32px 40px", maxWidth: 1080 }}>
@@ -14,11 +25,16 @@ export function LearningScreen({ course, onBack }) {
         <ChevronLeft size={15} /> Back to My learning
       </div>
 
+      {!hasModules ? (
+        <div className="ks-card" style={{ padding: 24, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
+          This course doesn't have any modules yet. Check back once the trainer has added content.
+        </div>
+      ) : (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 22 }}>
         <div>
           <div className="ks-card" style={{ padding: "12px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Module {activeModule + 1} of {course.modules}</div>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>{course.agenda[activeModule]}</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>{currentModuleTitle}</div>
           </div>
 
           {/* ASSUMPTION: course.videoUrls[i] is a new optional field a trainer
@@ -31,7 +47,7 @@ export function LearningScreen({ course, onBack }) {
               <iframe
                 key={course.videoUrls[activeModule]}
                 src={course.videoUrls[activeModule]}
-                title={course.agenda[activeModule]}
+                title={currentModuleTitle}
                 style={{ width: "100%", height: "100%", border: "none" }}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
@@ -43,7 +59,7 @@ export function LearningScreen({ course, onBack }) {
             </div>
           )}
           <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 18 }}>
-            {course.videoUrls?.[activeModule] ? course.agenda[activeModule] : `12:40 · ${course.agenda[activeModule]}`}
+            {course.videoUrls?.[activeModule] ? currentModuleTitle : `12:40 · ${currentModuleTitle}`}
           </div>
 
           <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 16 }}>
@@ -54,7 +70,7 @@ export function LearningScreen({ course, onBack }) {
 
           {tab === "video" && (
             <p style={{ fontSize: 14, color: "var(--slate)", lineHeight: 1.6 }}>
-              This module covers {course.agenda[activeModule].toLowerCase()}. Follow along in the video, then apply it in the short exercise before moving to the quiz.
+              This module covers {(currentModuleTitle ?? "this topic").toLowerCase()}. Follow along in the video, then apply it in the short exercise before moving to the quiz.
             </p>
           )}
           {tab === "notes" && (
@@ -96,7 +112,7 @@ export function LearningScreen({ course, onBack }) {
             className="ks-btn ks-btn-gold"
             style={{ marginTop: 20, opacity: activeModule >= course.modules - 1 ? 0.5 : 1 }}
             disabled={activeModule >= course.modules - 1}
-            onClick={() => setActiveModule((m) => Math.min(m + 1, course.modules - 1))}
+            onClick={() => setActiveModule((m) => Math.min(m + 1, agenda.length - 1))}
           >
             <CheckCircle2 size={16} />
             {activeModule >= course.modules - 1 ? "Course complete" : "Mark complete & continue"}
@@ -115,7 +131,7 @@ export function LearningScreen({ course, onBack }) {
             <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 8, marginBottom: 14 }}>{activeModule} of {course.modules} modules complete</div>
             <hr className="ks-hairline" style={{ margin: "0 0 10px" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {course.agenda.map((a, i) => (
+              {agenda.map((a, i) => (
                 <div key={a} onClick={() => setActiveModule(i)} style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "8px 8px", borderRadius: 8, cursor: "pointer",
                   background: i === activeModule ? "var(--gold-tint)" : "transparent",
@@ -141,6 +157,7 @@ export function LearningScreen({ course, onBack }) {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

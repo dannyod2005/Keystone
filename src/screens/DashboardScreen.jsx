@@ -45,6 +45,7 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
           <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 12 }}>Continue learning</div>
           {inProgress.map((e) => {
             const c = courses.find((x) => x.id === e.courseId);
+            if (!c) return null;
             return (
               <div key={e.courseId} className="ks-card" style={{ padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
                 <KeystoneArch progress={e.progress} size={48} />

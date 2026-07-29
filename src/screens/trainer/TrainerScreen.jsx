@@ -5,9 +5,19 @@ import { CategoryDot } from "../../components/common/Primitives";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
 
 function nextCourseId(courses) {
+  // Build the set of taken ids once, up front. The while loop below then
+  // only ever checks membership against this fixed Set — no function is
+  // declared inside the loop, so there's nothing for no-loop-func to flag,
+  // and it's O(n) instead of re-scanning the whole courses array on every
+  // candidate id.
+  const existingIds = new Set(courses.map((c) => c.id));
+
   let n = courses.length + 1;
   let id = `c${n}`;
-  while (courses.some((c) => c.id === id)) { n += 1; id = `c${n}`; }
+  while (existingIds.has(id)) {
+    n += 1;
+    id = `c${n}`;
+  }
   return id;
 }
 
