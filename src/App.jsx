@@ -1,18 +1,13 @@
 import React, { useState, useEffect } from "react";
 import {
-  Search, PlayCircle, CheckCircle2, Award, Calendar as CalendarIcon,
-  Clock, BookOpen, MessageSquare, ChevronDown, X,
-  ArrowRight, LayoutGrid, GraduationCap, ChevronLeft,
-  ChevronRight, Flame, Home as HomeIcon, HelpCircle, Menu,
-  Mail, Lock, User, BookMarked, Eye, EyeOff,
-  Pencil, Plus, Trash2, Video, Save
-} from "lucide-react";
+  BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation
+} from "react-router-dom";
+import { CheckCircle2 } from "lucide-react";
 
-import { INITIAL_COURSES, ENROLLED_DEFAULT, TESTIMONIALS, LEARNER } from "./data/courses";
-import { Stars, KeystoneArch, CategoryDot } from "./components/common/Primitives";
+import { INITIAL_COURSES, ENROLLED_DEFAULT } from "./data/courses";
 
 import { MarketingHeader } from "./components/layout/MarketingHeader";
-import { AppSidebar} from "./components/layout/AppSidebar"
+import { AppSidebar } from "./components/layout/AppSidebar";
 import { AppTopbar } from "./components/layout/AppTopbar";
 
 import { CourseDetailModal } from "./components/modals/CourseDetailModal";
@@ -25,30 +20,97 @@ import { LearningScreen } from "./screens/LearningScreen";
 import { TrainerScreen } from "./screens/trainer/TrainerScreen";
 
 /* ---------------------------------------------------------------
-   KEYSTONE LEARNING — clickable prototype
+   KEYSTONE LEARNING — clickable prototype (now routed)
 --------------------------------------------------------------- */
 
-/* ---------- Root ---------- */
+// Maps a pathname to the "screen key" the sidebar/topbar expect,
+// so AppSidebar/AppTopbar don't need to know about router internals.
+function screenKeyFromPath(pathname) {
+  if (pathname.startsWith("/catalogue")) return "catalogue";
+  if (pathname.startsWith("/dashboard")) return "dashboard";
+  if (pathname.startsWith("/learning")) return "learning";
+  if (pathname.startsWith("/trainer")) return "trainer";
+  return "home";
+}
 
-export default function KeystonePrototype() {
-  const [screen, setScreen] = useState("home");
+/* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
+function AppShell({ loggedIn, role, onSwitchRole, title, children }) {
+  const location = useLocation();
+  const screen = screenKeyFromPath(location.pathname);
+  const navigate = useNavigate();
+
+  const showSidebar = loggedIn; // home never renders AppShell at all (see routes below)
+
+  return (
+    <div style={{ display: "flex", minHeight: 640 }}>
+      {showSidebar && (
+        <AppSidebar
+          screen={screen}
+          onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
+          role={role}
+          onSwitchRole={onSwitchRole}
+        />
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {showSidebar && <AppTopbar title={title} />}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Route guards ---------- */
+function RequireAuth({ loggedIn, children }) {
+  const location = useLocation();
+  if (!loggedIn) {
+    // Bounce unauthenticated visitors back to the marketing home page,
+    // remembering where they were headed in case you want to resume
+    // after login later.
+    return <Navigate to="/" replace state={{ from: location.pathname }} />;
+  }
+  return children;
+}
+
+function RequireTrainer({ role, children }) {
+  if (role !== "trainer") {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
+
+/* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
+function LearningRoute({ courses }) {
+  const { courseId } = useParams();
+  const navigate = useNavigate();
+  const course = courses.find((c) => String(c.id) === courseId);
+
+  if (!course) {
+    // Unknown/removed course id — send them back to their dashboard
+    // instead of rendering a blank learning screen.
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <LearningScreen course={course} onBack={() => navigate("/dashboard")} />;
+}
+
+/* ---------- Root ---------- */
+function KeystonePrototype() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [loggedIn, setLoggedIn] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [enrolled, setEnrolled] = useState(ENROLLED_DEFAULT);
-  const [learningCourse, setLearningCourse] = useState(null);
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
-  // NEW: course catalogue is now state (seeded from INITIAL_COURSES) instead
-  // of a static module-level constant, so trainer adds/edits re-render every
-  // learner-facing screen that reads it.
   const [courses, setCourses] = useState(INITIAL_COURSES);
-  // NEW: role flag gating the Trainer studio. Set from the AuthModal signup
-  // form's role toggle; see AppSidebar's demo switch for the prototype-only
-  // convenience of flipping it without a second account.
   const [role, setRole] = useState("learner");
 
+  const screen = screenKeyFromPath(location.pathname);
+
   useEffect(() => {
+    const learningCourse =
+      screen === "learning" ? courses.find((c) => `/learning/${c.id}` === location.pathname) : null;
     const titles = {
       home: "Keystone Learning",
       catalogue: "Catalogue — Keystone",
@@ -57,7 +119,7 @@ export default function KeystonePrototype() {
       trainer: "Trainer Studio — Keystone",
     };
     document.title = titles[screen] || "Keystone";
-  }, [screen, learningCourse]);
+  }, [screen, location.pathname, courses]);
 
   const enrolledIds = enrolled.map((e) => e.courseId);
 
@@ -70,21 +132,23 @@ export default function KeystonePrototype() {
     setTimeout(() => setToast(null), 2600);
   }
 
-  function goTo(key) {
-    setScreen(key);
-  }
   function openAuth(mode) {
     setAuthMode(mode);
   }
+
   function completeEnrol(course) {
     if (!enrolledIds.includes(course.id)) {
-      setEnrolled((prev) => [...prev, { courseId: course.id, progress: 0, status: "in-progress", lastAccessed: "just now" }]);
+      setEnrolled((prev) => [
+        ...prev,
+        { courseId: course.id, progress: 0, status: "in-progress", lastAccessed: "just now" },
+      ]);
       setToast(`Enrolled in "${course.title}"`);
       setTimeout(() => setToast(null), 2600);
     }
     setSelectedCourse(null);
-    setScreen("dashboard");
+    navigate("/dashboard");
   }
+
   function handleAuthSubmit(mode, formData) {
     setLoggedIn(true);
     setAuthMode(null);
@@ -97,9 +161,10 @@ export default function KeystonePrototype() {
       completeEnrol(pendingCourse);
       setPendingCourse(null);
     } else {
-      setScreen("dashboard");
+      navigate("/dashboard");
     }
   }
+
   function handleEnrol(course) {
     if (!loggedIn) {
       setPendingCourse(course);
@@ -109,55 +174,119 @@ export default function KeystonePrototype() {
     }
     completeEnrol(course);
   }
+
   function handleStartLearning(course) {
-    setLearningCourse(course);
-    setScreen("learning");
+    navigate(`/learning/${course.id}`);
   }
 
-  const showSidebar = loggedIn && (screen === "dashboard" || screen === "learning" || screen === "catalogue" || screen === "trainer");
+  const shellTitle =
+    screen === "dashboard" ? "My learning" :
+    screen === "catalogue" ? "Catalogue" :
+    screen === "learning" ? (courses.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
+    screen === "trainer" ? "Trainer studio" : "";
 
   return (
     <div className="ks-root">
-      <div style={{ display: "flex", minHeight: 640 }}>
-        {showSidebar && (
-          <AppSidebar screen={screen} onGo={goTo} role={role}
-            onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} />
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {showSidebar && (
-            <AppTopbar title={
-              screen === "dashboard" ? "My learning" :
-              screen === "catalogue" ? "Catalogue" :
-              screen === "learning" ? learningCourse?.title :
-              screen === "trainer" ? "Trainer studio" : ""
-            } />
-          )}
+      <Routes>
+        <Route
+          path="/"
+          element={<HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} />}
+        />
 
-          {screen === "home" && <HomeScreen onGo={goTo} onAuth={openAuth} courses={courses} />}
-          {screen === "catalogue" && (
-            <CatalogueScreen loggedIn={loggedIn} onGo={goTo} onAuth={openAuth}
-              onOpenCourse={setSelectedCourse} enrolledIds={enrolledIds} courses={courses} />
-          )}
-          {screen === "dashboard" && (
-            <DashboardScreen enrolled={enrolled} onOpenCourse={setSelectedCourse} onStartLearning={handleStartLearning} courses={courses} />
-          )}
-          {screen === "learning" && <LearningScreen course={learningCourse} onBack={() => goTo("dashboard")} />}
-          {screen === "trainer" && role === "trainer" && (
-            <TrainerScreen courses={courses} onSaveCourse={saveCourse} />
-          )}
-        </div>
-      </div>
+        <Route
+          path="/catalogue"
+          element={
+            <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title={shellTitle}>
+              <CatalogueScreen
+                loggedIn={loggedIn}
+                onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
+                onAuth={openAuth}
+                onOpenCourse={setSelectedCourse}
+                enrolledIds={enrolledIds}
+                courses={courses}
+              />
+            </AppShell>
+          }
+        />
 
-      <CourseDetailModal course={selectedCourse} onClose={() => setSelectedCourse(null)}
-        onEnrol={handleEnrol} isEnrolled={selectedCourse ? enrolledIds.includes(selectedCourse.id) : false} />
+        <Route
+          path="/dashboard"
+          element={
+            <RequireAuth loggedIn={loggedIn}>
+              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title={shellTitle}>
+                <DashboardScreen
+                  enrolled={enrolled}
+                  onOpenCourse={setSelectedCourse}
+                  onStartLearning={handleStartLearning}
+                  courses={courses}
+                />
+              </AppShell>
+            </RequireAuth>
+          }
+        />
 
-      <AuthModal mode={authMode} onClose={() => { setAuthMode(null); setPendingCourse(null); }} onSubmit={handleAuthSubmit} />
+        <Route
+          path="/learning/:courseId"
+          element={
+            <RequireAuth loggedIn={loggedIn}>
+              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title={shellTitle}>
+                <LearningRoute courses={courses} />
+              </AppShell>
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/trainer"
+          element={
+            <RequireAuth loggedIn={loggedIn}>
+              <RequireTrainer role={role}>
+                <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title={shellTitle}>
+                  <TrainerScreen courses={courses} onSaveCourse={saveCourse} />
+                </AppShell>
+              </RequireTrainer>
+            </RequireAuth>
+          }
+        />
+
+        {/* Fallback: unknown paths go home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      <CourseDetailModal
+        course={selectedCourse}
+        onClose={() => setSelectedCourse(null)}
+        onEnrol={handleEnrol}
+        isEnrolled={selectedCourse ? enrolledIds.includes(selectedCourse.id) : false}
+      />
+
+      <AuthModal
+        mode={authMode}
+        onClose={() => { setAuthMode(null); setPendingCourse(null); }}
+        onSubmit={handleAuthSubmit}
+      />
 
       {toast && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "var(--ink)", color: "var(--paper)", padding: "12px 20px", borderRadius: 10, fontSize: 13.5, fontWeight: 500, display: "flex", alignItems: "center", gap: 8, zIndex: 60 }}>
+        <div
+          style={{
+            position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+            background: "var(--ink)", color: "var(--paper)", padding: "12px 20px",
+            borderRadius: 10, fontSize: 13.5, fontWeight: 500, display: "flex",
+            alignItems: "center", gap: 8, zIndex: 60,
+          }}
+        >
           <CheckCircle2 size={16} color="var(--gold)" /> {toast}
         </div>
       )}
     </div>
+  );
+}
+
+/* ---------- Default export: wraps in BrowserRouter ---------- */
+export default function App() {
+  return (
+    <BrowserRouter>
+      <KeystonePrototype />
+    </BrowserRouter>
   );
 }
