@@ -1,21 +1,41 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Course } from './entities/course.entity';
-import { MOCK_COURSES } from './mock-courses.data';
 
 @Injectable()
 export class CoursesService {
-  // TEMPORARY: returns hardcoded data. Once TypeORM is connected, this
-  // becomes something like:
-  //   constructor(
-  //     @InjectRepository(Course) private coursesRepo: Repository<Course>,
-  //   ) {}
-  //   findAll(): Promise<Course[]> {
-  //     return this.coursesRepo.find();
-  //   }
-  // The method signature (returns Promise<Course[]>) is already written to
-  // match that future shape, so the controller below won't need to change
-  // at all when the database is wired up.
+  constructor(
+    @InjectRepository(Course)
+    private readonly coursesRepo: Repository<Course>,
+  ) {}
+
   findAll(): Promise<Course[]> {
-    return Promise.resolve(MOCK_COURSES);
+    return this.coursesRepo.find({
+      relations: { modules: true, credits: true, faqs: true },
+      order: {
+        modules: { position: 'ASC' },
+        credits: { position: 'ASC' },
+        faqs: { position: 'ASC' },
+      },
+    });
+  }
+
+  async findOne(id: string): Promise<Course> {
+    const course = await this.coursesRepo.findOne({
+      where: { id },
+      relations: { modules: true, credits: true, faqs: true },
+      order: {
+        modules: { position: 'ASC' },
+        credits: { position: 'ASC' },
+        faqs: { position: 'ASC' },
+      },
+    });
+
+    if (!course) {
+      throw new NotFoundException(`Course with id "${id}" not found`);
+    }
+
+    return course;
   }
 }
