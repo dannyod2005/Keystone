@@ -1,56 +1,55 @@
-import { Entity, Column, PrimaryColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { CourseModule } from './course-module.entity';
+import { CourseCredit } from './course-credit.entity';
+import { CourseFaq } from './course-faq.entity';
 
-@Entity()
+@Entity('courses')
 export class Course {
-  @PrimaryColumn()
-  id!: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column()
-  title!: string;
+  title: string;
 
   @Column()
-  provider!: string;
+  provider: string;
 
   @Column()
-  category!: string;
+  category: string; // Technical | Business | Leadership
 
   @Column()
-  level!: string;
+  level: string; // Beginner | Intermediate | Advanced
+
+  @Column({ type: 'int', default: 0 })
+  hours: number;
+
+  @Column({ type: 'int', default: 0 })
+  projects: number;
+
+  @Column({ type: 'decimal', nullable: true })
+  rating: number;
+
+  @Column({ type: 'int', default: 0 })
+  learners: number;
 
   @Column()
-  hours!: number;
+  color: string; // ink | gold | success | coral
 
-  @Column()
-  projects!: number;
+  @Column({ type: 'text', nullable: true })
+  blurb: string;
 
-  @Column('float')
-  rating!: number;
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
 
-  @Column()
-  learners!: number;
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
 
-  @Column()
-  color!: string;
+  @OneToMany(() => CourseModule, (m) => m.course)
+  modules: CourseModule[];
 
-  @Column()
-  blurb!: string;
+  @OneToMany(() => CourseCredit, (c) => c.course)
+  credits: CourseCredit[];
 
-  // Postgres array of plain strings — maps directly to a JS string[].
-  @Column('text', { array: true })
-  agenda!: string[];
-
-  @Column()
-  modules!: number;
-
-  @Column('text', { array: true })
-  credits!: string[];
-
-  // Optional fields (added for trainer-authored video/FAQ content).
-  // 'simple-json' stores this as a JSON blob in a single column — the
-  // easiest option for now rather than creating separate related tables.
-  @Column('simple-json', { nullable: true })
-  videoUrls?: string[];
-
-  @Column('simple-json', { nullable: true })
-  faq?: { q: string; a: string }[];
+  @OneToMany(() => CourseFaq, (f) => f.course)
+  faqs: CourseFaq[];
 }
