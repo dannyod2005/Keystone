@@ -1,10 +1,22 @@
-import { Course } from './entities/course.entity';
+interface MockCourse {
+  id: string,
+  title: string;
+  provider: string;
+  category: string;
+  level: string;
+  hours: number;
+  projects: number;
+  rating: number;
+  learners: number;
+  color: string;
+  blurb: string;
+  agenda: string[];
+  modules: number;
+  credits: string[];
+}
 
-// TEMPORARY: stands in for a real database query. Once TypeORM is
-// connected to a live Postgres database, CoursesService.findAll() will
-// replace this with an actual repository call — this file can then be
-// deleted, or kept as a one-off seed script.
-export const MOCK_COURSES: Course[] = [
+
+export const MOCK_COURSES: MockCourse[] = [
   {
     id: 'c1', title: 'AI Engineering with Claude', provider: 'Anthropic Academy',
     category: 'Technical', level: 'Intermediate', hours: 24, projects: 13,
