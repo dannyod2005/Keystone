@@ -27,7 +27,7 @@ export class Course {
   projects: number;
 
   @Column({ type: 'decimal', nullable: true })
-  rating: number;
+  rating: number | null;
 
   @Column({ type: 'int', default: 0 })
   learners: number;
@@ -36,7 +36,7 @@ export class Course {
   color: string; // ink | gold | success | coral
 
   @Column({ type: 'text', nullable: true })
-  blurb: string;
+  blurb: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

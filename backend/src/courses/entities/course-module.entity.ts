@@ -14,9 +14,9 @@ export class CourseModule {
   @Column({ type: 'int' })
   position: number;
 
-  @Column()
+  @Column({ type: 'varchar' })
   title: string;
 
   @Column({ name: 'video_url', type: 'text', nullable: true })
-  videoUrl: string;
+  videoUrl: string | null;
 }
