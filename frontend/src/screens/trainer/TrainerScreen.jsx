@@ -4,23 +4,6 @@ import { Pencil, Plus } from "lucide-react";
 import { CategoryDot } from "../../components/common/Primitives";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
 
-function nextCourseId(courses) {
-  // Build the set of taken ids once, up front. The while loop below then
-  // only ever checks membership against this fixed Set — no function is
-  // declared inside the loop, so there's nothing for no-loop-func to flag,
-  // and it's O(n) instead of re-scanning the whole courses array on every
-  // candidate id.
-  const existingIds = new Set(courses.map((c) => c.id));
-
-  let n = courses.length + 1;
-  let id = `c${n}`;
-  while (existingIds.has(id)) {
-    n += 1;
-    id = `c${n}`;
-  }
-  return id;
-}
-
 export function TrainerScreen({ courses, onSaveCourse }) {
   const [editingId, setEditingId] = useState(null); // null = list view, "__new" = creating, else course id
 
@@ -28,13 +11,17 @@ export function TrainerScreen({ courses, onSaveCourse }) {
     editingId === "__new" ? null :
     editingId ? courses.find((c) => c.id === editingId) : null;
 
+  async function handleSave(draft) {
+    await onSaveCourse(draft); // throws on failure — editor catches and shows the error
+    setEditingId(null);
+  }
+
   if (editingId) {
     return (
       <TrainerCourseEditor
         course={editingCourse}
         onCancel={() => setEditingId(null)}
-        onSave={(draft) => { onSaveCourse(draft); setEditingId(null); }}
-        nextId={() => nextCourseId(courses)}
+        onSave={handleSave}
       />
     );
   }

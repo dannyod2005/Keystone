@@ -141,13 +141,35 @@ function KeystonePrototype() {
 
   const enrolledIds = enrolled.map((e) => e.courseId);
 
-  function saveCourse(draft) {
-    setCourses((prev) => {
-      const exists = prev.some((c) => c.id === draft.id);
-      return exists ? prev.map((c) => (c.id === draft.id ? draft : c)) : [...prev, draft];
+  async function saveCourse(draft) {
+    const isNew = !draft.id;
+    const url = isNew
+      ? `${process.env.REACT_APP_API_URL}/courses`
+      : `${process.env.REACT_APP_API_URL}/courses/${draft.id}`;
+
+    const res = await fetch(url, {
+      method: isNew ? "POST" : "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft.payload),
     });
-    setToast(`Saved "${draft.title}"`);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const message = Array.isArray(body?.message)
+        ? body.message.join(", ")
+        : body?.message || `Request failed: ${res.status}`;
+      throw new Error(message);
+    }
+
+    const saved = await res.json();
+
+    setCourses((prev) => {
+      const exists = prev.some((c) => c.id === saved.id);
+      return exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [...prev, saved];
+    });
+    setToast(`Saved "${saved.title}"`);
     setTimeout(() => setToast(null), 2600);
+    return saved;
   }
 
   function openAuth(mode) {

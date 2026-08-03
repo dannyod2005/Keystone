@@ -7,70 +7,118 @@ const TRAINER_COLORS = ["ink", "gold", "success", "coral"];
 
 function emptyCourseDraft() {
   return {
-    id: null, // filled in on save for new courses
     title: "", provider: "", category: TRAINER_CATEGORIES[0], level: TRAINER_LEVELS[0],
-    hours: 4, projects: 1, rating: 0, learners: 0, color: TRAINER_COLORS[0],
-    blurb: "", agenda: [""], modules: 1, credits: [""],
-    videoUrls: [""], faq: [{ q: "", a: "" }],
+    hours: 4, projects: 1, color: TRAINER_COLORS[0],
+    blurb: "",
+    modules: [{ title: "", videoUrl: "" }],
+    credits: [{ line: "" }],
+    faqs: [{ question: "", answer: "" }],
   };
 }
 
-export function TrainerCourseEditor({ course, onCancel, onSave, nextId }) {
+export function TrainerCourseEditor({ course, onCancel, onSave }) {
   const [draft, setDraft] = useState(() => {
     if (!course) return emptyCourseDraft();
     // Clone so in-progress edits don't mutate the live course until Save.
+    // Each item keeps its real database id — that's what lets PUT preserve
+    // identity instead of deleting and recreating everything on save.
     return {
-      ...course,
-      agenda: [...course.agenda],
-      credits: [...course.credits],
-      videoUrls: course.agenda.map((_, i) => course.videoUrls?.[i] || ""),
-      faq: course.faq && course.faq.length > 0 ? course.faq.map((f) => ({ ...f })) : [{ q: "", a: "" }],
+      title: course.title,
+      provider: course.provider,
+      category: course.category,
+      level: course.level,
+      hours: course.hours,
+      projects: course.projects,
+      color: course.color,
+      blurb: course.blurb ?? "",
+      modules: course.modules.map((m) => ({ id: m.id, title: m.title, videoUrl: m.videoUrl ?? "" })),
+      credits: course.credits.map((c) => ({ id: c.id, line: c.line })),
+      faqs: course.faqs.map((f) => ({ id: f.id, question: f.question, answer: f.answer })),
     };
   });
+
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   function set(field, v) { setDraft((d) => ({ ...d, [field]: v })); }
 
   function setModule(i, field, v) {
-    setDraft((d) => {
-      const agenda = [...d.agenda];
-      const videoUrls = [...d.videoUrls];
-      if (field === "title") agenda[i] = v; else videoUrls[i] = v;
-      return { ...d, agenda, videoUrls };
-    });
+    setDraft((d) => ({
+      ...d,
+      modules: d.modules.map((m, x) => (x === i ? { ...m, [field]: v } : m)),
+    }));
   }
   function addModule() {
-    setDraft((d) => ({ ...d, agenda: [...d.agenda, ""], videoUrls: [...d.videoUrls, ""] }));
+    setDraft((d) => ({ ...d, modules: [...d.modules, { title: "", videoUrl: "" }] }));
   }
   function removeModule(i) {
-    setDraft((d) => ({ ...d, agenda: d.agenda.filter((_, x) => x !== i), videoUrls: d.videoUrls.filter((_, x) => x !== i) }));
+    setDraft((d) => ({ ...d, modules: d.modules.filter((_, x) => x !== i) }));
   }
 
   function setFaq(i, field, v) {
-    setDraft((d) => { const faq = d.faq.map((f, x) => (x === i ? { ...f, [field]: v } : f)); return { ...d, faq }; });
+    setDraft((d) => ({
+      ...d,
+      faqs: d.faqs.map((f, x) => (x === i ? { ...f, [field]: v } : f)),
+    }));
   }
-  function addFaq() { setDraft((d) => ({ ...d, faq: [...d.faq, { q: "", a: "" }] })); }
-  function removeFaq(i) { setDraft((d) => ({ ...d, faq: d.faq.filter((_, x) => x !== i) })); }
+  function addFaq() { setDraft((d) => ({ ...d, faqs: [...d.faqs, { question: "", answer: "" }] })); }
+  function removeFaq(i) { setDraft((d) => ({ ...d, faqs: d.faqs.filter((_, x) => x !== i) })); }
 
-  function setCredit(i, v) { setDraft((d) => ({ ...d, credits: d.credits.map((c, x) => (x === i ? v : c)) })); }
-  function addCredit() { setDraft((d) => ({ ...d, credits: [...d.credits, ""] })); }
+  function setCredit(i, v) {
+    setDraft((d) => ({
+      ...d,
+      credits: d.credits.map((c, x) => (x === i ? { ...c, line: v } : c)),
+    }));
+  }
+  function addCredit() { setDraft((d) => ({ ...d, credits: [...d.credits, { line: "" }] })); }
   function removeCredit(i) { setDraft((d) => ({ ...d, credits: d.credits.filter((_, x) => x !== i) })); }
 
-  const canSave = draft.title.trim().length > 1 && draft.agenda.some((a) => a.trim().length > 0);
+  const canSave = draft.title.trim().length > 1 && draft.modules.some((m) => m.title.trim().length > 0);
 
-  function handleSave() {
+  async function handleSave() {
     if (!canSave) return;
-    const agenda = draft.agenda.filter((a) => a.trim().length > 0);
-    const videoUrls = draft.agenda.map((a, i) => (a.trim().length > 0 ? draft.videoUrls[i] || "" : null)).filter((v) => v !== null);
-    const faq = draft.faq.filter((f) => f.q.trim().length > 0 && f.a.trim().length > 0);
-    const credits = draft.credits.filter((c) => c.trim().length > 0);
-    onSave({
-      ...draft,
-      id: draft.id || nextId(),
-      agenda, videoUrls, faq, credits,
-      modules: agenda.length,
+
+    // Build a clean payload with ONLY the fields the backend DTO declares.
+    // The global ValidationPipe rejects (400) any request containing extra
+    // fields, so nothing beyond this shape can be sent.
+    const payload = {
+      title: draft.title,
+      provider: draft.provider,
+      category: draft.category,
+      level: draft.level,
       hours: Number(draft.hours) || 0,
       projects: Number(draft.projects) || 0,
-    });
+      color: draft.color,
+      blurb: draft.blurb || undefined,
+      modules: draft.modules
+        .filter((m) => m.title.trim().length > 0)
+        .map((m) => ({
+          ...(m.id ? { id: m.id } : {}),
+          title: m.title,
+          videoUrl: m.videoUrl || null,
+        })),
+      credits: draft.credits
+        .filter((c) => c.line.trim().length > 0)
+        .map((c) => ({ ...(c.id ? { id: c.id } : {}), line: c.line })),
+      faqs: draft.faqs
+        .filter((f) => f.question.trim().length > 0 && f.answer.trim().length > 0)
+        .map((f) => ({
+          ...(f.id ? { id: f.id } : {}),
+          question: f.question,
+          answer: f.answer,
+        })),
+    };
+
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave({ id: course?.id ?? null, payload });
+      // On success, the parent (TrainerScreen) unmounts this component —
+      // no need to reset saving/error state here.
+    } catch (err) {
+      setSaveError(err.message || "Failed to save course. Please try again.");
+      setSaving(false);
+    }
   }
 
   const field = { marginBottom: 16 };
@@ -131,15 +179,12 @@ export function TrainerCourseEditor({ course, onCancel, onSave, nextId }) {
           <Video size={14} color="var(--slate-light)" />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Modules &amp; video</span>
         </div>
-        {draft.agenda.map((title, i) => (
-          <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
+        {draft.modules.map((m, i) => (
+          <div key={m.id ?? `new-${i}`} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--slate-light)", width: 20, marginTop: 9 }}>{String(i + 1).padStart(2, "0")}</span>
             <div style={{ flex: 1 }}>
-              <input style={{ ...rowInput, marginBottom: 6 }} value={title} onChange={(e) => setModule(i, "title", e.target.value)} placeholder="Module title" />
-              {/* ASSUMPTION: URL-based video only (paste a YouTube/Vimeo embed
-                  link) — direct file upload is out of scope without a real
-                  backend/storage layer, per the brief's default. */}
-              <input style={rowInput} value={draft.videoUrls[i] || ""} onChange={(e) => setModule(i, "video", e.target.value)}
+              <input style={{ ...rowInput, marginBottom: 6 }} value={m.title} onChange={(e) => setModule(i, "title", e.target.value)} placeholder="Module title" />
+              <input style={rowInput} value={m.videoUrl || ""} onChange={(e) => setModule(i, "videoUrl", e.target.value)}
                 placeholder="Video embed URL (e.g. https://www.youtube.com/embed/...)" />
             </div>
             <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 10 }} onClick={() => removeModule(i)} />
@@ -150,11 +195,11 @@ export function TrainerCourseEditor({ course, onCancel, onSave, nextId }) {
 
       <div className="ks-card" style={{ padding: 20, marginBottom: 16 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 14 }}>FAQ</div>
-        {draft.faq.map((f, i) => (
-          <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
+        {draft.faqs.map((f, i) => (
+          <div key={f.id ?? `new-${i}`} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
             <div style={{ flex: 1 }}>
-              <input style={{ ...rowInput, marginBottom: 6 }} value={f.q} onChange={(e) => setFaq(i, "q", e.target.value)} placeholder="Question" />
-              <input style={rowInput} value={f.a} onChange={(e) => setFaq(i, "a", e.target.value)} placeholder="Answer" />
+              <input style={{ ...rowInput, marginBottom: 6 }} value={f.question} onChange={(e) => setFaq(i, "question", e.target.value)} placeholder="Question" />
+              <input style={rowInput} value={f.answer} onChange={(e) => setFaq(i, "answer", e.target.value)} placeholder="Answer" />
             </div>
             <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 10 }} onClick={() => removeFaq(i)} />
           </div>
@@ -168,8 +213,8 @@ export function TrainerCourseEditor({ course, onCancel, onSave, nextId }) {
           <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Sources &amp; credits</span>
         </div>
         {draft.credits.map((c, i) => (
-          <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-            <input style={rowInput} value={c} onChange={(e) => setCredit(i, e.target.value)} placeholder="e.g. Curriculum & instruction: ..." />
+          <div key={c.id ?? `new-${i}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <input style={rowInput} value={c.line} onChange={(e) => setCredit(i, e.target.value)} placeholder="e.g. Curriculum & instruction: ..." />
             <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeCredit(i)} />
           </div>
         ))}
@@ -177,12 +222,13 @@ export function TrainerCourseEditor({ course, onCancel, onSave, nextId }) {
       </div>
 
       <div style={{ display: "flex", gap: 10 }}>
-        <button className="ks-btn ks-btn-gold" style={{ opacity: canSave ? 1 : 0.5 }} disabled={!canSave} onClick={handleSave}>
-          <Save size={15} /> Save course
+        <button className="ks-btn ks-btn-gold" style={{ opacity: canSave && !saving ? 1 : 0.5 }} disabled={!canSave || saving} onClick={handleSave}>
+          <Save size={15} /> {saving ? "Saving…" : "Save course"}
         </button>
-        <button className="ks-btn ks-btn-ghost" onClick={onCancel}>Cancel</button>
+        <button className="ks-btn ks-btn-ghost" onClick={onCancel} disabled={saving}>Cancel</button>
       </div>
       {!canSave && <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>Add a title and at least one module to save.</div>}
+      {saveError && <div style={{ fontSize: 12.5, color: "var(--coral)", marginTop: 8 }}>{saveError}</div>}
     </div>
   );
 }
