@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Course } from './entities/course.entity';
+import { CourseModule } from './entities/course-module.entity';
+import { CourseCredit } from './entities/course-credit.entity';
+import { CourseFaq } from './entities/course-faq.entity';
+import { CreateCourseDto } from './dto/create-course.dto';
+import { UpdateCourseDto } from './dto/update-course.dto';
 
 @Injectable()
 export class CoursesService {
@@ -37,5 +42,129 @@ export class CoursesService {
     }
 
     return course;
+  }
+
+  create(dto: CreateCourseDto): Promise<Course> {
+    const course = this.coursesRepo.create({
+      title: dto.title,
+      provider: dto.provider,
+      category: dto.category,
+      level: dto.level,
+      hours: dto.hours,
+      projects: dto.projects,
+      color: dto.color,
+      blurb: dto.blurb ?? null,
+      modules: dto.modules.map((m, i) => ({
+        position: i,
+        title: m.title,
+        videoUrl: m.videoUrl ?? null,
+      })),
+      credits: (dto.credits ?? []).map((c, i) => ({
+        position: i,
+        line: c.line,
+      })),
+      faqs: (dto.faqs ?? []).map((f, i) => ({
+        position: i,
+        question: f.question,
+        answer: f.answer,
+      })),
+    });
+
+    return this.coursesRepo.save(course);
+  }
+
+  async update(id: string, dto: UpdateCourseDto): Promise<Course> {
+    const course = await this.findOne(id); // 404s if missing
+
+    return this.coursesRepo.manager.transaction(async (manager) => {
+      // Delete orphaned children FIRST, in their own statements, before
+      // any insert/update happens. TypeORM's cascade-save always runs
+      // inserts before deletes within a single save() call, which trips
+      // the (course_id, position) unique constraint the moment a new
+      // module reuses a position a soon-to-be-deleted module still
+      // occupies. Deleting explicitly beforehand means that position is
+      // already free by the time save() runs.
+      await this.deleteOrphaned(manager, CourseModule, course.modules, dto.modules);
+      await this.deleteOrphaned(manager, CourseCredit, course.credits, dto.credits ?? []);
+      await this.deleteOrphaned(manager, CourseFaq, course.faqs, dto.faqs ?? []);
+
+      course.title = dto.title;
+      course.provider = dto.provider;
+      course.category = dto.category;
+      course.level = dto.level;
+      course.hours = dto.hours;
+      course.projects = dto.projects;
+      course.color = dto.color;
+      course.blurb = dto.blurb ?? null;
+
+      course.modules = this.mergeChildren(
+        course.modules,
+        dto.modules,
+        (m, position) => ({ position, title: m.title, videoUrl: m.videoUrl ?? null }),
+      ) as Course['modules'];
+      course.credits = this.mergeChildren(
+        course.credits,
+        dto.credits ?? [],
+        (c, position) => ({ position, line: c.line }),
+      ) as Course['credits'];
+      course.faqs = this.mergeChildren(
+        course.faqs,
+        dto.faqs ?? [],
+        (f, position) => ({ position, question: f.question, answer: f.answer }),
+      ) as Course['faqs'];
+
+      return manager.save(Course, course);
+    });
+  }
+
+  /**
+   * Deletes existing child rows whose id is not present in the incoming
+   * DTO array at all — i.e. genuinely removed by the client. Runs BEFORE
+   * mergeChildren/save so the (course_id, position) unique constraint
+   * never sees a stale row still occupying a position a new row wants.
+   */
+  private async deleteOrphaned<Existing extends { id: string }, Incoming extends { id?: string }>(
+    manager: import('typeorm').EntityManager,
+    entityClass: new () => Existing,
+    existing: Existing[],
+    incoming: Incoming[],
+  ): Promise<void> {
+    const incomingIds = new Set(incoming.map((i) => i.id).filter(Boolean));
+    const removedIds = existing
+      .map((e) => e.id)
+      .filter((existingId) => !incomingIds.has(existingId));
+
+    if (removedIds.length > 0) {
+      await manager.delete(entityClass, { id: In(removedIds) });
+    }
+  }
+
+  /**
+   * Builds the final array to assign to course.modules/credits/faqs.
+   * - Incoming item WITH a matching existing id -> updated in place,
+   *   same id preserved.
+   * - Incoming item with no id (or an id no longer present, e.g. it was
+   *   already deleted above) -> treated as new, inserted as a fresh row.
+   * position is always re-derived from array order, never trusted from
+   * the client.
+   */
+  private mergeChildren
+    <Existing extends { id: string },
+    Incoming extends { id?: string },
+    Fields,
+  >(
+    existing: Existing[],
+    incoming: Incoming[],
+    toFields: (item: Incoming, position: number) => Fields,
+  ): (Existing | Fields)[] {
+    const existingById = new Map(existing.map((e) => [e.id, e]));
+
+    return incoming.map((item, position) => {
+      const fields = toFields(item, position);
+      if (item.id && existingById.has(item.id)) {
+        return { ...existingById.get(item.id), ...fields };
+      }
+      return fields;
+    });
   }
 }

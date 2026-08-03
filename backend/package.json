@@ -24,7 +24,6 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "seed:courses": "ts-node -r tsconfig-paths/register src/seeds/seed-courses.ts"
-
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -32,6 +31,8 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/typeorm": "^11.0.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
