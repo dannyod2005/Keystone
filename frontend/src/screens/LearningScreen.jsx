@@ -4,20 +4,17 @@ import { PlayCircle, CheckCircle2, ChevronLeft} from "lucide-react";
 
 export function LearningScreen({ course, onBack }) {
   const [tab, setTab] = useState("video");
-  // FIX: was `useState(2)`, which silently assumed every course has at
-  // least 3 agenda entries (true for the original demo data, but not for
-  // a freshly created course from Trainer Studio with a short/empty
-  // agenda). Always start at the first module instead.
   const [activeModule, setActiveModule] = useState(0);
 
   if (!course) return null;
 
-  // Guard against a course with no agenda at all (e.g. a brand-new,
-  // not-yet-populated course) instead of letting every course.agenda[i]
-  // access below throw.
-  const agenda = course.agenda ?? [];
-  const hasModules = agenda.length > 0;
-  const currentModuleTitle = agenda[activeModule];
+  // Guard against a course with no modules at all (e.g. a brand-new,
+  // not-yet-populated course) instead of letting every access below throw.
+  const modules = course.modules ?? [];
+  const hasModules = modules.length > 0;
+  const isComplete = activeModule >= modules.length;
+  const currentModule = modules[activeModule]; // undefined once isComplete is true
+  const isLastModule = activeModule >= modules.length - 1;
 
   return (
     <div style={{ padding: "22px 32px 40px", maxWidth: 1080 }}>
@@ -29,25 +26,26 @@ export function LearningScreen({ course, onBack }) {
         <div className="ks-card" style={{ padding: 24, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
           This course doesn't have any modules yet. Check back once the trainer has added content.
         </div>
+      ) : isComplete ? (
+        <div className="ks-card" style={{ padding: 24, textAlign: "center" }}>
+          <CheckCircle2 size={32} color="var(--success)" style={{ marginBottom: 10 }} />
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Course complete</div>
+          <div style={{ fontSize: 13.5, color: "var(--slate-light)" }}>You've finished all {modules.length} modules.</div>
+        </div>
       ) : (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 22 }}>
         <div>
           <div className="ks-card" style={{ padding: "12px 16px", marginBottom: 14 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Module {activeModule + 1} of {course.modules}</div>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>{currentModuleTitle}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Module {activeModule + 1} of {modules.length}</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>{currentModule.title}</div>
           </div>
 
-          {/* ASSUMPTION: course.videoUrls[i] is a new optional field a trainer
-              can set per module (see TrainerScreen). If present, embed it in
-              an iframe (works for YouTube/Vimeo-style embed URLs); otherwise
-              fall back to the original placeholder so untouched courses look
-              exactly as before. */}
-          {course.videoUrls?.[activeModule] ? (
+          {currentModule.videoUrl ? (
             <div style={{ background: "var(--ink)", borderRadius: 14, aspectRatio: "16/9", overflow: "hidden", marginBottom: 4 }}>
               <iframe
-                key={course.videoUrls[activeModule]}
-                src={course.videoUrls[activeModule]}
-                title={currentModuleTitle}
+                key={currentModule.videoUrl}
+                src={currentModule.videoUrl}
+                title={currentModule.title}
                 style={{ width: "100%", height: "100%", border: "none" }}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
@@ -59,7 +57,7 @@ export function LearningScreen({ course, onBack }) {
             </div>
           )}
           <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 18 }}>
-            {course.videoUrls?.[activeModule] ? currentModuleTitle : `12:40 · ${currentModuleTitle}`}
+            {currentModule.videoUrl ? currentModule.title : `12:40 · ${currentModule.title}`}
           </div>
 
           <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 16 }}>
@@ -70,7 +68,7 @@ export function LearningScreen({ course, onBack }) {
 
           {tab === "video" && (
             <p style={{ fontSize: 14, color: "var(--slate)", lineHeight: 1.6 }}>
-              This module covers {(currentModuleTitle ?? "this topic").toLowerCase()}. Follow along in the video, then apply it in the short exercise before moving to the quiz.
+              This module covers {currentModule.title.toLowerCase()}. Follow along in the video, then apply it in the short exercise before moving to the quiz.
             </p>
           )}
           {tab === "notes" && (
@@ -110,12 +108,22 @@ export function LearningScreen({ course, onBack }) {
 
           <button
             className="ks-btn ks-btn-gold"
-            style={{ marginTop: 20, opacity: activeModule >= course.modules - 1 ? 0.5 : 1 }}
-            disabled={activeModule >= course.modules - 1}
-            onClick={() => setActiveModule((m) => Math.min(m + 1, agenda.length - 1))}
+            style={{ marginTop: 20 }}
+            disabled={false}
+            onClick={() => {
+              if (isLastModule) {
+                // TODO: this is where enrollments.status should be set to
+                // "complete" once real enrollment data exists (see #17-20).
+                // For now, this just marks the final module as "done" in
+                // the UI's own local progress tracking below.
+                setActiveModule(modules.length); // one past the last index
+              } else {
+                setActiveModule((m) => m + 1);
+              }
+            }}
           >
             <CheckCircle2 size={16} />
-            {activeModule >= course.modules - 1 ? "Course complete" : "Mark complete & continue"}
+            {activeModule >= modules.length ? "Course complete" : "Mark complete & continue"}
           </button>
         </div>
 
@@ -123,21 +131,21 @@ export function LearningScreen({ course, onBack }) {
           <div className="ks-card" style={{ padding: 16, marginBottom: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Course progress</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)" }}>{Math.round((activeModule / course.modules) * 100)}%</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)" }}>{Math.round((Math.min(activeModule, modules.length) / modules.length) * 100)}%</span>
             </div>
             <div style={{ height: 8, background: "var(--line)", borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(activeModule / course.modules) * 100}%`, background: "var(--gold)", borderRadius: 4, transition: "width .2s ease" }} />
+              <div style={{ height: "100%", width: `${(Math.min(activeModule, modules.length) / modules.length) * 100}%`, background: "var(--gold)", borderRadius: 4, transition: "width .2s ease" }} />
             </div>
-            <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 8, marginBottom: 14 }}>{activeModule} of {course.modules} modules complete</div>
+            <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 8, marginBottom: 14 }}>{Math.min(activeModule, modules.length)} of {modules.length} modules complete</div>
             <hr className="ks-hairline" style={{ margin: "0 0 10px" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {agenda.map((a, i) => (
-                <div key={a} onClick={() => setActiveModule(i)} style={{
+              {modules.map((m, i) => (
+                <div key={m.id} onClick={() => setActiveModule(i)} style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "8px 8px", borderRadius: 8, cursor: "pointer",
                   background: i === activeModule ? "var(--gold-tint)" : "transparent",
                 }}>
                   {i < activeModule ? <CheckCircle2 size={15} color="var(--success)" /> : i === activeModule ? <PlayCircle size={15} color="var(--gold-dark)" /> : <span style={{ width: 15, height: 15, borderRadius: 99, border: "1.5px solid var(--line)", flexShrink: 0 }} />}
-                  <span style={{ fontSize: 13, fontWeight: i === activeModule ? 600 : 400 }}>{a}</span>
+                  <span style={{ fontSize: 13, fontWeight: i === activeModule ? 600 : 400 }}>{m.title}</span>
                 </div>
               ))}
             </div>
