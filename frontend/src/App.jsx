@@ -208,7 +208,15 @@ function KeystonePrototype() {
       <Routes>
         <Route
           path="/"
-          element={<HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} />}
+          element={
+            loggedIn ? (
+              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title="Home">
+                <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} />
+              </AppShell>
+            ) : (
+              <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} />
+            )
+          }
         />
 
         <Route

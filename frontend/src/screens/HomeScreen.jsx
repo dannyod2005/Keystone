@@ -6,10 +6,10 @@ import { MarketingHeader } from "../components/layout/MarketingHeader";
 
 /* ---------- Screen: Home (marketing) ---------- */
 
-export function HomeScreen({ onGo, onAuth, courses }) {
+export function HomeScreen({ onGo, onAuth, courses, loggedIn }) {
   return (
     <div>
-      <MarketingHeader onGo={onGo} onAuth={onAuth} />
+      {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
       <section style={{ maxWidth: 1160, margin: "0 auto", padding: "64px 28px 40px", display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 48, alignItems: "center" }}>
         <div>
           <span className="ks-badge" style={{ background: "var(--gold-tint)", color: "var(--gold-dark)" }}>For growing teams</span>
