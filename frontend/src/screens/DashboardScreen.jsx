@@ -52,7 +52,7 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 600 }}>{c.title}</div>
                   <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>
-                    {Math.round(e.progress * c.modules)} of {c.modules} modules · last opened {e.lastAccessed}
+                    {Math.round(e.progress * c.modules.length)} of {c.modules.length} modules · last opened {e.lastAccessed}
                   </div>
                   <div style={{ height: 5, background: "var(--line)", borderRadius: 3, marginTop: 8, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${e.progress * 100}%`, background: "var(--gold)" }} />
@@ -66,6 +66,7 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
           <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", margin: "24px 0 12px" }}>Completed</div>
           {complete.map((e) => {
             const c = courses.find((x) => x.id === e.courseId);
+            if (!c) return null;
             return (
               <div key={e.courseId} className="ks-card" style={{ padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
                 <div style={{ width: 48, height: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
