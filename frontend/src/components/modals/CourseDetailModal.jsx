@@ -32,29 +32,29 @@ export function CourseDetailModal({ course, onClose, onEnrol, isEnrolled }) {
 
           <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 10 }}>Course agenda</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 0, marginBottom: 22 }}>
-            {course.agenda.map((a, i) => (
-              <div key={a} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < course.agenda.length - 1 ? "1px solid var(--line)" : "none" }}>
+            {course.modules.map((m, i) => (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < course.modules.length - 1 ? "1px solid var(--line)" : "none" }}>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--slate-light)", width: 20 }}>{String(i + 1).padStart(2, "0")}</span>
-                <span style={{ fontSize: 14 }}>{a}</span>
+                <span style={{ fontSize: 14 }}>{m.title}</span>
               </div>
             ))}
           </div>
 
           <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 10 }}>FAQ</div>
           <div style={{ marginBottom: 22 }}>
-            {/* ASSUMPTION: course.faq is a new optional [{q,a}] field a trainer
-                can author (see TrainerScreen). Falls back to the original
-                hardcoded copy for courses that don't have one yet. */}
-            {(course.faq && course.faq.length > 0
-              ? course.faq
+            {/* course.faqs comes from the DB (course_faqs table) — every seeded
+                course has at least the placeholder pair from #8, so the fallback
+                below mainly protects against a future course created with none. */}
+            {(course.faqs && course.faqs.length > 0
+              ? course.faqs
               : [
-                  { q: "Do I get a certificate?", a: "Yes — issued automatically once all modules and the final project are complete." },
-                  { q: "Can I go at my own pace?", a: "Yes, all modules stay open for the life of your account." },
+                  { question: "Do I get a certificate?", answer: "Yes — issued automatically once all modules and the final project are complete." },
+                  { question: "Can I go at my own pace?", answer: "Yes, all modules stay open for the life of your account." },
                 ]
             ).map((item, i) => (
-              <div key={i}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 3 }}>{item.q}</div>
-                <div style={{ fontSize: 13.5, color: "var(--slate)", marginBottom: 12 }}>{item.a}</div>
+              <div key={item.id ?? i}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 3 }}>{item.question}</div>
+                <div style={{ fontSize: 13.5, color: "var(--slate)", marginBottom: 12 }}>{item.answer}</div>
               </div>
             ))}
           </div>
@@ -64,10 +64,10 @@ export function CourseDetailModal({ course, onClose, onEnrol, isEnrolled }) {
             <span style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)" }}>Sources & credits</span>
           </div>
           <ul style={{ margin: "0 0 22px", padding: 0, listStyle: "none" }}>
-            {course.credits.map((line, i) => (
-              <li key={i} style={{ display: "flex", gap: 8, fontSize: 13, color: "var(--slate)", lineHeight: 1.55, padding: "5px 0", borderBottom: i < course.credits.length - 1 ? "1px solid var(--line)" : "none" }}>
+            {course.credits.map((c, i) => (
+              <li key={c.id} style={{ display: "flex", gap: 8, fontSize: 13, color: "var(--slate)", lineHeight: 1.55, padding: "5px 0", borderBottom: i < course.credits.length - 1 ? "1px solid var(--line)" : "none" }}>
                 <span style={{ color: "var(--gold-dark)", flexShrink: 0 }}>·</span>
-                <span>{line}</span>
+                <span>{c.line}</span>
               </li>
             ))}
           </ul>
