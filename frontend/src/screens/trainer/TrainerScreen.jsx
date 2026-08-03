@@ -55,7 +55,7 @@ export function TrainerScreen({ courses, onSaveCourse }) {
             <CategoryDot color={c.color} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{c.title || "(untitled course)"}</div>
-              <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>{c.provider} · {c.modules} modules · {c.hours}h</div>
+              <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>{c.provider} · {c.modules.length} modules · {c.hours}h</div>
             </div>
             <button className="ks-btn ks-btn-ghost" onClick={() => setEditingId(c.id)}><Pencil size={14} /> Edit</button>
           </div>
