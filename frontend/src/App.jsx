@@ -114,7 +114,7 @@ function KeystonePrototype() {
   const [role, setRole] = useState("learner");
 
   useEffect(() => {
-    fetch("http://localhost:4000/courses")
+    fetch(`${process.env.REACT_APP_API_URL}/courses`)
       .then((res) => {
         if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         return res.json();
