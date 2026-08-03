@@ -17,6 +17,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         ssl: { rejectUnauthorized: false }, // Supabase requires SSL
         autoLoadEntities: true,
         synchronize: false, // intentionally off — see note below
+        logging: ['query', 'error']
       }),
     }),
     CoursesModule,

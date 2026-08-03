@@ -44,12 +44,12 @@ export class Course {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany(() => CourseModule, (m) => m.course)
+  @OneToMany(() => CourseModule, (m) => m.course, { cascade: true, orphanedRowAction: 'delete' })
   modules: CourseModule[];
 
-  @OneToMany(() => CourseCredit, (c) => c.course)
+  @OneToMany(() => CourseCredit, (c) => c.course, { cascade: true, orphanedRowAction: 'delete' })
   credits: CourseCredit[];
 
-  @OneToMany(() => CourseFaq, (f) => f.course)
+  @OneToMany(() => CourseFaq, (f) => f.course, { cascade: true, orphanedRowAction: 'delete' })
   faqs: CourseFaq[];
 }
