@@ -3,6 +3,7 @@ import {
   BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation
 } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
+import { supabase } from "./lib/supabaseClient";
 
 // NOTE: INITIAL_COURSES import removed — course data now comes from the
 // NestJS backend instead of this local mock file. ENROLLED_DEFAULT is
@@ -26,8 +27,6 @@ import { TrainerScreen } from "./screens/trainer/TrainerScreen";
    KEYSTONE LEARNING — clickable prototype (now routed)
 --------------------------------------------------------------- */
 
-// Maps a pathname to the "screen key" the sidebar/topbar expect,
-// so AppSidebar/AppTopbar don't need to know about router internals.
 function screenKeyFromPath(pathname) {
   if (pathname.startsWith("/catalogue")) return "catalogue";
   if (pathname.startsWith("/dashboard")) return "dashboard";
@@ -42,7 +41,7 @@ function AppShell({ loggedIn, role, onSwitchRole, title, children }) {
   const screen = screenKeyFromPath(location.pathname);
   const navigate = useNavigate();
 
-  const showSidebar = loggedIn; // home never renders AppShell at all (see routes below)
+  const showSidebar = loggedIn;
 
   return (
     <div style={{ display: "flex", minHeight: 640 }}>
@@ -66,9 +65,6 @@ function AppShell({ loggedIn, role, onSwitchRole, title, children }) {
 function RequireAuth({ loggedIn, children }) {
   const location = useLocation();
   if (!loggedIn) {
-    // Bounce unauthenticated visitors back to the marketing home page,
-    // remembering where they were headed in case you want to resume
-    // after login later.
     return <Navigate to="/" replace state={{ from: location.pathname }} />;
   }
   return children;
@@ -88,8 +84,6 @@ function LearningRoute({ courses }) {
   const course = courses.find((c) => String(c.id) === courseId);
 
   if (!course) {
-    // Unknown/removed course id — send them back to their dashboard
-    // instead of rendering a blank learning screen.
     return <Navigate to="/dashboard" replace />;
   }
   return <LearningScreen course={course} onBack={() => navigate("/dashboard")} />;
@@ -101,17 +95,41 @@ function KeystonePrototype() {
   const location = useLocation();
 
   const [loggedIn, setLoggedIn] = useState(false);
+  const [role, setRole] = useState("learner");
+  const [authLoading, setAuthLoading] = useState(true); // checking for an existing session on load
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [enrolled, setEnrolled] = useState(ENROLLED_DEFAULT);
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
-  // Starts empty rather than seeded with mock data — real courses arrive
-  // asynchronously from the backend once the fetch below completes.
   const [courses, setCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState(null);
-  const [role, setRole] = useState("learner");
+
+  // On load: check for an existing Supabase session (e.g. after a page
+  // refresh), and stay subscribed to auth state changes (login, logout,
+  // token refresh) for as long as the app is open.
+  useEffect(() => {
+    function applySession(session) {
+      if (session) {
+        setLoggedIn(true);
+        setRole(session.user.user_metadata?.role || "learner");
+      } else {
+        setLoggedIn(false);
+      }
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      applySession(session);
+      setAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session);
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -189,20 +207,24 @@ function KeystonePrototype() {
     navigate("/dashboard");
   }
 
-  function handleAuthSubmit(mode, formData) {
+  // AuthModal now performs the real Supabase call itself and hands us the
+  // resulting session directly, replacing the old (mode, formData) shape.
+  function handleAuthSubmit(session) {
     setLoggedIn(true);
+    setRole(session.user.user_metadata?.role || "learner");
     setAuthMode(null);
-    // ASSUMPTION: role only comes from the signup form (formData.role); a
-    // login has no role field in this mock system, so it leaves whatever
-    // role was last set (defaults to "learner"). A real backend would look
-    // this up from the account instead.
-    if (mode === "signup" && formData?.role) setRole(formData.role);
     if (pendingCourse) {
       completeEnrol(pendingCourse);
       setPendingCourse(null);
     } else {
       navigate("/dashboard");
     }
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setLoggedIn(false);
+    navigate("/");
   }
 
   function handleEnrol(course) {
@@ -224,6 +246,14 @@ function KeystonePrototype() {
     screen === "catalogue" ? "Catalogue" :
     screen === "learning" ? (courses.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
     screen === "trainer" ? "Trainer studio" : "";
+
+  if (authLoading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
+        <div style={{ fontSize: 13, color: "var(--slate-light)" }}>Loading…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="ks-root">
