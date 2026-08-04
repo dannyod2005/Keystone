@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { supabase } from "../../lib/supabaseClient";
 
 export function AuthModal({ mode, onClose, onSubmit }) {
   const [tab, setTab] = useState(mode || "login");
@@ -7,9 +8,17 @@ export function AuthModal({ mode, onClose, onSubmit }) {
   const [values, setValues] = useState({ name: "", email: "", password: "", role: "learner" });
   const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [authError, setAuthError] = useState(null);
+  const [confirmEmailMessage, setConfirmEmailMessage] = useState(null);
 
   React.useEffect(() => {
-    if (mode) { setTab(mode); setTouched(false); setSubmitting(false); }
+    if (mode) {
+      setTab(mode);
+      setTouched(false);
+      setSubmitting(false);
+      setAuthError(null);
+      setConfirmEmailMessage(null);
+    }
   }, [mode]);
 
   if (!mode) return null;
@@ -23,15 +32,48 @@ export function AuthModal({ mode, onClose, onSubmit }) {
     setValues((prev) => ({ ...prev, [field]: v }));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setTouched(true);
+    setAuthError(null);
+    setConfirmEmailMessage(null);
     if (!canSubmit) return;
     setSubmitting(true);
-    // Demo: simulate a brief network round-trip before "authenticating"
-    setTimeout(() => {
-      onSubmit(tab, values);
-    }, 450);
+
+    try {
+      if (tab === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email: values.email,
+          password: values.password,
+          options: {
+            data: { name: values.name, role: values.role },
+          },
+        });
+        if (error) throw error;
+
+        if (!data.session) {
+          // Email confirmation required — no session yet.
+          setConfirmEmailMessage(
+            "Check your email to confirm your account, then log in.",
+          );
+          setSubmitting(false);
+          return;
+        }
+
+        onSubmit(data.session);
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: values.email,
+          password: values.password,
+        });
+        if (error) throw error;
+
+        onSubmit(data.session);
+      }
+    } catch (err) {
+      setAuthError(err.message || "Something went wrong. Please try again.");
+      setSubmitting(false);
+    }
   }
 
   const field = {
@@ -56,8 +98,8 @@ export function AuthModal({ mode, onClose, onSubmit }) {
           </div>
 
           <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)" }}>
-            <div className={`ks-tab ${tab === "login" ? "active" : ""}`} onClick={() => { setTab("login"); setTouched(false); }}>Log in</div>
-            <div className={`ks-tab ${tab === "signup" ? "active" : ""}`} onClick={() => { setTab("signup"); setTouched(false); }}>Create account</div>
+            <div className={`ks-tab ${tab === "login" ? "active" : ""}`} onClick={() => { setTab("login"); setTouched(false); setAuthError(null); }}>Log in</div>
+            <div className={`ks-tab ${tab === "signup" ? "active" : ""}`} onClick={() => { setTab("signup"); setTouched(false); setAuthError(null); }}>Create account</div>
           </div>
         </div>
 
@@ -81,10 +123,6 @@ export function AuthModal({ mode, onClose, onSubmit }) {
             </div>
           )}
 
-          {/* ASSUMPTION: role is chosen at signup and stored on the mock
-              account — this is the "real" (non-demo) way to reach the
-              Trainer studio, since there's no invite/admin system in this
-              prototype. */}
           {tab === "signup" && (
             <div style={field}>
               <label style={label}>Account type</label>
@@ -132,6 +170,11 @@ export function AuthModal({ mode, onClose, onSubmit }) {
             {touched && !pwValid && <div style={errorText}>Password must be at least 8 characters.</div>}
           </div>
 
+          {authError && <div style={{ ...errorText, marginBottom: 12 }}>{authError}</div>}
+          {confirmEmailMessage && (
+            <div style={{ fontSize: 12.5, color: "var(--success)", marginBottom: 12 }}>{confirmEmailMessage}</div>
+          )}
+
           <button type="submit" className="ks-btn ks-btn-gold" style={{ width: "100%", justifyContent: "center", padding: "12px 0", fontSize: 15, marginTop: 10, opacity: submitting ? 0.7 : 1 }}>
             {submitting ? "Please wait…" : tab === "login" ? "Log in" : "Create free account"}
           </button>
@@ -139,14 +182,17 @@ export function AuthModal({ mode, onClose, onSubmit }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0" }}>
             <hr className="ks-hairline" style={{ flex: 1 }} /><span style={{ fontSize: 11.5, color: "var(--slate-light)" }}>OR</span><hr className="ks-hairline" style={{ flex: 1 }} />
           </div>
-          <button type="button" className="ks-btn ks-btn-ghost" style={{ width: "100%", justifyContent: "center", padding: "10px 0" }}
-            onClick={() => { setTouched(true); if (emailValid || tab === "signup") { setSubmitting(true); setTimeout(() => onSubmit(tab, { ...values, provider: "google" }), 450); } }}>
+          {/* Google OAuth requires a redirect flow (dashboard config + a
+              return route) that doesn't fit this modal's synchronous
+              submit pattern. Disabled for now — see #22's PR notes. */}
+          <button type="button" className="ks-btn ks-btn-ghost" style={{ width: "100%", justifyContent: "center", padding: "10px 0", opacity: 0.5, cursor: "not-allowed" }}
+            disabled title="Coming soon">
             <svg width="15" height="15" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.47a5.54 5.54 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.82z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.91l-3.88-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.27v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.27 14.28A7.2 7.2 0 0 1 4.89 12c0-.79.14-1.56.38-2.28v-3.1H1.27A12 12 0 0 0 0 12c0 1.94.46 3.77 1.27 5.38l4-3.1z"/><path fill="#EA4335" d="M12 4.75c1.76 0 3.34.6 4.58 1.79l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.27 6.62l4 3.1C6.22 6.86 8.87 4.75 12 4.75z"/></svg>
-            Continue with Google
+            Continue with Google (coming soon)
           </button>
 
           <div style={{ fontSize: 11.5, color: "var(--slate-light)", textAlign: "center", marginTop: 18, lineHeight: 1.5 }}>
-            Demo prototype — any valid-looking email &amp; an 8+ character password will work.
+            Real accounts — passwords are securely handled by Supabase Auth.
           </div>
         </form>
       </div>
