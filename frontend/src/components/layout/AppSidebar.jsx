@@ -3,7 +3,7 @@ import { LEARNER } from "../../data/courses";
 
 /* ---------- Logged-in app shell ---------- */
 
-export function AppSidebar({ screen, onGo, role, onSwitchRole, onLogout }) {
+export function AppSidebar({ screen, onGo, role, onLogout }) {
   const items = [
     { key: "dashboard", label: "My learning", icon: LayoutGrid },
     { key: "catalogue", label: "Catalogue", icon: BookOpen },
@@ -44,14 +44,6 @@ export function AppSidebar({ screen, onGo, role, onSwitchRole, onLogout }) {
         >
           <LogOut size={16} color="#B9C0CC" />
           Log out
-        </div>
-      )}
-      {onSwitchRole && (
-        <div
-          onClick={onSwitchRole}
-          style={{ margin: "12px 10px 0", fontSize: 11, color: "#B9C0CC", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}
-        >
-          Switch to {role === "trainer" ? "learner" : "trainer"} view (demo)
         </div>
       )}
     </aside>
