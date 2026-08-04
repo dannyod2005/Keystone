@@ -1,18 +1,14 @@
-import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil } from "lucide-react";
+import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut } from "lucide-react";
 import { LEARNER } from "../../data/courses";
 
 /* ---------- Logged-in app shell ---------- */
 
-export function AppSidebar({ screen, onGo, role, onSwitchRole }) {
+export function AppSidebar({ screen, onGo, role, onSwitchRole, onLogout }) {
   const items = [
     { key: "dashboard", label: "My learning", icon: LayoutGrid },
     { key: "catalogue", label: "Catalogue", icon: BookOpen },
     { key: "home", label: "Discover", icon: HomeIcon },
   ];
-  // ASSUMPTION: the trainer view is gated by a role flag (role === "trainer")
-  // set when the account is created (see AuthModal's role toggle on the
-  // signup tab). This nav item only renders for trainer accounts, mirroring
-  // how the rest of the sidebar is already conditionally shown.
   if (role === "trainer") {
     items.push({ key: "trainer", label: "Trainer studio", icon: Pencil });
   }
@@ -41,11 +37,15 @@ export function AppSidebar({ screen, onGo, role, onSwitchRole }) {
           <div style={{ fontSize: 11, color: "#B9C0CC" }}>{role === "trainer" ? "Trainer account" : LEARNER.goal}</div>
         </div>
       </div>
-      {/* ASSUMPTION: since there's no real backend, this is a demo-only
-          convenience so reviewers can flip between the learner and trainer
-          views in one session instead of creating two accounts. The "real"
-          path is choosing a role on signup (see AuthModal). Remove this
-          switch once role is decided at sign-up/invite time for real. */}
+      {onLogout && (
+        <div
+          onClick={onLogout}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 500, color: "#B9C0CC", marginTop: 8 }}
+        >
+          <LogOut size={16} color="#B9C0CC" />
+          Log out
+        </div>
+      )}
       {onSwitchRole && (
         <div
           onClick={onSwitchRole}

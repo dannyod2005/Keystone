@@ -36,7 +36,7 @@ function screenKeyFromPath(pathname) {
 }
 
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
-function AppShell({ loggedIn, role, onSwitchRole, title, children }) {
+function AppShell({ loggedIn, role, onSwitchRole, onLogout, title, children }) {
   const location = useLocation();
   const screen = screenKeyFromPath(location.pathname);
   const navigate = useNavigate();
@@ -51,6 +51,7 @@ function AppShell({ loggedIn, role, onSwitchRole, title, children }) {
           onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
           role={role}
           onSwitchRole={onSwitchRole}
+          onLogout={onLogout}
         />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -262,7 +263,7 @@ function KeystonePrototype() {
           path="/"
           element={
             loggedIn ? (
-              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title="Home">
+              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title="Home">
                 <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} />
               </AppShell>
             ) : (
@@ -274,7 +275,7 @@ function KeystonePrototype() {
         <Route
           path="/catalogue"
           element={
-            <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title={shellTitle}>
+            <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title={shellTitle}>
               <CatalogueScreen
                 loggedIn={loggedIn}
                 onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
@@ -291,7 +292,7 @@ function KeystonePrototype() {
           path="/dashboard"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title={shellTitle}>
+              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title={shellTitle}>
                 <DashboardScreen
                   enrolled={enrolled}
                   onOpenCourse={setSelectedCourse}
@@ -307,7 +308,7 @@ function KeystonePrototype() {
           path="/learning/:courseId"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title={shellTitle}>
+              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title={shellTitle}>
                 <LearningRoute courses={courses} />
               </AppShell>
             </RequireAuth>
@@ -319,7 +320,7 @@ function KeystonePrototype() {
           element={
             <RequireAuth loggedIn={loggedIn}>
               <RequireTrainer role={role}>
-                <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} title={shellTitle}>
+                <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title={shellTitle}>
                   <TrainerScreen courses={courses} onSaveCourse={saveCourse} />
                 </AppShell>
               </RequireTrainer>
