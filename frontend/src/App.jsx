@@ -4,6 +4,7 @@ import {
 } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
+import { useAuth } from "./context/AuthContext";
 
 // NOTE: INITIAL_COURSES import removed — course data now comes from the
 // NestJS backend instead of this local mock file. ENROLLED_DEFAULT is
@@ -36,7 +37,7 @@ function screenKeyFromPath(pathname) {
 }
 
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
-function AppShell({ loggedIn, role, onSwitchRole, onLogout, title, children }) {
+function AppShell({ loggedIn, role, onLogout, title, children }) {
   const location = useLocation();
   const screen = screenKeyFromPath(location.pathname);
   const navigate = useNavigate();
@@ -50,7 +51,6 @@ function AppShell({ loggedIn, role, onSwitchRole, onLogout, title, children }) {
           screen={screen}
           onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
           role={role}
-          onSwitchRole={onSwitchRole}
           onLogout={onLogout}
         />
       )}
@@ -95,9 +95,12 @@ function KeystonePrototype() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [role, setRole] = useState("learner");
-  const [authLoading, setAuthLoading] = useState(true); // checking for an existing session on load
+  // Auth state now comes from AuthContext instead of being tracked here
+  // directly — see #71.
+  const { user, loading: authLoading } = useAuth();
+  const loggedIn = !!user;
+  const role = user?.user_metadata?.role || "learner";
+
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [enrolled, setEnrolled] = useState(ENROLLED_DEFAULT);
   const [toast, setToast] = useState(null);
@@ -106,31 +109,6 @@ function KeystonePrototype() {
   const [courses, setCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState(null);
-
-  // On load: check for an existing Supabase session (e.g. after a page
-  // refresh), and stay subscribed to auth state changes (login, logout,
-  // token refresh) for as long as the app is open.
-  useEffect(() => {
-    function applySession(session) {
-      if (session) {
-        setLoggedIn(true);
-        setRole(session.user.user_metadata?.role || "learner");
-      } else {
-        setLoggedIn(false);
-      }
-    }
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      applySession(session);
-      setAuthLoading(false);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      applySession(session);
-    });
-
-    return () => listener.subscription.unsubscribe();
-  }, []);
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -208,11 +186,11 @@ function KeystonePrototype() {
     navigate("/dashboard");
   }
 
-  // AuthModal now performs the real Supabase call itself and hands us the
-  // resulting session directly, replacing the old (mode, formData) shape.
+  // AuthContext's onAuthStateChange listener picks up the new session
+  // automatically once signUp()/signInWithPassword() resolves inside
+  // AuthModal — this handler no longer needs to set loggedIn/role itself,
+  // just react to the successful submission (close modal, navigate).
   function handleAuthSubmit(session) {
-    setLoggedIn(true);
-    setRole(session.user.user_metadata?.role || "learner");
     setAuthMode(null);
     if (pendingCourse) {
       completeEnrol(pendingCourse);
@@ -224,7 +202,6 @@ function KeystonePrototype() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    setLoggedIn(false);
     navigate("/");
   }
 
@@ -263,7 +240,7 @@ function KeystonePrototype() {
           path="/"
           element={
             loggedIn ? (
-              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title="Home">
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home">
                 <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} />
               </AppShell>
             ) : (
@@ -275,7 +252,7 @@ function KeystonePrototype() {
         <Route
           path="/catalogue"
           element={
-            <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title={shellTitle}>
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
               <CatalogueScreen
                 loggedIn={loggedIn}
                 onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
@@ -292,7 +269,7 @@ function KeystonePrototype() {
           path="/dashboard"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title={shellTitle}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
                 <DashboardScreen
                   enrolled={enrolled}
                   onOpenCourse={setSelectedCourse}
@@ -308,7 +285,7 @@ function KeystonePrototype() {
           path="/learning/:courseId"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title={shellTitle}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
                 <LearningRoute courses={courses} />
               </AppShell>
             </RequireAuth>
@@ -320,7 +297,7 @@ function KeystonePrototype() {
           element={
             <RequireAuth loggedIn={loggedIn}>
               <RequireTrainer role={role}>
-                <AppShell loggedIn={loggedIn} role={role} onSwitchRole={() => setRole((r) => (r === "trainer" ? "learner" : "trainer"))} onLogout={handleLogout} title={shellTitle}>
+                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
                   <TrainerScreen courses={courses} onSaveCourse={saveCourse} />
                 </AppShell>
               </RequireTrainer>
