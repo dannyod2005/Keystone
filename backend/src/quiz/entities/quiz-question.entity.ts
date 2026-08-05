@@ -3,9 +3,11 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { CourseModule } from '../../courses/entities/course-module.entity';
+import { QuizOption } from './quiz-option.entity';
 
 @Entity('quiz_questions')
 export class QuizQuestion {
@@ -21,4 +23,7 @@ export class QuizQuestion {
 
   @Column({ type: 'int' })
   position: number;
+
+  @OneToMany(() => QuizOption, (option) => option.question)
+  options: QuizOption[];
 }

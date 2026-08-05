@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CoursesModule } from './courses/courses.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
+import { ModulesModule } from './modules/modules.module';
 import { SupabaseAuthGuard } from './auth/supabase-auth.guard';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -24,6 +25,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
     }),
     CoursesModule,
     EnrollmentsModule,
+    ModulesModule,
   ],
   controllers: [AppController],
   providers: [AppService, SupabaseAuthGuard],
