@@ -2,10 +2,10 @@ import { useState, useEffect } from "react";
 import { PlayCircle, CheckCircle2, XCircle, ChevronLeft} from "lucide-react";
 
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onBack }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onBack }) {
   const [tab, setTab] = useState("video");
 
-  const modules = course.modules ?? [];
+  const modules = course?.modules ?? [];
 
   const initialActiveModule = enrollment
     ? Math.min(Math.round(enrollment.progress * modules.length), modules.length)
@@ -23,13 +23,36 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   const [quizResult, setQuizResult] = useState(null); // set after submitting
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
 
+  // Notes state
   const [noteContent, setNoteContent] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteSavedAt, setNoteSavedAt] = useState(null);
-  
+
+  // Forum state
+  const [posts, setPosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [newPostContent, setNewPostContent] = useState("");
+  const [postingError, setPostingError] = useState(null);
+  const [posting, setPosting] = useState(false);
+
   const currentModule = modules[activeModule];
-  
+
+  useEffect(() => {
+    if (!currentModule || !onFetchQuiz) return;
+
+    setQuizQuestions([]);
+    setSelectedAnswers({});
+    setQuizResult(null);
+    setQuizError(null);
+    setQuizLoading(true);
+
+    onFetchQuiz(currentModule.id)
+      .then((data) => setQuizQuestions(data))
+      .catch((err) => setQuizError(err.message))
+      .finally(() => setQuizLoading(false));
+  }, [currentModule?.id]);
+
   useEffect(() => {
     if (!currentModule || !onFetchNote) return;
 
@@ -46,35 +69,18 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
       .finally(() => setNoteLoading(false));
   }, [currentModule?.id]);
 
-  async function handleNoteBlur() {
-    if (!currentModule || !onSaveNote) return;
-
-    setNoteSaving(true);
-    try {
-      const saved = await onSaveNote(currentModule.id, noteContent);
-      setNoteSavedAt(saved.updatedAt);
-    } catch (err) {
-      console.error("Failed to save note:", err.message);
-    } finally {
-      setNoteSaving(false);
-    }
-  }
-
-  
-
   useEffect(() => {
-    if (!currentModule || !onFetchQuiz) return;
+    if (!currentModule || !onFetchPosts) return;
 
-    setQuizQuestions([]);
-    setSelectedAnswers({});
-    setQuizResult(null);
-    setQuizError(null);
-    setQuizLoading(true);
+    setPosts([]);
+    setNewPostContent("");
+    setPostingError(null);
+    setPostsLoading(true);
 
-    onFetchQuiz(currentModule.id)
-      .then((data) => setQuizQuestions(data))
-      .catch((err) => setQuizError(err.message))
-      .finally(() => setQuizLoading(false));
+    onFetchPosts(currentModule.id)
+      .then((data) => setPosts(data))
+      .catch((err) => console.error("Failed to load forum posts:", err.message))
+      .finally(() => setPostsLoading(false));
   }, [currentModule?.id]);
 
   if (!course) return null;
@@ -126,6 +132,36 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
       setQuizError(err.message || "Failed to submit quiz.");
     } finally {
       setSubmittingQuiz(false);
+    }
+  }
+
+  async function handleNoteBlur() {
+    if (!currentModule || !onSaveNote) return;
+
+    setNoteSaving(true);
+    try {
+      const saved = await onSaveNote(currentModule.id, noteContent);
+      setNoteSavedAt(saved.updatedAt);
+    } catch (err) {
+      console.error("Failed to save note:", err.message);
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
+  async function handleCreatePost() {
+    if (!currentModule || !onCreatePost || !newPostContent.trim()) return;
+
+    setPostingError(null);
+    setPosting(true);
+    try {
+      const post = await onCreatePost(currentModule.id, newPostContent.trim());
+      setPosts((prev) => [...prev, post]);
+      setNewPostContent("");
+    } catch (err) {
+      setPostingError(err.message || "Failed to post.");
+    } finally {
+      setPosting(false);
     }
   }
 
@@ -280,15 +316,47 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
           )}
           {tab === "forum" && (
             <div className="ks-card" style={{ padding: 16 }}>
-              {[["Sam K.", "Anyone else find the tool-use section moves fast? Rewatched twice, worth it."], ["Dana P.", "The capstone rubric link in module 4 was really helpful for scoping mine."]].map(([n, m]) => (
-                <div key={n} style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 99, background: "var(--gold-tint)", color: "var(--gold-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{n[0]}</div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{n}</div>
-                    <div style={{ fontSize: 13, color: "var(--slate)" }}>{m}</div>
+              {postsLoading ? (
+                <div style={{ fontSize: 13.5, color: "var(--slate-light)" }}>Loading…</div>
+              ) : (
+                <>
+                  {posts.length === 0 ? (
+                    <div style={{ fontSize: 13.5, color: "var(--slate-light)", marginBottom: 16 }}>
+                      No posts yet — be the first to start the discussion.
+                    </div>
+                  ) : (
+                    posts.map((p) => (
+                      <div key={p.id} style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 99, background: "var(--gold-tint)", color: "var(--gold-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                          {(p.author.name || "?")[0]}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{p.author.name || "Anonymous"}</div>
+                          <div style={{ fontSize: 13, color: "var(--slate)" }}>{p.content}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+
+                  <div style={{ marginTop: 16 }}>
+                    <textarea
+                      value={newPostContent}
+                      onChange={(e) => setNewPostContent(e.target.value)}
+                      placeholder="Ask a question or share a thought…"
+                      style={{ width: "100%", minHeight: 60, border: "1px solid var(--line)", borderRadius: 8, padding: 10, fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical", marginBottom: 8 }}
+                    />
+                    {postingError && <div style={{ fontSize: 12, color: "var(--coral)", marginBottom: 8 }}>{postingError}</div>}
+                    <button
+                      className="ks-btn ks-btn-gold"
+                      disabled={posting || !newPostContent.trim()}
+                      style={{ opacity: posting || !newPostContent.trim() ? 0.6 : 1 }}
+                      onClick={handleCreatePost}
+                    >
+                      {posting ? "Posting…" : "Post"}
+                    </button>
                   </div>
-                </div>
-              ))}
+                </>
+              )}
             </div>
           )}
 
