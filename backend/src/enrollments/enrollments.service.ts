@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -6,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { Enrollment } from './entities/enrollment.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
@@ -112,5 +114,68 @@ export class EnrollmentsService {
       lastAccessed: saved.lastAccessed,
       createdAt: saved.createdAt,
     };
+  }
+
+  async generateCertificate(userId: string, enrollmentId: string): Promise<Buffer> {
+    const enrollment = await this.enrollmentsRepo.findOne({
+      where: { id: enrollmentId },
+      relations: { user: true, course: true },
+    });
+
+    if (!enrollment) {
+      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+    }
+
+    if (enrollment.user.id !== userId) {
+      throw new ForbiddenException('This enrollment does not belong to you');
+    }
+
+    if (enrollment.status !== 'complete') {
+      throw new BadRequestException('Certificate is only available for completed courses');
+    }
+
+    const learnerName = enrollment.user.name || 'Keystone Learner';
+    const courseTitle = enrollment.course.title;
+    const completionDate = (enrollment.lastAccessed ?? new Date()).toLocaleDateString(
+      'en-US',
+      { year: 'numeric', month: 'long', day: 'numeric' },
+    );
+
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([842, 595]); // A4 landscape, in points
+    const { width, height } = page.getSize();
+
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    const ink = rgb(0.086, 0.137, 0.239); // matches --ink from the app's design tokens
+    const gold = rgb(0.78, 0.6, 0.16);
+    const slate = rgb(0.4, 0.44, 0.52);
+
+    // Border
+    page.drawRectangle({
+      x: 24,
+      y: 24,
+      width: width - 48,
+      height: height - 48,
+      borderColor: gold,
+      borderWidth: 2,
+    });
+
+    const centerText = (text: string, y: number, font = fontRegular, size = 14, color = ink) => {
+      const textWidth = font.widthOfTextAtSize(text, size);
+      page.drawText(text, { x: (width - textWidth) / 2, y, size, font, color });
+    };
+
+    centerText('CERTIFICATE OF COMPLETION', height - 120, fontBold, 22, ink);
+    centerText('This certifies that', height - 180, fontRegular, 14, slate);
+    centerText(learnerName, height - 220, fontBold, 30, ink);
+    centerText('has successfully completed', height - 265, fontRegular, 14, slate);
+    centerText(courseTitle, height - 300, fontBold, 20, gold);
+    centerText(`Completed on ${completionDate}`, height - 350, fontRegular, 12, slate);
+    centerText('Keystone Learning', height - 80, fontBold, 14, ink);
+
+    const pdfBytes = await pdfDoc.save();
+    return Buffer.from(pdfBytes);
   }
 }
