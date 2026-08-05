@@ -9,6 +9,7 @@ import { Enrollment } from './entities/enrollment.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
+import { EnrollmentResponseDto } from './dto/enrollment-response.dto';
 
 @Injectable()
 export class EnrollmentsService {
@@ -22,10 +23,6 @@ export class EnrollmentsService {
   ) {}
 
   async create(userId: string, dto: CreateEnrollmentDto): Promise<Enrollment> {
-    // userId comes from the verified auth.users.id (SupabaseAuthGuard),
-    // never from the request body. #23's trigger guarantees profiles.id
-    // equals auth.users.id, so this lookup should always succeed for a
-    // real logged-in user — but we check explicitly rather than assume.
     const profile = await this.profilesRepo.findOne({ where: { id: userId } });
     if (!profile) {
       throw new NotFoundException('Profile not found for this user');
@@ -44,9 +41,6 @@ export class EnrollmentsService {
     try {
       return await this.enrollmentsRepo.save(enrollment);
     } catch (err) {
-      // Postgres error code 23505 = unique_violation. The (user_id,
-      // course_id) constraint from #17 means this is "already enrolled,"
-      // an expected case — surface it as a clean 409, not a raw 500.
       if (
         err instanceof QueryFailedError &&
         (err as any).code === '23505'
@@ -55,5 +49,26 @@ export class EnrollmentsService {
       }
       throw err;
     }
+  }
+
+  async findAllForUser(userId: string): Promise<EnrollmentResponseDto[]> {
+    // Only load the course relation to read its id — no need to pull
+    // the full nested course object, since the frontend already fetches
+    // all courses separately via GET /courses and joins client-side
+    // (same pattern the old ENROLLED_DEFAULT mock used).
+    const enrollments = await this.enrollmentsRepo.find({
+      where: { user: { id: userId } },
+      relations: { course: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    return enrollments.map((e) => ({
+      id: e.id,
+      courseId: e.course.id,
+      progress: e.progress,
+      status: e.status,
+      lastAccessed: e.lastAccessed,
+      createdAt: e.createdAt,
+    }));
   }
 }
