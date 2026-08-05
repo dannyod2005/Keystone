@@ -402,6 +402,24 @@ function KeystonePrototype() {
     navigate(`/learning/${course.id}`);
   }
 
+  async function viewCertificate(enrollmentId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}/certificate`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, "_blank");
+    // Revoke after a delay rather than immediately — the new tab needs
+    // time to actually load the blob URL before it's invalidated.
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  }
+
   const shellTitle =
     screen === "dashboard" ? "My learning" :
     screen === "catalogue" ? "Catalogue" :
@@ -458,6 +476,7 @@ function KeystonePrototype() {
                   onOpenCourse={setSelectedCourse}
                   onStartLearning={handleStartLearning}
                   courses={courses}
+                  onViewCertificate={viewCertificate}
                 />
               </AppShell>
             </RequireAuth>
