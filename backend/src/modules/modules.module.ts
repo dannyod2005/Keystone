@@ -8,6 +8,7 @@ import { QuizOption } from '../quiz/entities/quiz-option.entity';
 import { QuizSubmission } from '../quiz/entities/quiz-submission.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { ModuleNote } from '../notes/entities/module-note.entity';
+import { ForumPost } from '../forum/entities/forum-post.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ModuleNote } from '../notes/entities/module-note.entity';
       QuizSubmission,
       Profile,
       ModuleNote,
+      ForumPost,
     ]),
   ],
   controllers: [ModulesController],
