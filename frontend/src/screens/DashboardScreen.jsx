@@ -4,12 +4,20 @@ import { LEARNER } from "../data/courses";
 import { KeystoneArch } from "../components/common/Primitives";
 /* ---------- Screen: Dashboard ---------- */
 
-export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses }) {
+export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate }) {
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
 
   const days = ["M", "T", "W", "T", "F", "S", "S"];
   const goalDays = [true, true, false, true, true, false, false];
+
+  async function handleViewCertificate(enrollmentId) {
+    try {
+      await onViewCertificate(enrollmentId);
+    } catch (err) {
+      console.error("Failed to load certificate:", err.message);
+    }
+  }
 
   return (
     <div style={{ padding: "28px 32px", maxWidth: 1080 }}>
@@ -76,7 +84,7 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
                   <div style={{ fontSize: 14.5, fontWeight: 600 }}>{c.title}</div>
                   <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>Completed {e.lastAccessed} · certificate issued</div>
                 </div>
-                <button className="ks-btn ks-btn-ghost">View certificate</button>
+                <button className="ks-btn ks-btn-ghost" onClick={() => handleViewCertificate(e.id)}>View certificate</button>
               </div>
             );
           })}
