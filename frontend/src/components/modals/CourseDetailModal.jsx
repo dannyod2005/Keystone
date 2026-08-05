@@ -5,7 +5,7 @@ import { Stars, CategoryDot } from "../../components/common/Primitives";
 
 /* ---------- Course detail modal ---------- */
 
-export function CourseDetailModal({ course, onClose, onEnrol, isEnrolled }) {
+export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, isEnrolled }) {
   if (!course) return null;
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 20 }}>
@@ -73,7 +73,7 @@ export function CourseDetailModal({ course, onClose, onEnrol, isEnrolled }) {
           </ul>
 
           <button className="ks-btn ks-btn-gold" style={{ width: "100%", justifyContent: "center", padding: "12px 0", fontSize: 15 }}
-            onClick={() => onEnrol(course)} disabled={isEnrolled}>
+            onClick={() => (isEnrolled ? onGoToDashboard() : onEnrol(course))}>
             {isEnrolled ? <><CheckCircle2 size={16} /> Already enrolled — go to My learning</> : <>Enrol now <ArrowRight size={15} /></>}
           </button>
         </div>
