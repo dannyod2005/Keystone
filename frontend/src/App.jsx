@@ -82,7 +82,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote }) {
+function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onFetchPosts, onCreatePost }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
@@ -100,6 +100,8 @@ function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmi
       onSubmitQuiz={onSubmitQuiz}
       onFetchNote={onFetchNote}
       onSaveNote={onSaveNote}
+      onFetchPosts={onFetchPosts}
+      onCreatePost={onCreatePost}
       onBack={() => navigate("/dashboard")}
     />
   );
@@ -347,6 +349,30 @@ function KeystonePrototype() {
     return res.json();
   }
 
+  async function fetchPosts(moduleId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/forum`);
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
+  async function createPost(moduleId, content) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/forum`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
   function handleAuthSubmit(session) {
     setAuthMode(null);
     if (pendingCourse) {
@@ -451,6 +477,8 @@ function KeystonePrototype() {
                   onSubmitQuiz={submitQuiz}
                   onFetchNote={fetchNote}
                   onSaveNote={saveNote}
+                  onFetchPosts={fetchPosts}
+                  onCreatePost={createPost}
                 />
               </AppShell>
             </RequireAuth>
