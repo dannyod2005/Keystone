@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { PlayCircle, CheckCircle2, XCircle, ChevronLeft} from "lucide-react";
 
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onBack }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onBack }) {
   const [tab, setTab] = useState("video");
 
   const modules = course.modules ?? [];
@@ -23,7 +23,44 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   const [quizResult, setQuizResult] = useState(null); // set after submitting
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
 
+  const [noteContent, setNoteContent] = useState("");
+  const [noteLoading, setNoteLoading] = useState(false);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteSavedAt, setNoteSavedAt] = useState(null);
+  
   const currentModule = modules[activeModule];
+  
+  useEffect(() => {
+    if (!currentModule || !onFetchNote) return;
+
+    setNoteContent("");
+    setNoteSavedAt(null);
+    setNoteLoading(true);
+
+    onFetchNote(currentModule.id)
+      .then((data) => {
+        setNoteContent(data.content ?? "");
+        setNoteSavedAt(data.updatedAt);
+      })
+      .catch((err) => console.error("Failed to load note:", err.message))
+      .finally(() => setNoteLoading(false));
+  }, [currentModule?.id]);
+
+  async function handleNoteBlur() {
+    if (!currentModule || !onSaveNote) return;
+
+    setNoteSaving(true);
+    try {
+      const saved = await onSaveNote(currentModule.id, noteContent);
+      setNoteSavedAt(saved.updatedAt);
+    } catch (err) {
+      console.error("Failed to save note:", err.message);
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
+  
 
   useEffect(() => {
     if (!currentModule || !onFetchQuiz) return;
@@ -149,7 +186,23 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
           )}
           {tab === "notes" && (
             <div className="ks-card" style={{ padding: 16 }}>
-              <textarea placeholder="Jot down notes for this module — only visible to you." style={{ width: "100%", minHeight: 120, border: "none", outline: "none", fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical", background: "transparent" }} />
+              <textarea
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                onBlur={handleNoteBlur}
+                disabled={noteLoading}
+                placeholder="Jot down notes for this module — only visible to you."
+                style={{ width: "100%", minHeight: 120, border: "none", outline: "none", fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical", background: "transparent" }}
+              />
+              <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 8 }}>
+                {noteLoading
+                  ? "Loading…"
+                  : noteSaving
+                  ? "Saving…"
+                  : noteSavedAt
+                  ? `Saved ${new Date(noteSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : "Not saved yet"}
+              </div>
             </div>
           )}
           {tab === "quiz" && (
