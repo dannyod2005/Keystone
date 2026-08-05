@@ -6,11 +6,6 @@ import { CheckCircle2 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { useAuth } from "./context/AuthContext";
 
-// NOTE: INITIAL_COURSES import removed — course data now comes from the
-// NestJS backend instead of this local mock file. ENROLLED_DEFAULT is
-// untouched for now (enrolment/user data isn't backed by the API yet).
-import { ENROLLED_DEFAULT } from "./data/courses";
-
 import { MarketingHeader } from "./components/layout/MarketingHeader";
 import { AppSidebar } from "./components/layout/AppSidebar";
 import { AppTopbar } from "./components/layout/AppTopbar";
@@ -34,6 +29,14 @@ function screenKeyFromPath(pathname) {
   if (pathname.startsWith("/learning")) return "learning";
   if (pathname.startsWith("/trainer")) return "trainer";
   return "home";
+}
+
+// Backend returns lastAccessed as an ISO timestamp or null (a fresh
+// enrollment has never been "accessed" yet). Format to something short
+// for display; DashboardScreen just interpolates this string raw.
+function formatLastAccessed(iso) {
+  if (!iso) return "not yet";
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
@@ -95,14 +98,12 @@ function KeystonePrototype() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Auth state now comes from AuthContext instead of being tracked here
-  // directly — see #71.
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const loggedIn = !!user;
   const role = user?.user_metadata?.role || "learner";
 
   const [selectedCourse, setSelectedCourse] = useState(null);
-  const [enrolled, setEnrolled] = useState(ENROLLED_DEFAULT);
+  const [enrolled, setEnrolled] = useState([]);
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
@@ -120,6 +121,42 @@ function KeystonePrototype() {
       .catch((err) => setCoursesError(err.message))
       .finally(() => setCoursesLoading(false));
   }, []);
+
+  // Fetch the logged-in user's real enrollments (#19), replacing the old
+  // ENROLLED_DEFAULT mock. Re-runs whenever login state changes; clears
+  // back to [] on logout rather than leaving stale data from a previous
+  // session visible.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setEnrolled([]);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        // progress arrives as a string (Postgres decimal via pg driver,
+        // same quirk seen with Course.rating) — convert once here so
+        // DashboardScreen's arithmetic (e.progress * 100, etc.) works
+        // without needing changes there.
+        setEnrolled(
+          data.map((e) => ({
+            ...e,
+            progress: Number(e.progress),
+            lastAccessed: formatLastAccessed(e.lastAccessed),
+          })),
+        );
+      })
+      .catch((err) => {
+        console.error("Failed to load enrollments:", err.message);
+        setEnrolled([]);
+      });
+  }, [loggedIn, session]);
 
   const screen = screenKeyFromPath(location.pathname);
 
@@ -173,23 +210,56 @@ function KeystonePrototype() {
     setAuthMode(mode);
   }
 
-  function completeEnrol(course) {
-    if (!enrolledIds.includes(course.id)) {
-      setEnrolled((prev) => [
-        ...prev,
-        { courseId: course.id, progress: 0, status: "in-progress", lastAccessed: "just now" },
-      ]);
+  async function refetchEnrollments() {
+    if (!session) return;
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    setEnrolled(
+      data.map((e) => ({
+        ...e,
+        progress: Number(e.progress),
+        lastAccessed: formatLastAccessed(e.lastAccessed),
+      })),
+    );
+  }
+
+  async function completeEnrol(course) {
+    if (enrolledIds.includes(course.id)) {
+      setSelectedCourse(null);
+      navigate("/dashboard");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ courseId: course.id }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || `Request failed: ${res.status}`);
+      }
+
+      await refetchEnrollments();
       setToast(`Enrolled in "${course.title}"`);
       setTimeout(() => setToast(null), 2600);
+    } catch (err) {
+      setToast(`Couldn't enrol: ${err.message}`);
+      setTimeout(() => setToast(null), 3200);
     }
+
     setSelectedCourse(null);
     navigate("/dashboard");
   }
 
-  // AuthContext's onAuthStateChange listener picks up the new session
-  // automatically once signUp()/signInWithPassword() resolves inside
-  // AuthModal — this handler no longer needs to set loggedIn/role itself,
-  // just react to the successful submission (close modal, navigate).
   function handleAuthSubmit(session) {
     setAuthMode(null);
     if (pendingCourse) {
@@ -313,6 +383,7 @@ function KeystonePrototype() {
         course={selectedCourse}
         onClose={() => setSelectedCourse(null)}
         onEnrol={handleEnrol}
+        onGoToDashboard={() => { setSelectedCourse(null); navigate("/dashboard"); }}
         isEnrolled={selectedCourse ? enrolledIds.includes(selectedCourse.id) : false}
       />
 
