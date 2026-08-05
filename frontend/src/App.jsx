@@ -82,7 +82,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz }) {
+function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
@@ -98,6 +98,8 @@ function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmi
       onSaveProgress={onSaveProgress}
       onFetchQuiz={onFetchQuiz}
       onSubmitQuiz={onSubmitQuiz}
+      onFetchNote={onFetchNote}
+      onSaveNote={onSaveNote}
       onBack={() => navigate("/dashboard")}
     />
   );
@@ -241,6 +243,31 @@ function KeystonePrototype() {
     );
   }
 
+  async function fetchNote(moduleId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/notes`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
+  async function saveNote(moduleId, content) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/notes`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
 
   function openAuth(mode) {
     setAuthMode(mode);
@@ -422,6 +449,8 @@ function KeystonePrototype() {
                   onSaveProgress={saveProgress}
                   onFetchQuiz={fetchQuiz}
                   onSubmitQuiz={submitQuiz}
+                  onFetchNote={fetchNote}
+                  onSaveNote={saveNote}
                 />
               </AppShell>
             </RequireAuth>
