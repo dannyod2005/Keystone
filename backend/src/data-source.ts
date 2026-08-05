@@ -10,6 +10,7 @@ import { QuizQuestion } from './quiz/entities/quiz-question.entity';
 import { QuizOption } from './quiz/entities/quiz-option.entity';
 import { QuizSubmission } from './quiz/entities/quiz-submission.entity';
 import { ModuleNote } from './notes/entities/module-note.entity';
+import { ForumPost } from './forum/entities/forum-post.entity';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -26,6 +27,7 @@ export const AppDataSource = new DataSource({
     QuizOption,
     QuizSubmission,
     ModuleNote,
+    ForumPost,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,
