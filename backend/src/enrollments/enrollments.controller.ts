@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
+import { Body, Controller, Get, Param, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { EnrollmentsService } from './enrollments.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { EnrollmentResponseDto } from './dto/enrollment-response.dto';
@@ -38,5 +38,22 @@ export class EnrollmentsController {
     @Body() dto: UpdateProgressDto,
   ): Promise<EnrollmentResponseDto> {
     return this.enrollmentsService.updateProgress(req.user.id, id, dto);
+  }
+
+  @Get(':id/certificate')
+  @UseGuards(SupabaseAuthGuard)
+  async getCertificate(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const pdfBuffer = await this.enrollmentsService.generateCertificate(req.user.id, id);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline; filename="certificate.pdf"',
+      'Content-Length': pdfBuffer.length,
+    });
+    res.send(pdfBuffer);
   }
 }
