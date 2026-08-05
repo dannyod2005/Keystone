@@ -2,19 +2,49 @@ import { useState } from "react";
 import { PlayCircle, CheckCircle2, ChevronLeft} from "lucide-react";
 
 
-export function LearningScreen({ course, onBack }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onBack }) {
   const [tab, setTab] = useState("video");
-  const [activeModule, setActiveModule] = useState(0);
+
+  const modules = course.modules ?? [];
+
+  // Hydrate from real saved progress instead of always starting at 0.
+  // enrollment.progress is a fraction (0-1); convert back to a module
+  // count, clamped to a valid index range.
+  const initialActiveModule = enrollment
+    ? Math.min(Math.round(enrollment.progress * modules.length), modules.length)
+    : 0;
+
+  const [activeModule, setActiveModule] = useState(initialActiveModule);
+  const [saving, setSaving] = useState(false);
 
   if (!course) return null;
 
-  // Guard against a course with no modules at all (e.g. a brand-new,
-  // not-yet-populated course) instead of letting every access below throw.
-  const modules = course.modules ?? [];
   const hasModules = modules.length > 0;
   const isComplete = activeModule >= modules.length;
-  const currentModule = modules[activeModule]; // undefined once isComplete is true
+  const currentModule = modules[activeModule];
   const isLastModule = activeModule >= modules.length - 1;
+
+  async function handleMarkComplete() {
+    const nextActiveModule = isLastModule ? modules.length : activeModule + 1;
+    setActiveModule(nextActiveModule);
+
+    if (!enrollment || !onSaveProgress) return; // no enrollment context — nothing to persist
+
+    setSaving(true);
+    try {
+      await onSaveProgress(enrollment.id, nextActiveModule);
+    } catch (err) {
+      console.error("Failed to save progress:", err.message);
+      // Not reverting activeModule on failure — the learner's local
+      // progress through the video/tabs stays usable even if the save
+      // failed; it'll just be retried next time they mark a module
+      // complete, or the discrepancy is visible next time the dashboard
+      // is checked. A toast here would need lifting state up to App.jsx;
+      // left as a possible follow-up rather than adding that now.
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div style={{ padding: "22px 32px 40px", maxWidth: 1080 }}>
@@ -108,22 +138,12 @@ export function LearningScreen({ course, onBack }) {
 
           <button
             className="ks-btn ks-btn-gold"
-            style={{ marginTop: 20 }}
-            disabled={false}
-            onClick={() => {
-              if (isLastModule) {
-                // TODO: this is where enrollments.status should be set to
-                // "complete" once real enrollment data exists (see #17-20).
-                // For now, this just marks the final module as "done" in
-                // the UI's own local progress tracking below.
-                setActiveModule(modules.length); // one past the last index
-              } else {
-                setActiveModule((m) => m + 1);
-              }
-            }}
+            style={{ marginTop: 20, opacity: saving ? 0.7 : 1 }}
+            disabled={saving}
+            onClick={handleMarkComplete}
           >
             <CheckCircle2 size={16} />
-            {activeModule >= modules.length ? "Course complete" : "Mark complete & continue"}
+            {saving ? "Saving…" : isLastModule ? "Mark complete & finish" : "Mark complete & continue"}
           </button>
         </div>
 

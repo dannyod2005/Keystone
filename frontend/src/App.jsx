@@ -82,15 +82,23 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses }) {
+function LearningRoute({ courses, enrolled, onSaveProgress }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
+  const enrollment = enrolled.find((e) => e.courseId === courseId);
 
   if (!course) {
     return <Navigate to="/dashboard" replace />;
   }
-  return <LearningScreen course={course} onBack={() => navigate("/dashboard")} />;
+  return (
+    <LearningScreen
+      course={course}
+      enrollment={enrollment}
+      onSaveProgress={onSaveProgress}
+      onBack={() => navigate("/dashboard")}
+    />
+  );
 }
 
 /* ---------- Root ---------- */
@@ -205,6 +213,32 @@ function KeystonePrototype() {
     setTimeout(() => setToast(null), 2600);
     return saved;
   }
+
+  async function saveProgress(enrollmentId, completedModules) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ completedModules }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const updated = await res.json();
+    setEnrolled((prev) =>
+      prev.map((e) =>
+        e.id === updated.id
+          ? { ...updated, progress: Number(updated.progress), lastAccessed: formatLastAccessed(updated.lastAccessed) }
+          : e,
+      ),
+    );
+  }
+
 
   function openAuth(mode) {
     setAuthMode(mode);
@@ -356,7 +390,7 @@ function KeystonePrototype() {
           element={
             <RequireAuth loggedIn={loggedIn}>
               <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
-                <LearningRoute courses={courses} />
+                <LearningRoute courses={courses} enrolled={enrolled} onSaveProgress={saveProgress} />
               </AppShell>
             </RequireAuth>
           }

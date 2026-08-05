@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,6 +11,7 @@ import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { EnrollmentResponseDto } from './dto/enrollment-response.dto';
+import { UpdateProgressDto } from './dto/update-progress.dto';
 
 @Injectable()
 export class EnrollmentsService {
@@ -52,10 +54,6 @@ export class EnrollmentsService {
   }
 
   async findAllForUser(userId: string): Promise<EnrollmentResponseDto[]> {
-    // Only load the course relation to read its id — no need to pull
-    // the full nested course object, since the frontend already fetches
-    // all courses separately via GET /courses and joins client-side
-    // (same pattern the old ENROLLED_DEFAULT mock used).
     const enrollments = await this.enrollmentsRepo.find({
       where: { user: { id: userId } },
       relations: { course: true },
@@ -70,5 +68,49 @@ export class EnrollmentsService {
       lastAccessed: e.lastAccessed,
       createdAt: e.createdAt,
     }));
+  }
+
+  async updateProgress(
+    userId: string,
+    enrollmentId: string,
+    dto: UpdateProgressDto,
+  ): Promise<EnrollmentResponseDto> {
+    const enrollment = await this.enrollmentsRepo.findOne({
+      where: { id: enrollmentId },
+      relations: { user: true, course: { modules: true } },
+    });
+
+    if (!enrollment) {
+      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+    }
+
+    // Ownership check: a user can only update their own enrollment. Never
+    // trust that the client only ever sends its own enrollment id —
+    // verify against the token-derived userId, same principle as create().
+    if (enrollment.user.id !== userId) {
+      throw new ForbiddenException('This enrollment does not belong to you');
+    }
+
+    const totalModules = enrollment.course.modules.length;
+    // Clamp: a client sending a stale/bad value shouldn't be able to push
+    // completedModules past the real module count.
+    const completedModules = Math.min(dto.completedModules, totalModules);
+
+    enrollment.progress = totalModules > 0 ? completedModules / totalModules : 0;
+    enrollment.status = completedModules >= totalModules && totalModules > 0
+      ? 'complete'
+      : 'in-progress';
+    enrollment.lastAccessed = new Date();
+
+    const saved = await this.enrollmentsRepo.save(enrollment);
+
+    return {
+      id: saved.id,
+      courseId: enrollment.course.id,
+      progress: saved.progress,
+      status: saved.status,
+      lastAccessed: saved.lastAccessed,
+      createdAt: saved.createdAt,
+    };
   }
 }
