@@ -10,11 +10,14 @@ import { QuizQuestion } from '../quiz/entities/quiz-question.entity';
 import { QuizSubmission } from '../quiz/entities/quiz-submission.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { ModuleNote } from '../notes/entities/module-note.entity';
+import { ForumPost } from '../forum/entities/forum-post.entity';
 import { QuizQuestionResponseDto } from '../quiz/dto/quiz-question-response.dto';
 import { SubmitQuizDto } from '../quiz/dto/submit-quiz.dto';
 import { QuizResultDto } from '../quiz/dto/quiz-result.dto';
 import { UpsertNoteDto } from '../notes/dto/upsert-note.dto';
 import { NoteResponseDto } from '../notes/dto/note-response.dto';
+import { CreatePostDto } from '../forum/dto/create-post.dto';
+import { PostResponseDto } from '../forum/dto/post-response.dto';
 
 @Injectable()
 export class ModulesService {
@@ -29,6 +32,8 @@ export class ModulesService {
     private readonly profilesRepo: Repository<Profile>,
     @InjectRepository(ModuleNote)
     private readonly notesRepo: Repository<ModuleNote>,
+    @InjectRepository(ForumPost)
+    private readonly forumPostsRepo: Repository<ForumPost>,
   ) {}
 
   async getQuiz(moduleId: string): Promise<QuizQuestionResponseDto[]> {
@@ -209,7 +214,7 @@ export class ModulesService {
     };
   }
 
-    async getNote(userId: string, moduleId: string): Promise<NoteResponseDto> {
+  async getNote(userId: string, moduleId: string): Promise<NoteResponseDto> {
     const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
     if (!module) {
       throw new NotFoundException(`Module with id "${moduleId}" not found`);
@@ -259,6 +264,63 @@ export class ModulesService {
     return {
       content: saved.content,
       updatedAt: saved.updatedAt,
+    };
+  }
+
+  async listPosts(moduleId: string): Promise<PostResponseDto[]> {
+    const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
+    if (!module) {
+      throw new NotFoundException(`Module with id "${moduleId}" not found`);
+    }
+
+    const posts = await this.forumPostsRepo.find({
+      where: { module: { id: moduleId } },
+      relations: { user: true },
+      order: { createdAt: 'ASC' },
+    });
+
+    return posts.map((p) => ({
+      id: p.id,
+      content: p.content,
+      createdAt: p.createdAt,
+      author: {
+        id: p.user.id,
+        name: p.user.name,
+      },
+    }));
+  }
+
+  async createPost(
+    userId: string,
+    moduleId: string,
+    dto: CreatePostDto,
+  ): Promise<PostResponseDto> {
+    const profile = await this.profilesRepo.findOne({ where: { id: userId } });
+    if (!profile) {
+      throw new NotFoundException('Profile not found for this user');
+    }
+
+    const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
+    if (!module) {
+      throw new NotFoundException(`Module with id "${moduleId}" not found`);
+    }
+
+    const post = this.forumPostsRepo.create({
+      module,
+      user: profile,
+      content: dto.content,
+    });
+
+    const saved = await this.forumPostsRepo.save(post);
+
+    return {
+      id: saved.id,
+      content: saved.content,
+      createdAt: saved.createdAt,
+      author: {
+        id: profile.id,
+        name: profile.name,
+      },
     };
   }
 }

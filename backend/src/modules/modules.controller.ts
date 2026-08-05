@@ -6,6 +6,8 @@ import { SubmitQuizDto } from '../quiz/dto/submit-quiz.dto';
 import { QuizResultDto } from '../quiz/dto/quiz-result.dto';
 import { UpsertNoteDto } from '../notes/dto/upsert-note.dto';
 import { NoteResponseDto } from '../notes/dto/note-response.dto';
+import { CreatePostDto } from '../forum/dto/create-post.dto';
+import { PostResponseDto } from '../forum/dto/post-response.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 
 interface AuthenticatedRequest extends Request {
@@ -48,5 +50,20 @@ export class ModulesController {
     @Body() dto: UpsertNoteDto,
   ): Promise<NoteResponseDto> {
     return this.modulesService.saveNote(req.user.id, id, dto);
+  }
+
+  @Get(':id/forum')
+  listPosts(@Param('id') id: string): Promise<PostResponseDto[]> {
+    return this.modulesService.listPosts(id);
+  }
+
+  @Post(':id/forum')
+  @UseGuards(SupabaseAuthGuard)
+  createPost(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: CreatePostDto,
+  ): Promise<PostResponseDto> {
+    return this.modulesService.createPost(req.user.id, id, dto);
   }
 }
