@@ -7,6 +7,7 @@ import { QuizQuestion } from '../quiz/entities/quiz-question.entity';
 import { QuizOption } from '../quiz/entities/quiz-option.entity';
 import { QuizSubmission } from '../quiz/entities/quiz-submission.entity';
 import { Profile } from '../profiles/entities/profile.entity';
+import { ModuleNote } from '../notes/entities/module-note.entity';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { Profile } from '../profiles/entities/profile.entity';
       QuizOption,
       QuizSubmission,
       Profile,
+      ModuleNote,
     ]),
   ],
   controllers: [ModulesController],

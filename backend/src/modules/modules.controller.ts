@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { ModulesService } from './modules.service';
 import { QuizQuestionResponseDto } from '../quiz/dto/quiz-question-response.dto';
 import { SubmitQuizDto } from '../quiz/dto/submit-quiz.dto';
 import { QuizResultDto } from '../quiz/dto/quiz-result.dto';
+import { UpsertNoteDto } from '../notes/dto/upsert-note.dto';
+import { NoteResponseDto } from '../notes/dto/note-response.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 
 interface AuthenticatedRequest extends Request {
@@ -27,5 +29,24 @@ export class ModulesController {
     @Body() dto: SubmitQuizDto,
   ): Promise<QuizResultDto> {
     return this.modulesService.submitQuiz(req.user.id, id, dto);
+  }
+
+  @Get(':id/notes')
+  @UseGuards(SupabaseAuthGuard)
+  getNote(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<NoteResponseDto> {
+    return this.modulesService.getNote(req.user.id, id);
+  }
+
+  @Put(':id/notes')
+  @UseGuards(SupabaseAuthGuard)
+  saveNote(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: UpsertNoteDto,
+  ): Promise<NoteResponseDto> {
+    return this.modulesService.saveNote(req.user.id, id, dto);
   }
 }

@@ -9,9 +9,12 @@ import { CourseModule } from '../courses/entities/course-module.entity';
 import { QuizQuestion } from '../quiz/entities/quiz-question.entity';
 import { QuizSubmission } from '../quiz/entities/quiz-submission.entity';
 import { Profile } from '../profiles/entities/profile.entity';
+import { ModuleNote } from '../notes/entities/module-note.entity';
 import { QuizQuestionResponseDto } from '../quiz/dto/quiz-question-response.dto';
 import { SubmitQuizDto } from '../quiz/dto/submit-quiz.dto';
 import { QuizResultDto } from '../quiz/dto/quiz-result.dto';
+import { UpsertNoteDto } from '../notes/dto/upsert-note.dto';
+import { NoteResponseDto } from '../notes/dto/note-response.dto';
 
 @Injectable()
 export class ModulesService {
@@ -24,6 +27,8 @@ export class ModulesService {
     private readonly quizSubmissionsRepo: Repository<QuizSubmission>,
     @InjectRepository(Profile)
     private readonly profilesRepo: Repository<Profile>,
+    @InjectRepository(ModuleNote)
+    private readonly notesRepo: Repository<ModuleNote>,
   ) {}
 
   async getQuiz(moduleId: string): Promise<QuizQuestionResponseDto[]> {
@@ -201,6 +206,59 @@ export class ModulesService {
       total: questions.length,
       alreadySubmitted: false,
       results,
+    };
+  }
+
+    async getNote(userId: string, moduleId: string): Promise<NoteResponseDto> {
+    const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
+    if (!module) {
+      throw new NotFoundException(`Module with id "${moduleId}" not found`);
+    }
+
+    const note = await this.notesRepo.findOne({
+      where: { module: { id: moduleId }, user: { id: userId } },
+    });
+
+    return {
+      content: note?.content ?? null,
+      updatedAt: note?.updatedAt ?? null,
+    };
+  }
+
+  async saveNote(
+    userId: string,
+    moduleId: string,
+    dto: UpsertNoteDto,
+  ): Promise<NoteResponseDto> {
+    const profile = await this.profilesRepo.findOne({ where: { id: userId } });
+    if (!profile) {
+      throw new NotFoundException('Profile not found for this user');
+    }
+
+    const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
+    if (!module) {
+      throw new NotFoundException(`Module with id "${moduleId}" not found`);
+    }
+
+    let note = await this.notesRepo.findOne({
+      where: { module: { id: moduleId }, user: { id: userId } },
+    });
+
+    if (note) {
+      note.content = dto.content ?? null;
+    } else {
+      note = this.notesRepo.create({
+        module,
+        user: profile,
+        content: dto.content ?? null,
+      });
+    }
+
+    const saved = await this.notesRepo.save(note);
+
+    return {
+      content: saved.content,
+      updatedAt: saved.updatedAt,
     };
   }
 }
