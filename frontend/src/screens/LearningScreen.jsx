@@ -1,15 +1,12 @@
-import { useState } from "react";
-import { PlayCircle, CheckCircle2, ChevronLeft} from "lucide-react";
+import { useState, useEffect } from "react";
+import { PlayCircle, CheckCircle2, XCircle, ChevronLeft} from "lucide-react";
 
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onBack }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onBack }) {
   const [tab, setTab] = useState("video");
 
   const modules = course.modules ?? [];
 
-  // Hydrate from real saved progress instead of always starting at 0.
-  // enrollment.progress is a fraction (0-1); convert back to a module
-  // count, clamped to a valid index range.
   const initialActiveModule = enrollment
     ? Math.min(Math.round(enrollment.progress * modules.length), modules.length)
     : 0;
@@ -17,32 +14,81 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onBack }) {
   const [activeModule, setActiveModule] = useState(initialActiveModule);
   const [saving, setSaving] = useState(false);
 
+  // Quiz state — reset whenever the active module changes, since each
+  // module has its own separate quiz.
+  const [quizQuestions, setQuizQuestions] = useState([]);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizError, setQuizError] = useState(null);
+  const [selectedAnswers, setSelectedAnswers] = useState({}); // { [questionId]: optionId }
+  const [quizResult, setQuizResult] = useState(null); // set after submitting
+  const [submittingQuiz, setSubmittingQuiz] = useState(false);
+
+  const currentModule = modules[activeModule];
+
+  useEffect(() => {
+    if (!currentModule || !onFetchQuiz) return;
+
+    setQuizQuestions([]);
+    setSelectedAnswers({});
+    setQuizResult(null);
+    setQuizError(null);
+    setQuizLoading(true);
+
+    onFetchQuiz(currentModule.id)
+      .then((data) => setQuizQuestions(data))
+      .catch((err) => setQuizError(err.message))
+      .finally(() => setQuizLoading(false));
+  }, [currentModule?.id]);
+
   if (!course) return null;
 
   const hasModules = modules.length > 0;
   const isComplete = activeModule >= modules.length;
-  const currentModule = modules[activeModule];
   const isLastModule = activeModule >= modules.length - 1;
 
   async function handleMarkComplete() {
     const nextActiveModule = isLastModule ? modules.length : activeModule + 1;
     setActiveModule(nextActiveModule);
 
-    if (!enrollment || !onSaveProgress) return; // no enrollment context — nothing to persist
+    if (!enrollment || !onSaveProgress) return;
 
     setSaving(true);
     try {
       await onSaveProgress(enrollment.id, nextActiveModule);
     } catch (err) {
       console.error("Failed to save progress:", err.message);
-      // Not reverting activeModule on failure — the learner's local
-      // progress through the video/tabs stays usable even if the save
-      // failed; it'll just be retried next time they mark a module
-      // complete, or the discrepancy is visible next time the dashboard
-      // is checked. A toast here would need lifting state up to App.jsx;
-      // left as a possible follow-up rather than adding that now.
     } finally {
       setSaving(false);
+    }
+  }
+
+  function selectAnswer(questionId, optionId) {
+    if (quizResult) return; // locked once submitted
+    setSelectedAnswers((prev) => ({ ...prev, [questionId]: optionId }));
+  }
+
+  async function handleSubmitQuiz() {
+    if (!currentModule || !onSubmitQuiz) return;
+
+    const answers = quizQuestions.map((q) => ({
+      questionId: q.id,
+      optionId: selectedAnswers[q.id],
+    }));
+
+    if (answers.some((a) => !a.optionId)) {
+      setQuizError("Answer every question before submitting.");
+      return;
+    }
+
+    setQuizError(null);
+    setSubmittingQuiz(true);
+    try {
+      const result = await onSubmitQuiz(currentModule.id, answers);
+      setQuizResult(result);
+    } catch (err) {
+      setQuizError(err.message || "Failed to submit quiz.");
+    } finally {
+      setSubmittingQuiz(false);
     }
   }
 
@@ -108,18 +154,75 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onBack }) {
           )}
           {tab === "quiz" && (
             <div className="ks-card" style={{ padding: 18 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>Quick check — 3 questions</div>
-              {["Which step happens first when calling a tool?", "What reduces hallucinated tool calls?", "Where should retrieved context be placed?"].map((q, i) => (
-                <div key={q} style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 8 }}>{i + 1}. {q}</div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {["A", "B", "C"].map((o) => (
-                      <span key={o} style={{ fontSize: 12.5, border: "1px solid var(--line)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>Option {o}</span>
-                    ))}
-                  </div>
+              {quizLoading ? (
+                <div style={{ fontSize: 13.5, color: "var(--slate-light)" }}>Loading quiz…</div>
+              ) : quizQuestions.length === 0 ? (
+                <div style={{ fontSize: 13.5, color: "var(--slate-light)" }}>
+                  This module doesn't have a quiz yet.
                 </div>
-              ))}
-              <button className="ks-btn ks-btn-gold">Submit answers</button>
+              ) : (
+                <>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
+                    Quick check — {quizQuestions.length} question{quizQuestions.length === 1 ? "" : "s"}
+                    {quizResult && ` — ${quizResult.score}/${quizResult.total}${quizResult.alreadySubmitted ? " (already submitted)" : ""}`}
+                  </div>
+
+                  {quizQuestions.map((q, i) => {
+                    const resultForQuestion = quizResult?.results.find((r) => r.questionId === q.id);
+                    return (
+                      <div key={q.id} style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 8 }}>{i + 1}. {q.question}</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {q.options.map((o) => {
+                            const isSelected = selectedAnswers[q.id] === o.id;
+                            const isCorrectAnswer = resultForQuestion?.correctOptionId === o.id;
+                            const isWrongSelected = resultForQuestion && isSelected && !resultForQuestion.isCorrect;
+
+                            let borderColor = "var(--line)";
+                            let bg = "transparent";
+                            if (resultForQuestion) {
+                              if (isCorrectAnswer) { borderColor = "var(--success)"; bg = "var(--success-tint)"; }
+                              else if (isWrongSelected) { borderColor = "var(--coral)"; bg = "var(--coral-tint)"; }
+                            } else if (isSelected) {
+                              borderColor = "var(--gold-dark)";
+                              bg = "var(--gold-tint)";
+                            }
+
+                            return (
+                              <span
+                                key={o.id}
+                                onClick={() => selectAnswer(q.id, o.id)}
+                                style={{
+                                  fontSize: 12.5, border: `1px solid ${borderColor}`, background: bg,
+                                  borderRadius: 8, padding: "6px 12px", cursor: quizResult ? "default" : "pointer",
+                                  display: "flex", alignItems: "center", gap: 5,
+                                }}
+                              >
+                                {resultForQuestion && isCorrectAnswer && <CheckCircle2 size={13} color="var(--success)" />}
+                                {resultForQuestion && isWrongSelected && <XCircle size={13} color="var(--coral)" />}
+                                {o.optionText}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {quizError && <div style={{ fontSize: 12.5, color: "var(--coral)", marginBottom: 10 }}>{quizError}</div>}
+
+                  {!quizResult && (
+                    <button
+                      className="ks-btn ks-btn-gold"
+                      disabled={submittingQuiz}
+                      style={{ opacity: submittingQuiz ? 0.7 : 1 }}
+                      onClick={handleSubmitQuiz}
+                    >
+                      {submittingQuiz ? "Submitting…" : "Submit answers"}
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )}
           {tab === "forum" && (
@@ -172,16 +275,17 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onBack }) {
           </div>
           <div className="ks-card" style={{ padding: 16 }}>
             <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 10 }}>Grades</div>
-            {["Module 1 quiz", "Module 2 quiz"].map((g, i) => (
-              <div key={g} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "6px 0" }}>
-                <span style={{ color: "var(--slate)" }}>{g}</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{i === 0 ? "9/10" : "10/10"}</span>
+            {quizResult ? (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "6px 0" }}>
+                <span style={{ color: "var(--slate)" }}>Module {activeModule + 1} quiz</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{quizResult.score}/{quizResult.total}</span>
               </div>
-            ))}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "6px 0" }}>
-              <span style={{ color: "var(--slate-light)" }}>Module {activeModule + 1} quiz</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: "var(--slate-light)" }}>Not yet taken</span>
-            </div>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "6px 0" }}>
+                <span style={{ color: "var(--slate-light)" }}>Module {activeModule + 1} quiz</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: "var(--slate-light)" }}>Not yet taken</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

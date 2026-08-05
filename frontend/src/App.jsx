@@ -82,7 +82,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress }) {
+function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
@@ -96,6 +96,8 @@ function LearningRoute({ courses, enrolled, onSaveProgress }) {
       course={course}
       enrollment={enrollment}
       onSaveProgress={onSaveProgress}
+      onFetchQuiz={onFetchQuiz}
+      onSubmitQuiz={onSubmitQuiz}
       onBack={() => navigate("/dashboard")}
     />
   );
@@ -294,6 +296,30 @@ function KeystonePrototype() {
     navigate("/dashboard");
   }
 
+  async function fetchQuiz(moduleId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz`);
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
+  async function submitQuiz(moduleId, answers) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz/submit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ answers }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
   function handleAuthSubmit(session) {
     setAuthMode(null);
     if (pendingCourse) {
@@ -390,7 +416,13 @@ function KeystonePrototype() {
           element={
             <RequireAuth loggedIn={loggedIn}>
               <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
-                <LearningRoute courses={courses} enrolled={enrolled} onSaveProgress={saveProgress} />
+                <LearningRoute
+                  courses={courses}
+                  enrolled={enrolled}
+                  onSaveProgress={saveProgress}
+                  onFetchQuiz={fetchQuiz}
+                  onSubmitQuiz={submitQuiz}
+                />
               </AppShell>
             </RequireAuth>
           }
