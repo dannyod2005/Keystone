@@ -94,9 +94,9 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
           <div className="ks-card" style={{ padding: 18, marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <span style={{ fontSize: 13.5, fontWeight: 600 }}>July 2026</span>
-              <div style={{ display: "flex", gap: 6 }}>
-                <ChevronLeft size={14} color="var(--slate-light)" />
-                <ChevronRight size={14} color="var(--slate-light)" />
+              <div style={{ display: "flex", gap: 6, opacity: 0.35 }}>
+                <ChevronLeft size={14} color="var(--slate-light)" style={{ cursor: "not-allowed" }} />
+                <ChevronRight size={14} color="var(--slate-light)" style={{ cursor: "not-allowed" }} />
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, textAlign: "center" }}>
