@@ -197,7 +197,10 @@ function KeystonePrototype() {
 
     const res = await fetch(url, {
       method: isNew ? "POST" : "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
       body: JSON.stringify(draft.payload),
     });
 
