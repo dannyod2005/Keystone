@@ -371,6 +371,35 @@ function KeystonePrototype() {
     return res.json();
   }
 
+  async function fetchQuizForEdit(moduleId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz/edit`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
+  async function saveQuiz(moduleId, payload) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const message = Array.isArray(body?.message)
+        ? body.message.join(", ")
+        : body?.message || `Request failed: ${res.status}`;
+      throw new Error(message);
+    }
+
+    return res.json();
+  }
+
   function handleAuthSubmit(session) {
     setAuthMode(null);
     if (pendingCourse) {
@@ -508,7 +537,12 @@ function KeystonePrototype() {
             <RequireAuth loggedIn={loggedIn}>
               <RequireTrainer role={role}>
                 <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
-                  <TrainerScreen courses={courses} onSaveCourse={saveCourse} />
+                  <TrainerScreen
+                    courses={courses}
+                    onSaveCourse={saveCourse}
+                    onFetchQuizForEdit={fetchQuizForEdit}
+                    onSaveQuiz={saveQuiz}
+                  />
                 </AppShell>
               </RequireTrainer>
             </RequireAuth>
