@@ -6,7 +6,6 @@ import { CheckCircle2 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import { useAuth } from "./context/AuthContext";
 
-import { MarketingHeader } from "./components/layout/MarketingHeader";
 import { AppSidebar } from "./components/layout/AppSidebar";
 import { AppTopbar } from "./components/layout/AppTopbar";
 
@@ -122,8 +121,6 @@ function KeystonePrototype() {
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
   const [courses, setCourses] = useState([]);
-  const [coursesLoading, setCoursesLoading] = useState(true);
-  const [coursesError, setCoursesError] = useState(null);
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -132,10 +129,8 @@ function KeystonePrototype() {
         return res.json();
       })
       .then((data) => setCourses(data))
-      .catch((err) => setCoursesError(err.message))
-      .finally(() => setCoursesLoading(false));
+      .catch((err) => console.error("Failed to load courses:", err.message));
   }, []);
-
   // Fetch the logged-in user's real enrollments (#19), replacing the old
   // ENROLLED_DEFAULT mock. Re-runs whenever login state changes; clears
   // back to [] on logout rather than leaving stale data from a previous

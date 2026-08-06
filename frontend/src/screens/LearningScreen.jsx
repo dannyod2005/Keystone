@@ -51,6 +51,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
       .then((data) => setQuizQuestions(data))
       .catch((err) => setQuizError(err.message))
       .finally(() => setQuizLoading(false));
+    // Intentionally scoped to currentModule.id only: onFetchQuiz is
+    // recreated on every App.jsx render (not memoized), so including it
+    // here would refetch on every keystroke/state change anywhere in the
+    // app, not just on actual module navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentModule?.id]);
 
   useEffect(() => {
@@ -67,6 +72,9 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
       })
       .catch((err) => console.error("Failed to load note:", err.message))
       .finally(() => setNoteLoading(false));
+    // See quiz effect above for why onFetchNote/currentModule are
+    // intentionally omitted from the dependency array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentModule?.id]);
 
   useEffect(() => {
@@ -81,6 +89,9 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
       .then((data) => setPosts(data))
       .catch((err) => console.error("Failed to load forum posts:", err.message))
       .finally(() => setPostsLoading(false));
+    // See quiz effect above for why onFetchPosts/currentModule are
+    // intentionally omitted from the dependency array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentModule?.id]);
 
   if (!course) return null;
