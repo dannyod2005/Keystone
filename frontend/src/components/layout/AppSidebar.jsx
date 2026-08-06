@@ -13,8 +13,7 @@ export function AppSidebar({ screen, onGo, role, onLogout }) {
     items.push({ key: "trainer", label: "Trainer studio", icon: Pencil });
   }
   return (
-    <aside style={{ width: 220, flexShrink: 0, background: "var(--ink)", color: "var(--paper)", padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, minHeight: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 10px 22px" }}>
+    <aside style={{ width: 220, flexShrink: 0, background: "var(--ink)", color: "var(--paper)", padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, minHeight: "100vh" }}>        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 10px 22px" }}>
         <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 2 L21 8 V22 H15 V14 H9 V22 H3 V8 Z" fill="var(--gold)" /></svg>
         <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, color: "var(--paper)" }}>Keystone</span>
       </div>

@@ -48,7 +48,7 @@ function AppShell({ loggedIn, role, onLogout, title, children }) {
   const showSidebar = loggedIn;
 
   return (
-    <div style={{ display: "flex", minHeight: 640 }}>
+    <div style={{ display: "flex", minHeight: "100vh" }}>
       {showSidebar && (
         <AppSidebar
           screen={screen}
