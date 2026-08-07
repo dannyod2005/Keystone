@@ -12,7 +12,6 @@ export function MarketingHeader({ onGo, onAuth }) {
           <nav style={{ display: "flex", gap: 24 }}>
             <span onClick={() => onGo("home")} style={{ fontSize: 14, fontWeight: 500, cursor: "pointer", color: "var(--slate)" }}>Discover</span>
             <span onClick={() => onGo("catalogue")} style={{ fontSize: 14, fontWeight: 500, cursor: "pointer", color: "var(--slate)" }}>Catalogue</span>
-            <span style={{ fontSize: 14, fontWeight: 500, cursor: "pointer", color: "var(--slate)" }}>For teams</span>
           </nav>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
