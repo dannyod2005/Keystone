@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -17,6 +18,7 @@ import { QuizResultDto } from '../quiz/dto/quiz-result.dto';
 import { UpsertNoteDto } from '../notes/dto/upsert-note.dto';
 import { NoteResponseDto } from '../notes/dto/note-response.dto';
 import { CreatePostDto } from '../forum/dto/create-post.dto';
+import { UpdatePostDto } from '../forum/dto/update-post.dto';
 import { PostResponseDto } from '../forum/dto/post-response.dto';
 import { UpsertQuizDto } from '../quiz/dto/upsert-quiz.dto';
 import { QuizOption } from '../quiz/entities/quiz-option.entity';
@@ -28,6 +30,10 @@ import { ActivityService } from '../activity/activity.service';
 const QUIZ_SUBMIT_MINUTES = 5;
 const NOTE_SAVE_MINUTES = 3;
 const FORUM_POST_MINUTES = 3;
+
+function isEdited(post: ForumPost): boolean {
+  return post.updatedAt.getTime() !== post.createdAt.getTime();
+}
 
 @Injectable()
 export class ModulesService {
@@ -301,6 +307,7 @@ export class ModulesService {
         name: p.user.name,
       },
       parentPostId: p.parentPost?.id ?? null,
+      edited: isEdited(p),
     }));
   }
 
@@ -357,6 +364,44 @@ export class ModulesService {
         name: profile.name,
       },
       parentPostId: parentPost?.id ?? null,
+      edited: isEdited(saved),
+    };
+  }
+
+  async editPost(
+    userId: string,
+    moduleId: string,
+    postId: string,
+    dto: UpdatePostDto,
+  ): Promise<PostResponseDto> {
+    const post = await this.forumPostsRepo.findOne({
+      where: { id: postId, module: { id: moduleId } },
+      relations: { user: true, parentPost: true },
+    });
+    if (!post) {
+      throw new NotFoundException(`Post with id "${postId}" not found`);
+    }
+
+    // Ownership check: only the post's own author can edit it — never
+    // trust the client to only send its own posts, same principle as
+    // enrollment/note ownership checks elsewhere in this service.
+    if (post.user.id !== userId) {
+      throw new ForbiddenException('You can only edit your own posts');
+    }
+
+    post.content = dto.content;
+    const saved = await this.forumPostsRepo.save(post);
+
+    return {
+      id: saved.id,
+      content: saved.content,
+      createdAt: saved.createdAt,
+      author: {
+        id: post.user.id,
+        name: post.user.name,
+      },
+      parentPostId: post.parentPost?.id ?? null,
+      edited: isEdited(saved),
     };
   }
 
