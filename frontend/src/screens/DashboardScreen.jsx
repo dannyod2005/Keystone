@@ -11,6 +11,16 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
   const firstName = getDisplayName(user).split(" ")[0];
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
+  // #86 — "in-progress" (not yet complete) splits into two display groups:
+  // genuinely started (progress > 0) vs. enrolled but never opened
+  // (progress === 0, no lastAccessed yet — the two are set together in
+  // the same backend call, so either is an equivalent signal). Kept as a
+  // separate split from `inProgress` above rather than redefining it, so
+  // the stat tiles and "learned across N courses" below still count every
+  // non-complete enrollment, same as before — only the list rendering
+  // distinguishes the two.
+  const notStarted = inProgress.filter((e) => e.progress === 0);
+  const continuing = inProgress.filter((e) => e.progress > 0);
 
   const days = ["M", "T", "W", "T", "F", "S", "S"];
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -57,26 +67,54 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
             ))}
           </div>
 
-          <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 12 }}>Continue learning</div>
-          {inProgress.map((e) => {
-            const c = courses.find((x) => x.id === e.courseId);
-            if (!c) return null;
-            return (
-              <div key={e.courseId} className="ks-card" style={{ padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
-                <KeystoneArch progress={e.progress} size={48} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 600 }}>{c.title}</div>
-                  <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>
-                    {Math.round(e.progress * c.modules.length)} of {c.modules.length} modules · last opened {e.lastAccessed}
+          {notStarted.length > 0 && (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 12 }}>Not started</div>
+              {notStarted.map((e) => {
+                const c = courses.find((x) => x.id === e.courseId);
+                if (!c) return null;
+                return (
+                  <div key={e.courseId} className="ks-card" style={{ padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
+                    <KeystoneArch progress={0} size={48} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 600 }}>{c.title}</div>
+                      <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>
+                        {c.modules.length} module{c.modules.length === 1 ? "" : "s"} · not started yet
+                      </div>
+                    </div>
+                    <button className="ks-btn ks-btn-primary" onClick={() => onStartLearning(c)}>Start</button>
                   </div>
-                  <div style={{ height: 5, background: "var(--line)", borderRadius: 3, marginTop: 8, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${e.progress * 100}%`, background: "var(--gold)" }} />
+                );
+              })}
+            </>
+          )}
+
+          <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", margin: notStarted.length > 0 ? "24px 0 12px" : "0 0 12px" }}>Continue learning</div>
+          {continuing.length === 0 ? (
+            <div className="ks-card" style={{ padding: 16, marginBottom: 12, fontSize: 13, color: "var(--slate-light)" }}>
+              Nothing in progress yet.
+            </div>
+          ) : (
+            continuing.map((e) => {
+              const c = courses.find((x) => x.id === e.courseId);
+              if (!c) return null;
+              return (
+                <div key={e.courseId} className="ks-card" style={{ padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
+                  <KeystoneArch progress={e.progress} size={48} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 600 }}>{c.title}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>
+                      {Math.round(e.progress * c.modules.length)} of {c.modules.length} modules · last opened {e.lastAccessed}
+                    </div>
+                    <div style={{ height: 5, background: "var(--line)", borderRadius: 3, marginTop: 8, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${e.progress * 100}%`, background: "var(--gold)" }} />
+                    </div>
                   </div>
+                  <button className="ks-btn ks-btn-primary" onClick={() => onStartLearning(c)}>Resume</button>
                 </div>
-                <button className="ks-btn ks-btn-primary" onClick={() => onStartLearning(c)}>Resume</button>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
 
           <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", margin: "24px 0 12px" }}>Completed</div>
           {complete.map((e) => {
