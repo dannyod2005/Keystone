@@ -62,7 +62,7 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
             <BookMarked size={13} color="var(--slate-light)" />
             <span style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)" }}>Sources & credits</span>
           </div>
-          <ul style={{ margin: "0 0 22px", padding: 0, listStyle: "none" }}>
+          <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
             {course.credits.map((c, i) => (
               <li key={c.id} style={{ display: "flex", gap: 8, fontSize: 13, color: "var(--slate)", lineHeight: 1.55, padding: "5px 0", borderBottom: i < course.credits.length - 1 ? "1px solid var(--line)" : "none" }}>
                 <span style={{ color: "var(--gold-dark)", flexShrink: 0 }}>·</span>
@@ -70,7 +70,15 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
               </li>
             ))}
           </ul>
+        </div>
 
+        {/* Sticky footer: a sibling of the scrollable content div above,
+            both inside the same overflowY:auto card — sticky positions
+            relative to that scroll container, so this pins to the bottom
+            of the visible modal regardless of how long the agenda/FAQ/
+            credits content above it is (#75). Own background + top
+            border so scrolled content doesn't show through underneath it. */}
+        <div style={{ position: "sticky", bottom: 0, background: "var(--paper-2)", borderTop: "1px solid var(--line)", padding: "16px 28px" }}>
           <button className="ks-btn ks-btn-gold" style={{ width: "100%", justifyContent: "center", padding: "12px 0", fontSize: 15 }}
             onClick={() => (isEnrolled ? onGoToDashboard() : onEnrol(course))}>
             {isEnrolled ? <><CheckCircle2 size={16} /> Already enrolled — go to My learning</> : <>Enrol now <ArrowRight size={15} /></>}
