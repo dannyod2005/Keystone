@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Repository, EntityManager } from 'typeorm';
 import { CourseModule } from '../courses/entities/course-module.entity';
 import { QuizQuestion } from '../quiz/entities/quiz-question.entity';
 import { QuizSubmission } from '../quiz/entities/quiz-submission.entity';
@@ -18,6 +18,10 @@ import { UpsertNoteDto } from '../notes/dto/upsert-note.dto';
 import { NoteResponseDto } from '../notes/dto/note-response.dto';
 import { CreatePostDto } from '../forum/dto/create-post.dto';
 import { PostResponseDto } from '../forum/dto/post-response.dto';
+import { UpsertQuizDto } from '../quiz/dto/upsert-quiz.dto';
+import { QuizOption } from '../quiz/entities/quiz-option.entity';
+import { QuizQuestionEditResponseDto } from '../quiz/dto/quiz-question-edit-response.dto';
+
 
 @Injectable()
 export class ModulesService {
@@ -322,5 +326,135 @@ export class ModulesService {
         name: profile.name,
       },
     };
+  }
+
+  async upsertQuiz(moduleId: string, dto: UpsertQuizDto): Promise<QuizQuestionResponseDto[]> {
+    const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
+    if (!module) {
+      throw new NotFoundException(`Module with id "${moduleId}" not found`);
+    }
+
+    for (const q of dto.questions) {
+      const correctCount = q.options.filter((o) => o.isCorrect).length;
+      if (correctCount !== 1) {
+        throw new BadRequestException(
+          `Question "${q.question}" must have exactly one correct option (found ${correctCount})`,
+        );
+      }
+    }
+
+    return this.quizQuestionsRepo.manager.transaction(async (manager: EntityManager) => {
+      const existingQuestions = await manager.find(QuizQuestion, {
+        where: { module: { id: moduleId } },
+        relations: { options: true },
+      });
+
+      const incomingQuestionIds = new Set(
+        dto.questions.map((q) => q.id).filter((id): id is string => !!id),
+      );
+      const questionsToDelete = existingQuestions.filter((q) => !incomingQuestionIds.has(q.id));
+      if (questionsToDelete.length > 0) {
+        await manager.delete(QuizQuestion, questionsToDelete.map((q) => q.id));
+      }
+
+      for (const existingQ of existingQuestions) {
+        if (!incomingQuestionIds.has(existingQ.id)) continue;
+        const incomingQ = dto.questions.find((q) => q.id === existingQ.id);
+        if (!incomingQ) continue; // guarded by the Set check above, but satisfies TS
+
+        const incomingOptionIds = new Set(
+          incomingQ.options.map((o) => o.id).filter((id): id is string => !!id),
+        );
+        const optionsToDelete = existingQ.options.filter((o) => !incomingOptionIds.has(o.id));
+        if (optionsToDelete.length > 0) {
+          await manager.delete(QuizOption, optionsToDelete.map((o) => o.id));
+        }
+      }
+
+      const existingQuestionById = new Map(existingQuestions.map((q) => [q.id, q]));
+
+      for (const [qIndex, q] of dto.questions.entries()) {
+        let questionEntity: QuizQuestion;
+        const matchedExisting = q.id ? existingQuestionById.get(q.id) : undefined;
+
+        if (matchedExisting) {
+          matchedExisting.question = q.question;
+          matchedExisting.position = qIndex;
+          questionEntity = await manager.save(QuizQuestion, matchedExisting);
+        } else {
+          const created = manager.create(QuizQuestion, {
+            module,
+            question: q.question,
+            position: qIndex,
+          });
+          questionEntity = await manager.save(QuizQuestion, created);
+        }
+
+        const existingOptionById = new Map(
+          (matchedExisting?.options ?? []).map((o) => [o.id, o]),
+        );
+
+        for (const [oIndex, o] of q.options.entries()) {
+          const matchedOption = o.id ? existingOptionById.get(o.id) : undefined;
+
+          if (matchedOption) {
+            matchedOption.optionText = o.optionText;
+            matchedOption.isCorrect = o.isCorrect;
+            matchedOption.position = oIndex;
+            await manager.save(QuizOption, matchedOption);
+          } else {
+            const createdOption = manager.create(QuizOption, {
+              question: questionEntity,
+              optionText: o.optionText,
+              isCorrect: o.isCorrect,
+              position: oIndex,
+            });
+            await manager.save(QuizOption, createdOption);
+          }
+        }
+      }
+
+      // Read back through the same transactional manager, not
+      // this.quizQuestionsRepo — that repo uses a separate connection
+      // which, under READ COMMITTED, can't see these writes until this
+      // transaction commits (commit happens only after this callback
+      // returns). Reading through `manager` sees the writes immediately.
+      return this.fetchQuizForEdit(moduleId, manager);
+    });
+  }
+
+  async getQuizForEdit(moduleId: string): Promise<QuizQuestionEditResponseDto[]> {
+    const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
+    if (!module) {
+      throw new NotFoundException(`Module with id "${moduleId}" not found`);
+    }
+
+    return this.fetchQuizForEdit(moduleId, this.quizQuestionsRepo.manager);
+  }
+
+  private async fetchQuizForEdit(
+    moduleId: string,
+    manager: EntityManager,
+  ): Promise<QuizQuestionEditResponseDto[]> {
+    const questions = await manager.find(QuizQuestion, {
+      where: { module: { id: moduleId } },
+      relations: { options: true },
+      order: {
+        position: 'ASC',
+        options: { position: 'ASC' },
+      },
+    });
+
+    return questions.map((q) => ({
+      id: q.id,
+      question: q.question,
+      position: q.position,
+      options: q.options.map((o) => ({
+        id: o.id,
+        optionText: o.optionText,
+        isCorrect: o.isCorrect,
+        position: o.position,
+      })),
+    }));
   }
 }

@@ -9,6 +9,7 @@ import { QuizSubmission } from '../quiz/entities/quiz-submission.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { ModuleNote } from '../notes/entities/module-note.entity';
 import { ForumPost } from '../forum/entities/forum-post.entity';
+import { RequireTrainerGuard } from '../auth/require-trainer.guard';
 
 @Module({
   imports: [
@@ -23,6 +24,6 @@ import { ForumPost } from '../forum/entities/forum-post.entity';
     ]),
   ],
   controllers: [ModulesController],
-  providers: [ModulesService],
+  providers: [ModulesService, RequireTrainerGuard],
 })
 export class ModulesModule {}

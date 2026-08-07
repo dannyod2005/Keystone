@@ -4,7 +4,7 @@ import { Pencil, Plus } from "lucide-react";
 import { CategoryDot } from "../../components/common/Primitives";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
 
-export function TrainerScreen({ courses, onSaveCourse }) {
+export function TrainerScreen({ courses, onSaveCourse, onFetchQuizForEdit, onSaveQuiz }) {
   const [editingId, setEditingId] = useState(null); // null = list view, "__new" = creating, else course id
 
   const editingCourse =
@@ -22,6 +22,8 @@ export function TrainerScreen({ courses, onSaveCourse }) {
         course={editingCourse}
         onCancel={() => setEditingId(null)}
         onSave={handleSave}
+        onFetchQuizForEdit={onFetchQuizForEdit}
+        onSaveQuiz={onSaveQuiz}
       />
     );
   }

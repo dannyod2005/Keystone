@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronLeft, BookMarked, Plus, Trash2, Save, Video } from "lucide-react";
+import { useState, useRef } from "react";
+import { ChevronLeft, BookMarked, Plus, Trash2, Save, Video, ChevronDown, ChevronUp, HelpCircle } from "lucide-react";
 
 const TRAINER_CATEGORIES = ["Technical", "Business", "Leadership"];
 const TRAINER_LEVELS = ["Beginner", "Intermediate", "Advanced"];
@@ -16,12 +16,29 @@ function emptyCourseDraft() {
   };
 }
 
-export function TrainerCourseEditor({ course, onCancel, onSave }) {
+function emptyQuestion() {
+  return {
+    question: "",
+    options: [
+      { optionText: "", isCorrect: true },
+      { optionText: "", isCorrect: false },
+    ],
+  };
+}
+
+export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz }) {
+
+  const [quizState, setQuizState] = useState({}); // { [moduleId]: { expanded, loading, loaded, questions, saving, error } }
+
+  // Tracks the latest save request's sequence number per module, so an
+  // older, slower response can never overwrite state with stale data
+  // after a newer request has already completed. useRef (not useState)
+  // specifically because it updates synchronously, immediately blocking
+  // a rapid double-click before React even re-renders to disable the button.
+  const saveSequenceRef = useRef({});
+
   const [draft, setDraft] = useState(() => {
     if (!course) return emptyCourseDraft();
-    // Clone so in-progress edits don't mutate the live course until Save.
-    // Each item keeps its real database id — that's what lets PUT preserve
-    // identity instead of deleting and recreating everything on save.
     return {
       title: course.title,
       provider: course.provider,
@@ -73,14 +90,159 @@ export function TrainerCourseEditor({ course, onCancel, onSave }) {
   function addCredit() { setDraft((d) => ({ ...d, credits: [...d.credits, { line: "" }] })); }
   function removeCredit(i) { setDraft((d) => ({ ...d, credits: d.credits.filter((_, x) => x !== i) })); }
 
+  /* ---------- Quiz management ---------- */
+
+  async function toggleQuiz(moduleId) {
+    const current = quizState[moduleId];
+    if (current?.expanded) {
+      setQuizState((prev) => ({ ...prev, [moduleId]: { ...prev[moduleId], expanded: false } }));
+      return;
+    }
+
+    setQuizState((prev) => ({
+      ...prev,
+      [moduleId]: { ...prev[moduleId], expanded: true, loading: !prev[moduleId]?.loaded },
+    }));
+
+    if (current?.loaded) return; // already fetched once, just re-showing
+
+    try {
+      const questions = await onFetchQuizForEdit(moduleId);
+      setQuizState((prev) => ({
+        ...prev,
+        [moduleId]: {
+          ...prev[moduleId],
+          loading: false,
+          loaded: true,
+          questions: questions.length > 0 ? questions : [emptyQuestion()],
+          error: null,
+        },
+      }));
+    } catch (err) {
+      setQuizState((prev) => ({
+        ...prev,
+        [moduleId]: { ...prev[moduleId], loading: false, error: err.message },
+      }));
+    }
+  }
+
+  function updateQuestions(moduleId, updater) {
+    setQuizState((prev) => ({
+      ...prev,
+      [moduleId]: { ...prev[moduleId], questions: updater(prev[moduleId].questions) },
+    }));
+  }
+
+  function setQuestionText(moduleId, qIndex, text) {
+    updateQuestions(moduleId, (qs) =>
+      qs.map((q, i) => (i === qIndex ? { ...q, question: text } : q)),
+    );
+  }
+
+  function addQuestion(moduleId) {
+    updateQuestions(moduleId, (qs) => [...qs, emptyQuestion()]);
+  }
+
+  function removeQuestion(moduleId, qIndex) {
+    updateQuestions(moduleId, (qs) => qs.filter((_, i) => i !== qIndex));
+  }
+
+  function setOptionText(moduleId, qIndex, oIndex, text) {
+    updateQuestions(moduleId, (qs) =>
+      qs.map((q, i) =>
+        i === qIndex
+          ? { ...q, options: q.options.map((o, x) => (x === oIndex ? { ...o, optionText: text } : o)) }
+          : q,
+      ),
+    );
+  }
+
+  function setCorrectOption(moduleId, qIndex, oIndex) {
+    updateQuestions(moduleId, (qs) =>
+      qs.map((q, i) =>
+        i === qIndex
+          ? { ...q, options: q.options.map((o, x) => ({ ...o, isCorrect: x === oIndex })) }
+          : q,
+      ),
+    );
+  }
+
+  function addOption(moduleId, qIndex) {
+    updateQuestions(moduleId, (qs) =>
+      qs.map((q, i) => (i === qIndex ? { ...q, options: [...q.options, { optionText: "", isCorrect: false }] } : q)),
+    );
+  }
+
+  function removeOption(moduleId, qIndex, oIndex) {
+    updateQuestions(moduleId, (qs) =>
+      qs.map((q, i) => (i === qIndex ? { ...q, options: q.options.filter((_, x) => x !== oIndex) } : q)),
+    );
+  }
+
+  function quizValidationError(questions) {
+    for (const q of questions) {
+      if (!q.question.trim()) return "Every question needs text.";
+      if (q.options.length < 2) return "Every question needs at least 2 options.";
+      if (q.options.some((o) => !o.optionText.trim())) return "Every option needs text.";
+      if (q.options.filter((o) => o.isCorrect).length !== 1) return "Every question needs exactly one correct option.";
+    }
+    return null;
+  }
+
+  async function handleSaveQuiz(moduleId) {
+    const questions = quizState[moduleId]?.questions ?? [];
+    const validationError = quizValidationError(questions);
+    if (validationError) {
+      setQuizState((prev) => ({ ...prev, [moduleId]: { ...prev[moduleId], error: validationError } }));
+      return;
+    }
+
+    const payload = {
+      questions: questions.map((q) => ({
+        ...(q.id ? { id: q.id } : {}),
+        question: q.question,
+        options: q.options.map((o) => ({
+          ...(o.id ? { id: o.id } : {}),
+          optionText: o.optionText,
+          isCorrect: o.isCorrect,
+        })),
+      })),
+    };
+
+    // Claim this as the latest request for this module, synchronously —
+    // any earlier in-flight request for the same module is now stale.
+    const mySequence = (saveSequenceRef.current[moduleId] ?? 0) + 1;
+    saveSequenceRef.current[moduleId] = mySequence;
+
+    setQuizState((prev) => ({ ...prev, [moduleId]: { ...prev[moduleId], saving: true, error: null } }));
+    try {
+      const saved = await onSaveQuiz(moduleId, payload);
+
+      // If a newer request has started since this one began, this
+      // response is stale — discard it rather than overwrite fresher
+      // (or in-flight) state.
+      if (saveSequenceRef.current[moduleId] !== mySequence) return;
+
+      setQuizState((prev) => ({
+        ...prev,
+        [moduleId]: { ...prev[moduleId], saving: false, questions: saved.length > 0 ? saved : [emptyQuestion()] },
+      }));
+    } catch (err) {
+      if (saveSequenceRef.current[moduleId] !== mySequence) return;
+      setQuizState((prev) => ({
+        ...prev,
+        [moduleId]: { ...prev[moduleId], saving: false, error: err.message },
+      }));
+    }
+  }
+
+  /* ---------- Course save ---------- */
+
   const canSave = draft.title.trim().length > 1 && draft.modules.some((m) => m.title.trim().length > 0);
 
   async function handleSave() {
     if (!canSave) return;
 
-    // Build a clean payload with ONLY the fields the backend DTO declares.
-    // The global ValidationPipe rejects (400) any request containing extra
-    // fields, so nothing beyond this shape can be sent.
     const payload = {
       title: draft.title,
       provider: draft.provider,
@@ -113,8 +275,6 @@ export function TrainerCourseEditor({ course, onCancel, onSave }) {
     setSaveError(null);
     try {
       await onSave({ id: course?.id ?? null, payload });
-      // On success, the parent (TrainerScreen) unmounts this component —
-      // no need to reset saving/error state here.
     } catch (err) {
       setSaveError(err.message || "Failed to save course. Please try again.");
       setSaving(false);
@@ -179,18 +339,102 @@ export function TrainerCourseEditor({ course, onCancel, onSave }) {
           <Video size={14} color="var(--slate-light)" />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Modules &amp; video</span>
         </div>
-        {draft.modules.map((m, i) => (
-          <div key={m.id ?? `new-${i}`} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--slate-light)", width: 20, marginTop: 9 }}>{String(i + 1).padStart(2, "0")}</span>
-            <div style={{ flex: 1 }}>
-              <input style={{ ...rowInput, marginBottom: 6 }} value={m.title} onChange={(e) => setModule(i, "title", e.target.value)} placeholder="Module title" />
-              <input style={rowInput} value={m.videoUrl || ""} onChange={(e) => setModule(i, "videoUrl", e.target.value)}
-                placeholder="Video embed URL (e.g. https://www.youtube.com/embed/...)" />
+        {draft.modules.map((m, i) => {
+          const qState = m.id ? quizState[m.id] : null;
+          return (
+            <div key={m.id ?? `new-${i}`} style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--slate-light)", width: 20, marginTop: 9 }}>{String(i + 1).padStart(2, "0")}</span>
+                <div style={{ flex: 1 }}>
+                  <input style={{ ...rowInput, marginBottom: 6 }} value={m.title} onChange={(e) => setModule(i, "title", e.target.value)} placeholder="Module title" />
+                  <input style={rowInput} value={m.videoUrl || ""} onChange={(e) => setModule(i, "videoUrl", e.target.value)}
+                    placeholder="Video embed URL (e.g. https://www.youtube.com/embed/...)" />
+                </div>
+                <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 10 }} onClick={() => removeModule(i)} />
+              </div>
+
+              {m.id ? (
+                <div style={{ marginLeft: 28, marginTop: 6 }}>
+                  <span
+                    onClick={() => toggleQuiz(m.id)}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" }}
+                  >
+                    <HelpCircle size={13} />
+                    Manage quiz
+                    {qState?.expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </span>
+
+                  {qState?.expanded && (
+                    <div className="ks-card" style={{ padding: 14, marginTop: 8, background: "var(--paper)" }}>
+                      {qState.loading ? (
+                        <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>Loading quiz…</div>
+                      ) : (
+                        <>
+                          {(qState.questions ?? []).map((q, qIndex) => (
+                            <div key={q.id ?? `newq-${qIndex}`} style={{ marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid var(--line)" }}>
+                              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
+                                <input
+                                  style={rowInput}
+                                  value={q.question}
+                                  onChange={(e) => setQuestionText(m.id, qIndex, e.target.value)}
+                                  placeholder={`Question ${qIndex + 1}`}
+                                />
+                                <Trash2 size={15} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 9, flexShrink: 0 }} onClick={() => removeQuestion(m.id, qIndex)} />
+                              </div>
+                              {q.options.map((o, oIndex) => (
+                                <div key={o.id ?? `newo-${oIndex}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, marginLeft: 12 }}>
+                                  <input
+                                    type="radio"
+                                    name={`correct-${m.id}-${qIndex}`}
+                                    checked={o.isCorrect}
+                                    onChange={() => setCorrectOption(m.id, qIndex, oIndex)}
+                                    title="Mark as correct answer"
+                                  />
+                                  <input
+                                    style={{ ...rowInput, flex: 1 }}
+                                    value={o.optionText}
+                                    onChange={(e) => setOptionText(m.id, qIndex, oIndex, e.target.value)}
+                                    placeholder={`Option ${oIndex + 1}`}
+                                  />
+                                  <Trash2 size={14} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeOption(m.id, qIndex, oIndex)} />
+                                </div>
+                              ))}
+                              <span
+                                onClick={() => addOption(m.id, qIndex)}
+                                style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer", marginLeft: 12 }}
+                              >
+                                + Add option
+                              </span>
+                            </div>
+                          ))}
+
+                          <button className="ks-btn ks-btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px", marginRight: 8 }} onClick={() => addQuestion(m.id)}>
+                            <Plus size={12} /> Add question
+                          </button>
+                          <button
+                            className="ks-btn ks-btn-gold"
+                            style={{ fontSize: 12.5, padding: "6px 12px", opacity: qState.saving ? 0.7 : 1 }}
+                            disabled={qState.saving}
+                            onClick={() => handleSaveQuiz(m.id)}
+                          >
+                            {qState.saving ? "Saving…" : "Save quiz"}
+                          </button>
+
+                          {qState.error && <div style={{ fontSize: 12, color: "var(--coral)", marginTop: 8 }}>{qState.error}</div>}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginLeft: 28, marginTop: 4, fontSize: 11.5, color: "var(--slate-light)" }}>
+                  Save the course first to add quiz questions to this module.
+                </div>
+              )}
             </div>
-            <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 10 }} onClick={() => removeModule(i)} />
-          </div>
-        ))}
-        <button className="ks-btn ks-btn-ghost" style={{ fontSize: 13, padding: "7px 12px" }} onClick={addModule}><Plus size={13} /> Add module</button>
+          );
+        })}
+        <button className="ks-btn ks-btn-ghost" style={{ fontSize: 13, padding: "7px 12px", marginTop: 4 }} onClick={addModule}><Plus size={13} /> Add module</button>
       </div>
 
       <div className="ks-card" style={{ padding: 20, marginBottom: 16 }}>

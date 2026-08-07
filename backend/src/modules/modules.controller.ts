@@ -9,6 +9,9 @@ import { NoteResponseDto } from '../notes/dto/note-response.dto';
 import { CreatePostDto } from '../forum/dto/create-post.dto';
 import { PostResponseDto } from '../forum/dto/post-response.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
+import { RequireTrainerGuard } from '../auth/require-trainer.guard';
+import { UpsertQuizDto } from '../quiz/dto/upsert-quiz.dto';
+import { QuizQuestionEditResponseDto } from '../quiz/dto/quiz-question-edit-response.dto';
 
 interface AuthenticatedRequest extends Request {
   user: { id: string };
@@ -21,6 +24,12 @@ export class ModulesController {
   @Get(':id/quiz')
   getQuiz(@Param('id') id: string): Promise<QuizQuestionResponseDto[]> {
     return this.modulesService.getQuiz(id);
+  }
+
+  @Get(':id/quiz/edit')
+  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
+  getQuizForEdit(@Param('id') id: string): Promise<QuizQuestionEditResponseDto[]> {
+    return this.modulesService.getQuizForEdit(id);
   }
 
   @Post(':id/quiz/submit')
@@ -65,5 +74,14 @@ export class ModulesController {
     @Body() dto: CreatePostDto,
   ): Promise<PostResponseDto> {
     return this.modulesService.createPost(req.user.id, id, dto);
+  }
+
+  @Put(':id/quiz')
+  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
+  upsertQuiz(
+    @Param('id') id: string,
+    @Body() dto: UpsertQuizDto,
+  ): Promise<QuizQuestionResponseDto[]> {
+    return this.modulesService.upsertQuiz(id, dto);
   }
 }
