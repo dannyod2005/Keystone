@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Course } from './entities/course.entity';
 import { CourseModule } from './entities/course-module.entity';
 import { CourseCredit } from './entities/course-credit.entity';
@@ -17,6 +17,11 @@ export class CoursesService {
 
   findAll(): Promise<Course[]> {
     return this.coursesRepo.find({
+      // Catalogue view — soft-deleted courses are excluded here, but this
+      // filter is deliberately local to this query, not baked into the
+      // entity (see Course.deletedAt comment). An enrolled learner's
+      // course join elsewhere is untouched by this.
+      where: { deletedAt: IsNull() },
       relations: { modules: true, credits: true, faqs: true },
       order: {
         modules: { position: 'ASC' },
@@ -28,7 +33,7 @@ export class CoursesService {
 
   async findOne(id: string): Promise<Course> {
     const course = await this.coursesRepo.findOne({
-      where: { id },
+      where: { id, deletedAt: IsNull() },
       relations: { modules: true, credits: true, faqs: true },
       order: {
         modules: { position: 'ASC' },
@@ -42,6 +47,20 @@ export class CoursesService {
     }
 
     return course;
+  }
+
+  async remove(id: string): Promise<void> {
+    // update() rather than a find-then-save round trip — also naturally
+    // covers "already deleted" as a no-op match failure, which we want to
+    // surface as 404 rather than silently succeeding.
+    const result = await this.coursesRepo.update(
+      { id, deletedAt: IsNull() },
+      { deletedAt: new Date() },
+    );
+
+    if (result.affected === 0) {
+      throw new NotFoundException(`Course with id "${id}" not found`);
+    }
   }
 
   create(dto: CreateCourseDto): Promise<Course> {

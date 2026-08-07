@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation
 } from "react-router-dom";
@@ -223,9 +223,29 @@ function KeystonePrototype() {
 
   const screen = screenKeyFromPath(location.pathname);
 
+  const enrolledIds = enrolled.map((e) => e.courseId);
+
+  // `courses` is the public catalogue (GET /courses) — deliberately
+  // excludes soft-deleted courses (#41). But an enrolled learner's
+  // dashboard/learning screen shouldn't lose access just because a
+  // trainer deleted the course later, so fall back to the lightweight
+  // course snapshot embedded on the enrollment itself (see
+  // EnrolledCourseDto on the backend) for any id the catalogue doesn't
+  // have. Only used for the learner-facing screens below — Trainer Studio
+  // and the public catalogue correctly keep using `courses` as-is.
+  const coursesForLearners = useMemo(() => {
+    const catalogueIds = new Set(courses.map((c) => c.id));
+    return [
+      ...courses,
+      ...enrolled
+        .map((e) => e.course)
+        .filter((c) => c && !catalogueIds.has(c.id)),
+    ];
+  }, [courses, enrolled]);
+
   useEffect(() => {
     const learningCourse =
-      screen === "learning" ? courses.find((c) => `/learning/${c.id}` === location.pathname) : null;
+      screen === "learning" ? coursesForLearners.find((c) => `/learning/${c.id}` === location.pathname) : null;
     const titles = {
       home: "Keystone Learning",
       catalogue: "Catalogue — Keystone",
@@ -234,9 +254,7 @@ function KeystonePrototype() {
       trainer: "Trainer Studio — Keystone",
     };
     document.title = titles[screen] || "Keystone";
-  }, [screen, location.pathname, courses]);
-
-  const enrolledIds = enrolled.map((e) => e.courseId);
+  }, [screen, location.pathname, coursesForLearners]);
 
   async function saveCourse(draft) {
     const isNew = !draft.id;
@@ -270,6 +288,25 @@ function KeystonePrototype() {
     setToast(`Saved "${saved.title}"`);
     setTimeout(() => setToast(null), 2600);
     return saved;
+  }
+
+  // Soft delete (#41) — backend just stamps deleted_at rather than
+  // removing the row, so existing enrollments/progress aren't touched.
+  // Here that just means removing it from the local catalogue list.
+  async function deleteCourse(courseId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/${courseId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    setCourses((prev) => prev.filter((c) => c.id !== courseId));
+    setToast("Course deleted");
+    setTimeout(() => setToast(null), 2600);
   }
 
   async function saveProgress(enrollmentId, completedModules) {
@@ -534,7 +571,7 @@ function KeystonePrototype() {
   const shellTitle =
     screen === "dashboard" ? "My learning" :
     screen === "catalogue" ? "Catalogue" :
-    screen === "learning" ? (courses.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
+    screen === "learning" ? (coursesForLearners.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
     screen === "trainer" ? "Trainer studio" : "";
 
   if (authLoading) {
@@ -586,7 +623,7 @@ function KeystonePrototype() {
                   enrolled={enrolled}
                   onOpenCourse={setSelectedCourse}
                   onStartLearning={handleStartLearning}
-                  courses={courses}
+                  courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
                   user={user}
                   activitySummary={activitySummary}
@@ -602,7 +639,7 @@ function KeystonePrototype() {
             <RequireAuth loggedIn={loggedIn}>
               <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
                 <LearningRoute
-                  courses={courses}
+                  courses={coursesForLearners}
                   enrolled={enrolled}
                   onSaveProgress={saveProgress}
                   onFetchQuiz={fetchQuiz}
@@ -628,6 +665,7 @@ function KeystonePrototype() {
                   <TrainerScreen
                     courses={courses}
                     onSaveCourse={saveCourse}
+                    onDeleteCourse={deleteCourse}
                     onFetchQuizForEdit={fetchQuizForEdit}
                     onSaveQuiz={saveQuiz}
                   />

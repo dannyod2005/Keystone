@@ -44,6 +44,14 @@ export class Course {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
+  // Deliberately a plain column, not @DeleteDateColumn — see the migration
+  // comment for why: TypeORM's built-in soft-delete auto-filters this
+  // entity out of every join, which would hide an already-enrolled
+  // learner's course from their own dashboard. Filtering is applied
+  // explicitly in CoursesService instead, only where it belongs.
+  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
   @OneToMany(() => CourseModule, (m) => m.course, { cascade: true, orphanedRowAction: 'delete' })
   modules: CourseModule[];
 
