@@ -3,49 +3,103 @@ import { ArrowRight, ChevronRight} from "lucide-react";
 import { TESTIMONIALS } from "../data/courses";
 import { Stars, KeystoneArch, CategoryDot } from "../components/common/Primitives";
 import { MarketingHeader } from "../components/layout/MarketingHeader";
+import { getDisplayName } from "../lib/userDisplay";
 
-/* ---------- Screen: Home (marketing) ---------- */
+/* ---------- Screen: Home (marketing for logged-out visitors, a
+   welcome-back landing for logged-in users) ---------- */
 
-export function HomeScreen({ onGo, onAuth, courses, loggedIn }) {
+export function HomeScreen({ onGo, onAuth, courses, loggedIn, user, enrolled = [] }) {
+  const firstName = loggedIn ? getDisplayName(user).split(" ")[0] : null;
+  const inProgress = enrolled.filter((e) => e.status === "in-progress");
+  const complete = enrolled.filter((e) => e.status === "complete");
+
   return (
     <div>
       {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
       <section style={{ maxWidth: 1160, margin: "0 auto", padding: "64px 28px 40px", display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 48, alignItems: "center" }}>
-        <div>
-          <span className="ks-badge" style={{ background: "var(--gold-tint)", color: "var(--gold-dark)" }}>For growing teams</span>
-          <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 46, lineHeight: 1.08, margin: "18px 0 16px" }}>
-            Skills your team can point to, not just talk about.
-          </h1>
-          <p style={{ fontSize: 16, color: "var(--slate)", lineHeight: 1.6, maxWidth: 460 }}>
-            Short, project-based courses in AI, data, and leadership — built so a busy person can actually finish them.
-          </p>
-          <div style={{ display: "flex", gap: 12, marginTop: 26 }}>
-            <button className="ks-btn ks-btn-gold" style={{ padding: "12px 22px", fontSize: 15 }} onClick={() => onAuth("signup")}>Get started free</button>
-            <button className="ks-btn ks-btn-ghost" style={{ padding: "12px 22px", fontSize: 15 }} onClick={() => onGo("catalogue")}>
-              Browse catalogue <ArrowRight size={15} />
-            </button>
+        {loggedIn ? (
+          <div>
+            <span className="ks-badge" style={{ background: "var(--gold-tint)", color: "var(--gold-dark)" }}>Welcome back</span>
+            <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 46, lineHeight: 1.08, margin: "18px 0 16px" }}>
+              Good to see you, {firstName}.
+            </h1>
+            <p style={{ fontSize: 16, color: "var(--slate)", lineHeight: 1.6, maxWidth: 460 }}>
+              Pick up a course you've already started, or browse the catalogue for something new.
+            </p>
+            <div style={{ display: "flex", gap: 12, marginTop: 26 }}>
+              <button className="ks-btn ks-btn-gold" style={{ padding: "12px 22px", fontSize: 15 }} onClick={() => onGo("dashboard")}>Go to my learning</button>
+              <button className="ks-btn ks-btn-ghost" style={{ padding: "12px 22px", fontSize: 15 }} onClick={() => onGo("catalogue")}>
+                Browse catalogue <ArrowRight size={15} />
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 26, marginTop: 34 }}>
+              {[[String(inProgress.length), "in progress"], [String(complete.length), "completed"]].map(([n, l]) => (
+                <div key={l}>
+                  <div style={{ fontFamily: "var(--font-mono)", fontWeight: 500, fontSize: 20 }}>{n}</div>
+                  <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{l}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 26, marginTop: 34 }}>
-            {[["40,000+", "learners"], ["120+", "courses"], ["4.8", "avg. rating"]].map(([n, l]) => (
-              <div key={l}>
-                <div style={{ fontFamily: "var(--font-mono)", fontWeight: 500, fontSize: 20 }}>{n}</div>
-                <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{l}</div>
-              </div>
-            ))}
+        ) : (
+          <div>
+            <span className="ks-badge" style={{ background: "var(--gold-tint)", color: "var(--gold-dark)" }}>For growing teams</span>
+            <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 46, lineHeight: 1.08, margin: "18px 0 16px" }}>
+              Skills your team can point to, not just talk about.
+            </h1>
+            <p style={{ fontSize: 16, color: "var(--slate)", lineHeight: 1.6, maxWidth: 460 }}>
+              Short, project-based courses in AI, data, and leadership — built so a busy person can actually finish them.
+            </p>
+            <div style={{ display: "flex", gap: 12, marginTop: 26 }}>
+              <button className="ks-btn ks-btn-gold" style={{ padding: "12px 22px", fontSize: 15 }} onClick={() => onAuth("signup")}>Get started free</button>
+              <button className="ks-btn ks-btn-ghost" style={{ padding: "12px 22px", fontSize: 15 }} onClick={() => onGo("catalogue")}>
+                Browse catalogue <ArrowRight size={15} />
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 26, marginTop: 34 }}>
+              {[["40,000+", "learners"], ["120+", "courses"], ["4.8", "avg. rating"]].map(([n, l]) => (
+                <div key={l}>
+                  <div style={{ fontFamily: "var(--font-mono)", fontWeight: 500, fontSize: 20 }}>{n}</div>
+                  <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{l}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         <div className="ks-card" style={{ padding: 22, position: "relative" }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>Continue where you left off</div>
-          {courses.slice(0, 3).map((c) => (
-            <div key={c.id} onClick={() => onGo("catalogue")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, cursor: "pointer" }}>
-              <KeystoneArch progress={c.id === "c1" ? 0.62 : c.id === "c2" ? 0.1 : 0.2} size={40} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{c.title}</div>
-                <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.provider}</div>
+          {loggedIn ? (
+            inProgress.length > 0 ? (
+              inProgress.slice(0, 3).map((e) => (
+                <div key={e.id} onClick={() => onGo(`learning/${e.courseId}`)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, cursor: "pointer" }}>
+                  <KeystoneArch progress={e.progress} size={40} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{e.course?.title ?? "Untitled course"}</div>
+                    <div style={{ fontSize: 12, color: "var(--slate-light)" }}>
+                      {Math.round(e.progress * (e.course?.modules?.length ?? 0))} of {e.course?.modules?.length ?? 0} modules
+                    </div>
+                  </div>
+                  <ChevronRight size={15} color="var(--slate-light)" />
+                </div>
+              ))
+            ) : (
+              <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "10px 8px" }}>
+                You haven't started a course yet —{" "}
+                <span onClick={() => onGo("catalogue")} style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>browse the catalogue</span>.
               </div>
-              <ChevronRight size={15} color="var(--slate-light)" />
-            </div>
-          ))}
+            )
+          ) : (
+            courses.slice(0, 3).map((c) => (
+              <div key={c.id} onClick={() => onGo("catalogue")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, cursor: "pointer" }}>
+                <KeystoneArch progress={c.id === "c1" ? 0.62 : c.id === "c2" ? 0.1 : 0.2} size={40} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600 }}>{c.title}</div>
+                  <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.provider}</div>
+                </div>
+                <ChevronRight size={15} color="var(--slate-light)" />
+              </div>
+            ))
+          )}
         </div>
       </section>
 
