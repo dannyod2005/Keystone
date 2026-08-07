@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { ModulesService } from './modules.service';
 import { QuizQuestionResponseDto } from '../quiz/dto/quiz-question-response.dto';
@@ -7,6 +7,7 @@ import { QuizResultDto } from '../quiz/dto/quiz-result.dto';
 import { UpsertNoteDto } from '../notes/dto/upsert-note.dto';
 import { NoteResponseDto } from '../notes/dto/note-response.dto';
 import { CreatePostDto } from '../forum/dto/create-post.dto';
+import { UpdatePostDto } from '../forum/dto/update-post.dto';
 import { PostResponseDto } from '../forum/dto/post-response.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RequireTrainerGuard } from '../auth/require-trainer.guard';
@@ -74,6 +75,17 @@ export class ModulesController {
     @Body() dto: CreatePostDto,
   ): Promise<PostResponseDto> {
     return this.modulesService.createPost(req.user.id, id, dto);
+  }
+
+  @Patch(':id/forum/:postId')
+  @UseGuards(SupabaseAuthGuard)
+  editPost(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('postId') postId: string,
+    @Body() dto: UpdatePostDto,
+  ): Promise<PostResponseDto> {
+    return this.modulesService.editPost(req.user.id, id, postId, dto);
   }
 
   @Put(':id/quiz')

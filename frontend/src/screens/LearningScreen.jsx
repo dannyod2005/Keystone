@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { PlayCircle, CheckCircle2, XCircle, ChevronLeft} from "lucide-react";
 
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onBack }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
   const [tab, setTab] = useState("video");
 
   const modules = course?.modules ?? [];
@@ -39,6 +39,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   // post it's replying to. null = the top-level composer is in use instead.
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyContent, setReplyContent] = useState("");
+  // Editing: only one post editable at a time, same pattern as replying.
+  const [editingId, setEditingId] = useState(null);
+  const [editContent, setEditContent] = useState("");
+  const [editingError, setEditingError] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const currentModule = modules[activeModule];
 
@@ -90,6 +95,9 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
     setPostsLoading(true);
     setReplyingTo(null);
     setReplyContent("");
+    setEditingId(null);
+    setEditContent("");
+    setEditingError(null);
 
     onFetchPosts(currentModule.id)
       .then((data) => setPosts(data))
@@ -188,6 +196,23 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
     }
   }
 
+  async function handleSaveEdit(postId) {
+    if (!currentModule || !onEditPost || !editContent.trim()) return;
+
+    setEditingError(null);
+    setSavingEdit(true);
+    try {
+      const updated = await onEditPost(currentModule.id, postId, editContent.trim());
+      setPosts((prev) => prev.map((p) => (p.id === postId ? updated : p)));
+      setEditingId(null);
+      setEditContent("");
+    } catch (err) {
+      setEditingError(err.message || "Failed to save edit.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   // Groups the flat post list (#39 — flat from the API, nested in the UI)
   // into a reply tree. A post whose parentPostId doesn't match anything
   // in this list (shouldn't normally happen) falls back to top-level
@@ -211,6 +236,10 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   function renderPost(p, depth) {
     const indent = Math.min(depth, 3) * 28;
     const isReplying = replyingTo === p.id;
+    const isEditing = editingId === p.id;
+    const isOwnPost = !!currentUserId && p.author.id === currentUserId;
+    const actionLinkStyle = { fontSize: 11.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" };
+
     return (
       <div key={p.id} style={{ marginLeft: indent }}>
         <div style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: depth === 0 ? "1px solid var(--line)" : "none" }}>
@@ -218,18 +247,67 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
             {(p.author.name || "?")[0]}
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{p.author.name || "Anonymous"}</div>
-            <div style={{ fontSize: 13, color: "var(--slate)" }}>{p.content}</div>
-            <span
-              onClick={() => {
-                setReplyingTo(isReplying ? null : p.id);
-                setReplyContent("");
-                setPostingError(null);
-              }}
-              style={{ fontSize: 11.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer", marginTop: 4, display: "inline-block" }}
-            >
-              {isReplying ? "Cancel" : "Reply"}
-            </span>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              {p.author.name || "Anonymous"}
+              {p.edited && (
+                <span style={{ fontSize: 11, fontWeight: 400, color: "var(--slate-light)", marginLeft: 6 }}>(edited)</span>
+              )}
+            </div>
+
+            {isEditing ? (
+              <div style={{ marginTop: 4 }}>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  style={{ width: "100%", minHeight: 48, border: "1px solid var(--line)", borderRadius: 8, padding: 10, fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical", marginBottom: 8 }}
+                />
+                {editingError && <div style={{ fontSize: 12, color: "var(--coral)", marginBottom: 8 }}>{editingError}</div>}
+                <button
+                  className="ks-btn ks-btn-gold"
+                  disabled={savingEdit || !editContent.trim()}
+                  style={{ opacity: savingEdit || !editContent.trim() ? 0.6 : 1, padding: "6px 14px", fontSize: 13, marginRight: 10 }}
+                  onClick={() => handleSaveEdit(p.id)}
+                >
+                  {savingEdit ? "Saving…" : "Save"}
+                </button>
+                <span
+                  onClick={() => { setEditingId(null); setEditContent(""); setEditingError(null); }}
+                  style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate)", cursor: "pointer" }}
+                >
+                  Cancel
+                </span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: "var(--slate)" }}>{p.content}</div>
+            )}
+
+            {!isEditing && (
+              <div style={{ display: "flex", gap: 14, marginTop: 4 }}>
+                <span
+                  onClick={() => {
+                    setReplyingTo(isReplying ? null : p.id);
+                    setReplyContent("");
+                    setPostingError(null);
+                  }}
+                  style={actionLinkStyle}
+                >
+                  {isReplying ? "Cancel" : "Reply"}
+                </span>
+                {isOwnPost && (
+                  <span
+                    onClick={() => {
+                      setEditingId(p.id);
+                      setEditContent(p.content);
+                      setEditingError(null);
+                      setReplyingTo(null);
+                    }}
+                    style={actionLinkStyle}
+                  >
+                    Edit
+                  </span>
+                )}
+              </div>
+            )}
 
             {isReplying && (
               <div style={{ marginTop: 8 }}>

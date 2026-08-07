@@ -82,7 +82,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onFetchPosts, onCreatePost }) {
+function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
@@ -102,6 +102,8 @@ function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmi
       onSaveNote={onSaveNote}
       onFetchPosts={onFetchPosts}
       onCreatePost={onCreatePost}
+      onEditPost={onEditPost}
+      currentUserId={currentUserId}
       onBack={() => navigate("/dashboard")}
     />
   );
@@ -433,6 +435,26 @@ function KeystonePrototype() {
     return result;
   }
 
+  async function editPost(moduleId, postId, content) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/forum/${postId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    // No activity refetch here — editing isn't new activity, deliberately
+    // (an unlimited edit loop shouldn't be a way to farm streak minutes).
+    return res.json();
+  }
+
   async function fetchQuizForEdit(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz/edit`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
@@ -589,6 +611,8 @@ function KeystonePrototype() {
                   onSaveNote={saveNote}
                   onFetchPosts={fetchPosts}
                   onCreatePost={createPost}
+                  onEditPost={editPost}
+                  currentUserId={user?.id}
                 />
               </AppShell>
             </RequireAuth>

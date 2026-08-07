@@ -5,6 +5,7 @@ import {
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { CourseModule } from '../../courses/entities/course-module.entity';
 import { Profile } from '../../profiles/entities/profile.entity';
@@ -35,4 +36,10 @@ export class ForumPost {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  // Bumped automatically by TypeORM on every save() that changes the row.
+  // A post is considered edited when this no longer matches createdAt —
+  // see PostResponseDto.edited.
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
 }
