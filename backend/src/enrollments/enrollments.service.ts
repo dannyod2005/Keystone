@@ -6,13 +6,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { IsNull, QueryFailedError, Repository } from 'typeorm';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { Enrollment } from './entities/enrollment.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
-import { EnrollmentResponseDto } from './dto/enrollment-response.dto';
+import { EnrolledCourseDto, EnrollmentResponseDto } from './dto/enrollment-response.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
 import { ActivityService } from '../activity/activity.service';
 
@@ -34,7 +34,12 @@ export class EnrollmentsService {
       throw new NotFoundException('Profile not found for this user');
     }
 
-    const course = await this.coursesRepo.findOne({ where: { id: dto.courseId } });
+    // deletedAt filter: a soft-deleted course shouldn't be enrollable —
+    // same NotFoundException as a genuinely missing course, since from the
+    // learner's perspective it no longer exists.
+    const course = await this.coursesRepo.findOne({
+      where: { id: dto.courseId, deletedAt: IsNull() },
+    });
     if (!course) {
       throw new NotFoundException(`Course with id "${dto.courseId}" not found`);
     }
@@ -60,18 +65,15 @@ export class EnrollmentsService {
   async findAllForUser(userId: string): Promise<EnrollmentResponseDto[]> {
     const enrollments = await this.enrollmentsRepo.find({
       where: { user: { id: userId } },
-      relations: { course: true },
-      order: { createdAt: 'DESC' },
+      // course.modules loaded (and embedded below) so the dashboard/
+      // learning screen work off this snapshot rather than re-looking the
+      // course up in the catalogue list, which omits soft-deleted courses
+      // (#41) — see EnrolledCourseDto.
+      relations: { course: { modules: true } },
+      order: { createdAt: 'DESC', course: { modules: { position: 'ASC' } } },
     });
 
-    return enrollments.map((e) => ({
-      id: e.id,
-      courseId: e.course.id,
-      progress: e.progress,
-      status: e.status,
-      lastAccessed: e.lastAccessed,
-      createdAt: e.createdAt,
-    }));
+    return enrollments.map((e) => this.toResponseDto(e));
   }
 
   async updateProgress(
@@ -82,6 +84,7 @@ export class EnrollmentsService {
     const enrollment = await this.enrollmentsRepo.findOne({
       where: { id: enrollmentId },
       relations: { user: true, course: { modules: true } },
+      order: { course: { modules: { position: 'ASC' } } },
     });
 
     if (!enrollment) {
@@ -131,13 +134,34 @@ export class EnrollmentsService {
       );
     }
 
+    // save() returns the same entity reference with its already-loaded
+    // relations intact, so saved.course.modules (fetched above for the
+    // totalModules calc) is still there — no need to re-query.
+    return this.toResponseDto(saved);
+  }
+
+  private toResponseDto(enrollment: Enrollment): EnrollmentResponseDto {
     return {
-      id: saved.id,
+      id: enrollment.id,
       courseId: enrollment.course.id,
-      progress: saved.progress,
-      status: saved.status,
-      lastAccessed: saved.lastAccessed,
-      createdAt: saved.createdAt,
+      progress: enrollment.progress,
+      status: enrollment.status,
+      lastAccessed: enrollment.lastAccessed,
+      createdAt: enrollment.createdAt,
+      course: this.toEnrolledCourseDto(enrollment.course),
+    };
+  }
+
+  private toEnrolledCourseDto(course: Course): EnrolledCourseDto {
+    return {
+      id: course.id,
+      title: course.title,
+      modules: (course.modules ?? []).map((m) => ({
+        id: m.id,
+        position: m.position,
+        title: m.title,
+        videoUrl: m.videoUrl,
+      })),
     };
   }
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { Course } from './entities/course.entity';
 import { CreateCourseDto } from './dto/create-course.dto';
@@ -33,5 +33,12 @@ export class CoursesController {
     @Body() dto: UpdateCourseDto,
   ): Promise<Course> {
     return this.coursesService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
+  @HttpCode(204)
+  remove(@Param('id') id: string): Promise<void> {
+    return this.coursesService.remove(id);
   }
 }
