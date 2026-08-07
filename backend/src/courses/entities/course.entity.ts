@@ -23,9 +23,6 @@ export class Course {
   @Column({ type: 'int', default: 0 })
   hours: number;
 
-  @Column({ type: 'int', default: 0 })
-  projects: number;
-
   @Column({ type: 'decimal', nullable: true })
   rating: number | null;
 

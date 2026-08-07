@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, X, ArrowRight, BookMarked, FileText } from "lucide-react";
+import { CheckCircle2, Clock, X, ArrowRight, BookMarked } from "lucide-react";
 
 import { Stars, CategoryDot } from "../../components/common/Primitives";
 
@@ -25,7 +25,6 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
         <div style={{ padding: "20px 28px" }}>
           <div style={{ display: "flex", gap: 22, marginBottom: 18, fontSize: 13, color: "var(--slate)" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Clock size={14} /> {course.hours} hours</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><FileText size={14} /> {course.projects} projects</span>
             <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Stars rating={course.rating} /> {course.rating} ({course.learners.toLocaleString()})</span>
           </div>
           <p style={{ fontSize: 14.5, color: "var(--ink-70)", lineHeight: 1.6, marginBottom: 22 }}>{course.blurb}</p>

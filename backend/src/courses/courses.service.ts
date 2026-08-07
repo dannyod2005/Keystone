@@ -70,7 +70,6 @@ export class CoursesService {
       category: dto.category,
       level: dto.level,
       hours: dto.hours,
-      projects: dto.projects,
       color: dto.color,
       blurb: dto.blurb ?? null,
       modules: dto.modules.map((m, i) => ({
@@ -112,7 +111,6 @@ export class CoursesService {
       course.category = dto.category;
       course.level = dto.level;
       course.hours = dto.hours;
-      course.projects = dto.projects;
       course.color = dto.color;
       course.blurb = dto.blurb ?? null;
 
