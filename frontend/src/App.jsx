@@ -39,7 +39,7 @@ function formatLastAccessed(iso) {
 }
 
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
-function AppShell({ loggedIn, role, onLogout, title, children }) {
+function AppShell({ loggedIn, role, onLogout, title, children, user }) {
   const location = useLocation();
   const screen = screenKeyFromPath(location.pathname);
   const navigate = useNavigate();
@@ -54,6 +54,7 @@ function AppShell({ loggedIn, role, onLogout, title, children }) {
           onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
           role={role}
           onLogout={onLogout}
+          user={user}
         />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -468,7 +469,7 @@ function KeystonePrototype() {
           path="/"
           element={
             loggedIn ? (
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home">
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user}>
                 <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} />
               </AppShell>
             ) : (
@@ -480,7 +481,7 @@ function KeystonePrototype() {
         <Route
           path="/catalogue"
           element={
-            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
               <CatalogueScreen
                 loggedIn={loggedIn}
                 onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
@@ -497,13 +498,14 @@ function KeystonePrototype() {
           path="/dashboard"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
                 <DashboardScreen
                   enrolled={enrolled}
                   onOpenCourse={setSelectedCourse}
                   onStartLearning={handleStartLearning}
                   courses={courses}
                   onViewCertificate={viewCertificate}
+                  user={user}
                 />
               </AppShell>
             </RequireAuth>
@@ -514,7 +516,7 @@ function KeystonePrototype() {
           path="/learning/:courseId"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
                 <LearningRoute
                   courses={courses}
                   enrolled={enrolled}
@@ -536,7 +538,7 @@ function KeystonePrototype() {
           element={
             <RequireAuth loggedIn={loggedIn}>
               <RequireTrainer role={role}>
-                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle}>
+                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
                   <TrainerScreen
                     courses={courses}
                     onSaveCourse={saveCourse}
