@@ -288,7 +288,7 @@ export class ModulesService {
 
     const posts = await this.forumPostsRepo.find({
       where: { module: { id: moduleId } },
-      relations: { user: true },
+      relations: { user: true, parentPost: true },
       order: { createdAt: 'ASC' },
     });
 
@@ -300,6 +300,7 @@ export class ModulesService {
         id: p.user.id,
         name: p.user.name,
       },
+      parentPostId: p.parentPost?.id ?? null,
     }));
   }
 
@@ -318,10 +319,30 @@ export class ModulesService {
       throw new NotFoundException(`Module with id "${moduleId}" not found`);
     }
 
+    let parentPost: ForumPost | null = null;
+    if (dto.parentPostId) {
+      parentPost = await this.forumPostsRepo.findOne({
+        where: { id: dto.parentPostId },
+        relations: { module: true },
+      });
+      if (!parentPost) {
+        throw new NotFoundException(`Post with id "${dto.parentPostId}" not found`);
+      }
+      // Never trust a client-supplied parentPostId to actually belong to
+      // this module — replying to a post from a different module would
+      // otherwise let a reply show up somewhere it doesn't belong.
+      if (parentPost.module.id !== moduleId) {
+        throw new BadRequestException(
+          'parentPostId does not belong to this module',
+        );
+      }
+    }
+
     const post = this.forumPostsRepo.create({
       module,
       user: profile,
       content: dto.content,
+      parentPost,
     });
 
     const saved = await this.forumPostsRepo.save(post);
@@ -335,6 +356,7 @@ export class ModulesService {
         id: profile.id,
         name: profile.name,
       },
+      parentPostId: parentPost?.id ?? null,
     };
   }
 

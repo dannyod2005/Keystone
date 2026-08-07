@@ -410,14 +410,17 @@ function KeystonePrototype() {
     return res.json();
   }
 
-  async function createPost(moduleId, content) {
+  async function createPost(moduleId, content, parentPostId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/forum`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ content }),
+      // parentPostId omitted entirely (not sent as null) when this is a
+      // top-level post — the backend DTO's @IsOptional() only skips
+      // validation for a genuinely missing key, not an explicit null.
+      body: JSON.stringify(parentPostId ? { content, parentPostId } : { content }),
     });
 
     if (!res.ok) {
