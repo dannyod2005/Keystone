@@ -82,7 +82,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
+function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
@@ -98,6 +98,7 @@ function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmi
       onSaveProgress={onSaveProgress}
       onFetchQuiz={onFetchQuiz}
       onSubmitQuiz={onSubmitQuiz}
+      onFetchQuizResults={onFetchQuizResults}
       onFetchNote={onFetchNote}
       onSaveNote={onSaveNote}
       onFetchPosts={onFetchPosts}
@@ -443,6 +444,14 @@ function KeystonePrototype() {
     return result;
   }
 
+  async function fetchCourseQuizResults(courseId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/${courseId}/quiz-results`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
   async function fetchPosts(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/forum`);
     if (!res.ok) throw new Error(`Request failed: ${res.status}`);
@@ -644,6 +653,7 @@ function KeystonePrototype() {
                   onSaveProgress={saveProgress}
                   onFetchQuiz={fetchQuiz}
                   onSubmitQuiz={submitQuiz}
+                  onFetchQuizResults={fetchCourseQuizResults}
                   onFetchNote={fetchNote}
                   onSaveNote={saveNote}
                   onFetchPosts={fetchPosts}

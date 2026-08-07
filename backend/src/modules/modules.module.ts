@@ -27,5 +27,8 @@ import { ActivityModule } from '../activity/activity.module';
   ],
   controllers: [ModulesController],
   providers: [ModulesService, RequireTrainerGuard],
+  // Exported so CoursesModule can inject it for GET /courses/:id/quiz-results
+  // (#82) — same cross-module pattern already used for ActivityModule.
+  exports: [ModulesService],
 })
 export class ModulesModule {}
