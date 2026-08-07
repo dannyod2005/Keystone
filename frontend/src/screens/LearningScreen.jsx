@@ -35,6 +35,10 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   const [newPostContent, setNewPostContent] = useState("");
   const [postingError, setPostingError] = useState(null);
   const [posting, setPosting] = useState(false);
+  // Threading (#39): only one reply box open at a time, keyed by which
+  // post it's replying to. null = the top-level composer is in use instead.
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyContent, setReplyContent] = useState("");
 
   const currentModule = modules[activeModule];
 
@@ -84,6 +88,8 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
     setNewPostContent("");
     setPostingError(null);
     setPostsLoading(true);
+    setReplyingTo(null);
+    setReplyContent("");
 
     onFetchPosts(currentModule.id)
       .then((data) => setPosts(data))
@@ -160,20 +166,95 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
     }
   }
 
-  async function handleCreatePost() {
-    if (!currentModule || !onCreatePost || !newPostContent.trim()) return;
+  async function handleCreatePost(parentPostId = null) {
+    const content = parentPostId ? replyContent : newPostContent;
+    if (!currentModule || !onCreatePost || !content.trim()) return;
 
     setPostingError(null);
     setPosting(true);
     try {
-      const post = await onCreatePost(currentModule.id, newPostContent.trim());
+      const post = await onCreatePost(currentModule.id, content.trim(), parentPostId);
       setPosts((prev) => [...prev, post]);
-      setNewPostContent("");
+      if (parentPostId) {
+        setReplyContent("");
+        setReplyingTo(null);
+      } else {
+        setNewPostContent("");
+      }
     } catch (err) {
       setPostingError(err.message || "Failed to post.");
     } finally {
       setPosting(false);
     }
+  }
+
+  // Groups the flat post list (#39 — flat from the API, nested in the UI)
+  // into a reply tree. A post whose parentPostId doesn't match anything
+  // in this list (shouldn't normally happen) falls back to top-level
+  // rather than silently disappearing.
+  function buildThreads(flatPosts) {
+    const byId = new Map(flatPosts.map((p) => [p.id, { ...p, replies: [] }]));
+    const roots = [];
+    for (const post of byId.values()) {
+      const parent = post.parentPostId ? byId.get(post.parentPostId) : null;
+      if (parent) {
+        parent.replies.push(post);
+      } else {
+        roots.push(post);
+      }
+    }
+    return roots;
+  }
+
+  // Recursive so a reply-to-a-reply still nests correctly, but indentation
+  // is capped so a long chain doesn't march off the edge of a narrow tab.
+  function renderPost(p, depth) {
+    const indent = Math.min(depth, 3) * 28;
+    const isReplying = replyingTo === p.id;
+    return (
+      <div key={p.id} style={{ marginLeft: indent }}>
+        <div style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: depth === 0 ? "1px solid var(--line)" : "none" }}>
+          <div style={{ width: 28, height: 28, borderRadius: 99, background: "var(--gold-tint)", color: "var(--gold-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+            {(p.author.name || "?")[0]}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{p.author.name || "Anonymous"}</div>
+            <div style={{ fontSize: 13, color: "var(--slate)" }}>{p.content}</div>
+            <span
+              onClick={() => {
+                setReplyingTo(isReplying ? null : p.id);
+                setReplyContent("");
+                setPostingError(null);
+              }}
+              style={{ fontSize: 11.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer", marginTop: 4, display: "inline-block" }}
+            >
+              {isReplying ? "Cancel" : "Reply"}
+            </span>
+
+            {isReplying && (
+              <div style={{ marginTop: 8 }}>
+                <textarea
+                  value={replyContent}
+                  onChange={(e) => setReplyContent(e.target.value)}
+                  placeholder={`Reply to ${p.author.name || "this post"}…`}
+                  style={{ width: "100%", minHeight: 48, border: "1px solid var(--line)", borderRadius: 8, padding: 10, fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical", marginBottom: 8 }}
+                />
+                {postingError && <div style={{ fontSize: 12, color: "var(--coral)", marginBottom: 8 }}>{postingError}</div>}
+                <button
+                  className="ks-btn ks-btn-gold"
+                  disabled={posting || !replyContent.trim()}
+                  style={{ opacity: posting || !replyContent.trim() ? 0.6 : 1, padding: "6px 14px", fontSize: 13 }}
+                  onClick={() => handleCreatePost(p.id)}
+                >
+                  {posting ? "Posting…" : "Reply"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        {p.replies.map((child) => renderPost(child, depth + 1))}
+      </div>
+    );
   }
 
   return (
@@ -336,17 +417,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
                       No posts yet — be the first to start the discussion.
                     </div>
                   ) : (
-                    posts.map((p) => (
-                      <div key={p.id} style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
-                        <div style={{ width: 28, height: 28, borderRadius: 99, background: "var(--gold-tint)", color: "var(--gold-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
-                          {(p.author.name || "?")[0]}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{p.author.name || "Anonymous"}</div>
-                          <div style={{ fontSize: 13, color: "var(--slate)" }}>{p.content}</div>
-                        </div>
-                      </div>
-                    ))
+                    buildThreads(posts).map((p) => renderPost(p, 0))
                   )}
 
                   <div style={{ marginTop: 16 }}>
@@ -361,7 +432,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
                       className="ks-btn ks-btn-gold"
                       disabled={posting || !newPostContent.trim()}
                       style={{ opacity: posting || !newPostContent.trim() ? 0.6 : 1 }}
-                      onClick={handleCreatePost}
+                      onClick={() => handleCreatePost()}
                     >
                       {posting ? "Posting…" : "Post"}
                     </button>
