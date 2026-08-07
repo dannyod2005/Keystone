@@ -1,9 +1,12 @@
 import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut } from "lucide-react";
 import { LEARNER } from "../../data/courses";
+import { getDisplayName, getInitials } from "../../lib/userDisplay";
 
 /* ---------- Logged-in app shell ---------- */
 
-export function AppSidebar({ screen, onGo, role, onLogout }) {
+export function AppSidebar({ screen, onGo, role, onLogout, user }) {
+  const displayName = getDisplayName(user);
+  const initials = getInitials(displayName);
   const items = [
     { key: "dashboard", label: "My learning", icon: LayoutGrid },
     { key: "catalogue", label: "Catalogue", icon: BookOpen },
@@ -30,9 +33,9 @@ export function AppSidebar({ screen, onGo, role, onLogout }) {
       })}
       <hr style={{ border: "none", borderTop: "1px solid #FFFFFF22", margin: "16px 4px" }} />
       <div style={{ padding: "0 10px", display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 30, height: 30, borderRadius: 99, background: "var(--gold)", color: "#2B1E06", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 }}>AC</div>
+        <div style={{ width: 30, height: 30, borderRadius: 99, background: "var(--gold)", color: "#2B1E06", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 }}>{initials}</div>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--paper)" }}>{LEARNER.name}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--paper)" }}>{displayName}</div>
           <div style={{ fontSize: 11, color: "#B9C0CC" }}>{role === "trainer" ? "Trainer account" : LEARNER.goal}</div>
         </div>
       </div>

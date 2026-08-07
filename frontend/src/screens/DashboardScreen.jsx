@@ -2,9 +2,11 @@ import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame } fro
 
 import { LEARNER } from "../data/courses";
 import { KeystoneArch } from "../components/common/Primitives";
+import { getDisplayName } from "../lib/userDisplay";
 /* ---------- Screen: Dashboard ---------- */
 
-export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate }) {
+export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user }) {
+  const firstName = getDisplayName(user).split(" ")[0];
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
 
@@ -23,7 +25,7 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
     <div style={{ padding: "28px 32px", maxWidth: 1080 }}>
       <div className="ks-card" style={{ padding: "20px 24px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>Good morning, {LEARNER.name.split(" ")[0]}</div>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>Good morning, {firstName}</div>
           <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>Your goal: <b style={{ color: "var(--ink)" }}>{LEARNER.goal}</b></div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--gold-tint)", padding: "8px 14px", borderRadius: 100 }}>
