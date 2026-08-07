@@ -89,7 +89,6 @@ describe('CoursesService', () => {
         category: 'Technical',
         level: 'Beginner',
         hours: 5,
-        projects: 1,
         color: 'gold',
         modules: [{ title: 'Module One' }, { title: 'Module Two' }],
         credits: [{ line: 'Credit One' }],
@@ -153,7 +152,6 @@ describe('CoursesService', () => {
         category: 'Technical',
         level: 'Beginner',
         hours: 5,
-        projects: 1,
         color: 'gold',
         modules: [{ id: 'm1', title: 'Module One' }], // m2 dropped
       };
@@ -173,7 +171,6 @@ describe('CoursesService', () => {
         category: 'Technical',
         level: 'Beginner',
         hours: 5,
-        projects: 1,
         color: 'gold',
         modules: [
           { id: 'm1', title: 'Module One' },
@@ -196,7 +193,6 @@ describe('CoursesService', () => {
         category: 'Technical',
         level: 'Beginner',
         hours: 5,
-        projects: 1,
         color: 'gold',
         modules: [{ id: 'm1', title: 'Module One Renamed' }],
       };
@@ -215,7 +211,6 @@ describe('CoursesService', () => {
         category: 'Technical',
         level: 'Beginner',
         hours: 5,
-        projects: 1,
         color: 'gold',
         modules: [
           { id: 'm1', title: 'Module One' },
@@ -237,7 +232,6 @@ describe('CoursesService', () => {
         category: 'Technical',
         level: 'Beginner',
         hours: 5,
-        projects: 1,
         color: 'gold',
         modules: [{ id: 'm1', title: 'Module One' }],
       };

@@ -8,7 +8,7 @@ const TRAINER_COLORS = ["ink", "gold", "success", "coral"];
 function emptyCourseDraft() {
   return {
     title: "", provider: "", category: TRAINER_CATEGORIES[0], level: TRAINER_LEVELS[0],
-    hours: 4, projects: 1, color: TRAINER_COLORS[0],
+    hours: 4, color: TRAINER_COLORS[0],
     blurb: "",
     modules: [{ title: "", videoUrl: "" }],
     credits: [{ line: "" }],
@@ -45,7 +45,6 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       category: course.category,
       level: course.level,
       hours: course.hours,
-      projects: course.projects,
       color: course.color,
       blurb: course.blurb ?? "",
       modules: course.modules.map((m) => ({ id: m.id, title: m.title, videoUrl: m.videoUrl ?? "" })),
@@ -249,7 +248,6 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       category: draft.category,
       level: draft.level,
       hours: Number(draft.hours) || 0,
-      projects: Number(draft.projects) || 0,
       color: draft.color,
       blurb: draft.blurb || undefined,
       modules: draft.modules

@@ -12,7 +12,6 @@ interface SeedCourse {
   category: string;
   level: string;
   hours: number;
-  projects: number;
   rating: number;
   learners: number;
   color: string;
@@ -47,7 +46,6 @@ const SAMPLE_COURSES: SeedCourse[] = [
     category: 'Technical',
     level: 'Intermediate',
     hours: 24,
-    projects: 13,
     rating: 4.9,
     learners: 2840,
     color: 'ink',
@@ -72,7 +70,6 @@ const SAMPLE_COURSES: SeedCourse[] = [
     category: 'Technical',
     level: 'Beginner',
     hours: 32,
-    projects: 5,
     rating: 4.8,
     learners: 18400,
     color: 'gold',
@@ -97,7 +94,6 @@ const SAMPLE_COURSES: SeedCourse[] = [
     category: 'Business',
     level: 'Beginner',
     hours: 10,
-    projects: 3,
     rating: 4.7,
     learners: 6210,
     color: 'success',
@@ -120,7 +116,6 @@ const SAMPLE_COURSES: SeedCourse[] = [
     category: 'Leadership',
     level: 'Advanced',
     hours: 8,
-    projects: 2,
     rating: 4.6,
     learners: 4120,
     color: 'coral',
@@ -144,7 +139,6 @@ const SAMPLE_COURSES: SeedCourse[] = [
     category: 'Technical',
     level: 'Intermediate',
     hours: 14,
-    projects: 4,
     rating: 4.8,
     learners: 5390,
     color: 'gold',
@@ -168,7 +162,6 @@ const SAMPLE_COURSES: SeedCourse[] = [
     category: 'Business',
     level: 'Beginner',
     hours: 6,
-    projects: 2,
     rating: 4.5,
     learners: 3010,
     color: 'success',
@@ -211,7 +204,6 @@ async function seed() {
         category: sample.category,
         level: sample.level,
         hours: sample.hours,
-        projects: sample.projects,
         rating: sample.rating,
         learners: sample.learners,
         color: sample.color,
