@@ -125,6 +125,8 @@ function KeystonePrototype() {
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
   const [courses, setCourses] = useState([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+  const [enrolledLoading, setEnrolledLoading] = useState(true);
   const [activitySummary, setActivitySummary] = useState({
     streak: 0,
     minutesThisWeek: 0,
@@ -140,7 +142,8 @@ function KeystonePrototype() {
         return res.json();
       })
       .then((data) => setCourses(data))
-      .catch((err) => console.error("Failed to load courses:", err.message));
+      .catch((err) => console.error("Failed to load courses:", err.message))
+      .finally(() => setCoursesLoading(false));
   }, []);
   // Fetch the logged-in user's real enrollments (#19), replacing the old
   // ENROLLED_DEFAULT mock. Re-runs whenever login state changes; clears
@@ -149,9 +152,11 @@ function KeystonePrototype() {
   useEffect(() => {
     if (!loggedIn || !session) {
       setEnrolled([]);
+      setEnrolledLoading(false);
       return;
     }
 
+    setEnrolledLoading(true);
     fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
@@ -175,7 +180,8 @@ function KeystonePrototype() {
       .catch((err) => {
         console.error("Failed to load enrollments:", err.message);
         setEnrolled([]);
-      });
+      })
+      .finally(() => setEnrolledLoading(false));
   }, [loggedIn, session]);
 
   // Real streak / minutes-this-week / daily-goal data (#37), replacing the
@@ -618,6 +624,7 @@ function KeystonePrototype() {
                 onOpenCourse={setSelectedCourse}
                 enrolledIds={enrolledIds}
                 courses={courses}
+                loading={coursesLoading}
               />
             </AppShell>
           }
@@ -636,6 +643,7 @@ function KeystonePrototype() {
                   onViewCertificate={viewCertificate}
                   user={user}
                   activitySummary={activitySummary}
+                  loading={coursesLoading || enrolledLoading}
                 />
               </AppShell>
             </RequireAuth>

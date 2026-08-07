@@ -7,7 +7,7 @@ import { getDisplayName } from "../lib/userDisplay";
 
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 30, goalHitDays: 0, week: [] };
 
-export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, activitySummary = DEFAULT_ACTIVITY_SUMMARY }) {
+export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false }) {
   const firstName = getDisplayName(user).split(" ")[0];
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
@@ -51,6 +51,12 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
         <div>
+          {loading ? (
+            <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
+              Loading your learning…
+            </div>
+          ) : (
+          <>
           <div style={{ display: "flex", gap: 14, marginBottom: 22 }}>
             {[
               { label: "In progress", value: inProgress.length, icon: PlayCircle, tint: "var(--gold-tint)", fg: "var(--gold-dark)" },
@@ -133,6 +139,8 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
               </div>
             );
           })}
+          </>
+          )}
         </div>
 
         <div>
