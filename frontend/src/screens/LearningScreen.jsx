@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { PlayCircle, CheckCircle2, XCircle, ChevronLeft} from "lucide-react";
 
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
   const [tab, setTab] = useState("video");
 
   const modules = course?.modules ?? [];
@@ -22,6 +22,14 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   const [selectedAnswers, setSelectedAnswers] = useState({}); // { [questionId]: optionId }
   const [quizResult, setQuizResult] = useState(null); // set after submitting
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
+
+  // Grades overview (#82) — every module's quiz result for this course,
+  // not just the currently active one. Course-scoped (not per-module), so
+  // it's fetched once per course visit rather than in the per-module quiz
+  // effect below, and refetched after a fresh submission so it stays in
+  // sync without a page reload.
+  const [quizResultsOverview, setQuizResultsOverview] = useState([]);
+  const [quizResultsLoading, setQuizResultsLoading] = useState(false);
 
   // Notes state
   const [noteContent, setNoteContent] = useState("");
@@ -66,6 +74,19 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
     // app, not just on actual module navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentModule?.id]);
+
+  // Course-scoped (not per-module) — fetched once per course visit rather
+  // than in the effect above, since it covers every module at once.
+  useEffect(() => {
+    if (!course || !onFetchQuizResults) return;
+
+    setQuizResultsLoading(true);
+    onFetchQuizResults(course.id)
+      .then((data) => setQuizResultsOverview(data))
+      .catch((err) => console.error("Failed to load quiz results:", err.message))
+      .finally(() => setQuizResultsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [course?.id]);
 
   useEffect(() => {
     if (!currentModule || !onFetchNote) return;
@@ -153,6 +174,12 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
     try {
       const result = await onSubmitQuiz(currentModule.id, answers);
       setQuizResult(result);
+      // Keep the Grades panel in sync without requiring a page reload (#82).
+      if (course && onFetchQuizResults) {
+        onFetchQuizResults(course.id)
+          .then((data) => setQuizResultsOverview(data))
+          .catch((err) => console.error("Failed to refresh quiz results:", err.message));
+      }
     } catch (err) {
       setQuizError(err.message || "Failed to submit quiz.");
     } finally {
@@ -556,16 +583,23 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
           </div>
           <div className="ks-card" style={{ padding: 16 }}>
             <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 10 }}>Grades</div>
-            {quizResult ? (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "6px 0" }}>
-                <span style={{ color: "var(--slate)" }}>Module {activeModule + 1} quiz</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>{quizResult.score}/{quizResult.total}</span>
-              </div>
+            {quizResultsLoading ? (
+              <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "6px 0" }}>Loading…</div>
+            ) : quizResultsOverview.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "6px 0" }}>No modules yet.</div>
             ) : (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "6px 0" }}>
-                <span style={{ color: "var(--slate-light)" }}>Module {activeModule + 1} quiz</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: "var(--slate-light)" }}>Not yet taken</span>
-              </div>
+              quizResultsOverview.map((r, i) => (
+                <div
+                  key={r.moduleId}
+                  onClick={() => { setActiveModule(i); setTab("quiz"); }}
+                  style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 0", cursor: "pointer" }}
+                >
+                  <span style={{ color: r.taken ? "var(--slate)" : "var(--slate-light)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.moduleTitle}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: r.taken ? "var(--ink)" : "var(--slate-light)", flexShrink: 0 }}>
+                    {!r.hasQuiz ? "No quiz" : r.taken ? `${r.score}/${r.total}` : "Not yet taken"}
+                  </span>
+                </div>
+              ))
             )}
           </div>
         </div>

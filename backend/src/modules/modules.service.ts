@@ -23,6 +23,7 @@ import { PostResponseDto } from '../forum/dto/post-response.dto';
 import { UpsertQuizDto } from '../quiz/dto/upsert-quiz.dto';
 import { QuizOption } from '../quiz/entities/quiz-option.entity';
 import { QuizQuestionEditResponseDto } from '../quiz/dto/quiz-question-edit-response.dto';
+import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 import { ActivityService } from '../activity/activity.service';
 
 // Fixed per-event minute estimates for actions that aren't naturally
@@ -230,6 +231,88 @@ export class ModulesService {
       alreadySubmitted: false,
       results,
     };
+  }
+
+  // #82 — one row per module in the course, for LearningScreen's "Grades"
+  // panel overview. Deliberately queries course_modules directly by
+  // course id rather than going through CoursesService.findOne (which
+  // filters out soft-deleted courses, #41) — an enrolled learner viewing
+  // grades for a course a trainer has since deleted should keep working,
+  // same principle as the enrollment/dashboard fix.
+  async getQuizResultsForCourse(
+    userId: string,
+    courseId: string,
+  ): Promise<ModuleQuizResultDto[]> {
+    const modules = await this.modulesRepo.find({
+      where: { course: { id: courseId } },
+      order: { position: 'ASC' },
+    });
+
+    if (modules.length === 0) {
+      return [];
+    }
+
+    const moduleIds = modules.map((m) => m.id);
+    const questions = await this.quizQuestionsRepo.find({
+      where: { module: { id: In(moduleIds) } },
+      relations: { options: true, module: true },
+    });
+
+    const optionIds = questions.flatMap((q) => q.options.map((o) => o.id));
+    const submissions = optionIds.length > 0
+      ? await this.quizSubmissionsRepo.find({
+          where: { user: { id: userId }, option: { id: In(optionIds) } },
+          relations: { option: true },
+        })
+      : [];
+
+    const questionsByModuleId = new Map<string, QuizQuestion[]>();
+    for (const q of questions) {
+      const list = questionsByModuleId.get(q.module.id) ?? [];
+      list.push(q);
+      questionsByModuleId.set(q.module.id, list);
+    }
+
+    return modules.map((module) => {
+      const moduleQuestions = questionsByModuleId.get(module.id) ?? [];
+      if (moduleQuestions.length === 0) {
+        return {
+          moduleId: module.id,
+          moduleTitle: module.title,
+          hasQuiz: false,
+          taken: false,
+          score: null,
+          total: 0,
+        };
+      }
+
+      const moduleOptionIds = new Set(
+        moduleQuestions.flatMap((q) => q.options.map((o) => o.id)),
+      );
+      const moduleSubmissions = submissions.filter((s) =>
+        moduleOptionIds.has(s.option.id),
+      );
+
+      if (moduleSubmissions.length === 0) {
+        return {
+          moduleId: module.id,
+          moduleTitle: module.title,
+          hasQuiz: true,
+          taken: false,
+          score: null,
+          total: moduleQuestions.length,
+        };
+      }
+
+      return {
+        moduleId: module.id,
+        moduleTitle: module.title,
+        hasQuiz: true,
+        taken: true,
+        score: moduleSubmissions.filter((s) => s.option.isCorrect).length,
+        total: moduleQuestions.length,
+      };
+    });
   }
 
   async getNote(userId: string, moduleId: string): Promise<NoteResponseDto> {
