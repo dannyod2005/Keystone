@@ -14,6 +14,7 @@ import { Course } from '../courses/entities/course.entity';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { EnrollmentResponseDto } from './dto/enrollment-response.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
+import { ActivityService } from '../activity/activity.service';
 
 @Injectable()
 export class EnrollmentsService {
@@ -24,6 +25,7 @@ export class EnrollmentsService {
     private readonly profilesRepo: Repository<Profile>,
     @InjectRepository(Course)
     private readonly coursesRepo: Repository<Course>,
+    private readonly activityService: ActivityService,
   ) {}
 
   async create(userId: string, dto: CreateEnrollmentDto): Promise<Enrollment> {
@@ -98,6 +100,14 @@ export class EnrollmentsService {
     // completedModules past the real module count.
     const completedModules = Math.min(dto.completedModules, totalModules);
 
+    // Captured before we overwrite progress below — needed to work out how
+    // many *new* modules this call actually completed, for activity
+    // logging (#37). Rounding a fraction back to a module count is a bit
+    // lossy, but progress is always derived from a module count in the
+    // first place, so it round-trips cleanly in practice.
+    const oldCompletedModules =
+      totalModules > 0 ? Math.round(enrollment.progress * totalModules) : 0;
+
     enrollment.progress = totalModules > 0 ? completedModules / totalModules : 0;
     enrollment.status = completedModules >= totalModules && totalModules > 0
       ? 'complete'
@@ -105,6 +115,21 @@ export class EnrollmentsService {
     enrollment.lastAccessed = new Date();
 
     const saved = await this.enrollmentsRepo.save(enrollment);
+
+    const newlyCompleted = Math.max(completedModules - oldCompletedModules, 0);
+    if (newlyCompleted > 0 && totalModules > 0) {
+      // Estimate: this course's total hours spread evenly across its
+      // modules, scaled by how many modules were newly completed this
+      // call. Not a measured duration — see #37.
+      const minutesPerModule = Math.round(
+        (enrollment.course.hours * 60) / totalModules,
+      );
+      await this.activityService.logEvent(
+        userId,
+        'module_complete',
+        newlyCompleted * minutesPerModule,
+      );
+    }
 
     return {
       id: saved.id,

@@ -122,6 +122,13 @@ function KeystonePrototype() {
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
   const [courses, setCourses] = useState([]);
+  const [activitySummary, setActivitySummary] = useState({
+    streak: 0,
+    minutesThisWeek: 0,
+    dailyGoalMin: 30,
+    goalHitDays: 0,
+    week: [],
+  });
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -167,6 +174,50 @@ function KeystonePrototype() {
         setEnrolled([]);
       });
   }, [loggedIn, session]);
+
+  // Real streak / minutes-this-week / daily-goal data (#37), replacing the
+  // old LEARNER mock. Re-runs on login state change like enrollments above;
+  // resets to a neutral empty shape on logout.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setActivitySummary({
+        streak: 0,
+        minutesThisWeek: 0,
+        dailyGoalMin: 30,
+        goalHitDays: 0,
+        week: [],
+      });
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/activity/summary`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setActivitySummary)
+      .catch((err) => console.error("Failed to load activity summary:", err.message));
+  }, [loggedIn, session]);
+
+  // Fire-and-forget refresh after an action that logs activity server-side
+  // (module completed, quiz submitted, note saved, forum post made) — so
+  // the dashboard reflects it without needing a full reload. A failure
+  // here shouldn't surface to the user; it just means the dashboard stays
+  // slightly stale until the next natural refetch.
+  async function refetchActivitySummary() {
+    if (!session) return;
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/activity/summary`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      setActivitySummary(await res.json());
+    } catch (err) {
+      console.error("Failed to refresh activity summary:", err.message);
+    }
+  }
 
   const screen = screenKeyFromPath(location.pathname);
 
@@ -242,6 +293,7 @@ function KeystonePrototype() {
           : e,
       ),
     );
+    refetchActivitySummary();
   }
 
   async function fetchNote(moduleId) {
@@ -267,7 +319,9 @@ function KeystonePrototype() {
       throw new Error(body?.message || `Request failed: ${res.status}`);
     }
 
-    return res.json();
+    const result = await res.json();
+    refetchActivitySummary();
+    return result;
   }
 
   function openAuth(mode) {
@@ -345,7 +399,9 @@ function KeystonePrototype() {
       throw new Error(body?.message || `Request failed: ${res.status}`);
     }
 
-    return res.json();
+    const result = await res.json();
+    refetchActivitySummary();
+    return result;
   }
 
   async function fetchPosts(moduleId) {
@@ -369,7 +425,9 @@ function KeystonePrototype() {
       throw new Error(body?.message || `Request failed: ${res.status}`);
     }
 
-    return res.json();
+    const result = await res.json();
+    refetchActivitySummary();
+    return result;
   }
 
   async function fetchQuizForEdit(moduleId) {
@@ -506,6 +564,7 @@ function KeystonePrototype() {
                   courses={courses}
                   onViewCertificate={viewCertificate}
                   user={user}
+                  activitySummary={activitySummary}
                 />
               </AppShell>
             </RequireAuth>

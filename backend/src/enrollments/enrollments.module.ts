@@ -5,9 +5,10 @@ import { EnrollmentsService } from './enrollments.service';
 import { Enrollment } from './entities/enrollment.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
+import { ActivityModule } from '../activity/activity.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Enrollment, Profile, Course])],
+  imports: [TypeOrmModule.forFeature([Enrollment, Profile, Course]), ActivityModule],
   controllers: [EnrollmentsController],
   providers: [EnrollmentsService],
 })

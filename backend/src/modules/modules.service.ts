@@ -21,7 +21,13 @@ import { PostResponseDto } from '../forum/dto/post-response.dto';
 import { UpsertQuizDto } from '../quiz/dto/upsert-quiz.dto';
 import { QuizOption } from '../quiz/entities/quiz-option.entity';
 import { QuizQuestionEditResponseDto } from '../quiz/dto/quiz-question-edit-response.dto';
+import { ActivityService } from '../activity/activity.service';
 
+// Fixed per-event minute estimates for actions that aren't naturally
+// scaled by course length the way module completion is (see #37).
+const QUIZ_SUBMIT_MINUTES = 5;
+const NOTE_SAVE_MINUTES = 3;
+const FORUM_POST_MINUTES = 3;
 
 @Injectable()
 export class ModulesService {
@@ -38,6 +44,7 @@ export class ModulesService {
     private readonly notesRepo: Repository<ModuleNote>,
     @InjectRepository(ForumPost)
     private readonly forumPostsRepo: Repository<ForumPost>,
+    private readonly activityService: ActivityService,
   ) {}
 
   async getQuiz(moduleId: string): Promise<QuizQuestionResponseDto[]> {
@@ -205,6 +212,7 @@ export class ModulesService {
       }),
     );
     await this.quizSubmissionsRepo.save(submissionsToSave);
+    await this.activityService.logEvent(userId, 'quiz_submit', QUIZ_SUBMIT_MINUTES);
 
     const results = dto.answers.map((a) =>
       buildResultItem(a.questionId, a.optionId),
@@ -264,6 +272,7 @@ export class ModulesService {
     }
 
     const saved = await this.notesRepo.save(note);
+    await this.activityService.logEvent(userId, 'note_save', NOTE_SAVE_MINUTES);
 
     return {
       content: saved.content,
@@ -316,6 +325,7 @@ export class ModulesService {
     });
 
     const saved = await this.forumPostsRepo.save(post);
+    await this.activityService.logEvent(userId, 'forum_post', FORUM_POST_MINUTES);
 
     return {
       id: saved.id,
