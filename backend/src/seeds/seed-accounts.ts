@@ -42,7 +42,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import ws from 'ws';
 import { AppDataSource } from '../data-source';
 
-interface SeedAccount {
+export interface SeedAccount {
   name: string;
   email: string;
   role: 'trainer' | 'learner';
@@ -53,7 +53,10 @@ interface SeedAccount {
 // documentation/demo use, never resolves to a real mailbox) rather
 // than a real-looking domain, so there's no risk of these looking like
 // or colliding with genuine addresses.
-const ACCOUNTS: SeedAccount[] = [
+//
+// Exported so #146 (seed-providers.ts) can look up the same trainer
+// accounts by email instead of hand-copying this list a second time.
+export const ACCOUNTS: SeedAccount[] = [
   // Learners
   {
     name: 'Nguyễn Thị Lan Anh',
@@ -257,7 +260,13 @@ async function main() {
   await AppDataSource.destroy();
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Guarded so #146 (seed-providers.ts) can `import { ACCOUNTS } from
+// './seed-accounts'` without also triggering this script's side
+// effects (creating accounts, writing the credentials file) just by
+// importing the constant.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
