@@ -225,10 +225,87 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ),
         ],
       },
-      { title: 'Tool use & function calling', videoUrl: TECH.js1 },
-      { title: 'Retrieval & context design', videoUrl: TECH.js2 },
-      { title: 'Agents & evaluation', videoUrl: TECH.html },
-      { title: 'Capstone project', videoUrl: TECH.js3 },
+      {
+        title: 'Tool use & function calling',
+        videoUrl: TECH.js1,
+        quiz: [
+          q(
+            'What allows a model to call external functions or APIs during a conversation?',
+            [
+              ['Tool use / function calling', true],
+              ['Fine-tuning', false],
+              ['Prompt caching', false],
+              ['Temperature adjustment', false],
+            ],
+          ),
+          q('Why define a strict JSON schema for a tool?', [
+            [
+              'So the model produces arguments the tool can reliably parse',
+              true,
+            ],
+            ['To make responses shorter', false],
+            ['To disable the tool', false],
+            ['To increase the context window', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Retrieval & context design',
+        videoUrl: TECH.js2,
+        quiz: [
+          q('What is the main goal of retrieval in a RAG pipeline?', [
+            ["Fetching relevant documents to ground the model's answer", true],
+            ['Compressing the model weights', false],
+            ['Speeding up token generation', false],
+            ['Formatting the output as markdown', false],
+          ]),
+          q('Why chunk documents before embedding them?', [
+            ['Smaller chunks retrieve more precisely relevant context', true],
+            ['Chunking removes the need for embeddings', false],
+            ['It reduces API costs to zero', false],
+            ['It prevents hallucination entirely', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Agents & evaluation',
+        videoUrl: TECH.html,
+        quiz: [
+          q('An "agentic" workflow is one where the model:', [
+            [
+              'Plans and takes multiple actions toward a goal with limited supervision',
+              true,
+            ],
+            ['Only ever returns plain text', false],
+            ['Cannot call any tools', false],
+            ['Requires a human to approve every token', false],
+          ]),
+          q('Why evaluate an agent on a held-out test set?', [
+            ["To measure how it performs on cases it wasn't tuned on", true],
+            ['To make the agent faster', false],
+            ['To reduce token costs', false],
+            ['To skip prompt engineering', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Capstone project',
+        videoUrl: TECH.js3,
+        quiz: [
+          q('What is the purpose of a capstone project in this course?', [
+            ['Applying everything learned to a real, end-to-end build', true],
+            ['Testing typing speed', false],
+            ['Grading attendance', false],
+            ['Replacing the final quiz', false],
+          ]),
+          q('Which is a good practice before submitting a capstone project?', [
+            ['Testing it against edge cases and unexpected input', true],
+            ['Skipping documentation', false],
+            ['Removing all error handling', false],
+            ['Hardcoding all inputs', false],
+          ]),
+        ],
+      },
     ],
     credits: [
       'Curriculum & instruction: Anthropic Academy teaching staff',
@@ -266,10 +343,84 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Data structures', videoUrl: TECH.python },
-      { title: 'Using web APIs', videoUrl: TECH.js1 },
-      { title: 'Databases', videoUrl: TECH.js2 },
-      { title: 'Capstone: visualize data', videoUrl: TECH.html },
+      {
+        title: 'Data structures',
+        videoUrl: TECH.python,
+        quiz: [
+          q('Which Python data structure stores key-value pairs?', [
+            ['Dictionary', true],
+            ['List', false],
+            ['Tuple', false],
+            ['Set', false],
+          ]),
+          q('What is a key difference between a list and a tuple in Python?', [
+            ['Lists are mutable, tuples are immutable', true],
+            ['Tuples can only hold numbers', false],
+            ['Lists cannot be indexed', false],
+            ['Tuples are always sorted', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Using web APIs',
+        videoUrl: TECH.js1,
+        quiz: [
+          q('What format do most modern web APIs use for data exchange?', [
+            ['JSON', true],
+            ['INI', false],
+            ['DOCX', false],
+            ['EXE', false],
+          ]),
+          q('What does an HTTP GET request typically do?', [
+            ['Retrieves data from a server', true],
+            ['Deletes a resource', false],
+            ['Always modifies the database', false],
+            ['Installs a package', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Databases',
+        videoUrl: TECH.js2,
+        quiz: [
+          q(
+            'What Python library is commonly used to connect to a SQL database?',
+            [
+              ['sqlite3 (or a driver like psycopg2)', true],
+              ['matplotlib', false],
+              ['requests', false],
+              ['tkinter', false],
+            ],
+          ),
+          q('What is the purpose of a primary key in a database table?', [
+            ['Uniquely identifying each row', true],
+            ['Formatting output', false],
+            ['Storing images', false],
+            ['Compressing data', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Capstone: visualize data',
+        videoUrl: TECH.html,
+        quiz: [
+          q('What is a good first step before visualizing a dataset?', [
+            ['Cleaning and understanding the data', true],
+            ['Picking random colors', false],
+            ['Deleting all missing values without review', false],
+            ['Skipping straight to publishing', false],
+          ]),
+          q(
+            'Why choose a line chart over a bar chart for data that changes over time?',
+            [
+              ['It better shows change over time', true],
+              ['It uses fewer colors', false],
+              ['It hides outliers', false],
+              ['It requires no axis labels', false],
+            ],
+          ),
+        ],
+      },
     ],
     credits: [
       'Curriculum & instruction: Dept. of Data Science faculty',
@@ -307,9 +458,63 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Matplotlib & seaborn', videoUrl: TECH.js3 },
-      { title: 'Design & annotation', videoUrl: TECH.python },
-      { title: 'Capstone: a report', videoUrl: TECH.js1 },
+      {
+        title: 'Matplotlib & seaborn',
+        videoUrl: TECH.js3,
+        quiz: [
+          q('What is seaborn built on top of?', [
+            ['Matplotlib', true],
+            ['Django', false],
+            ['Flask', false],
+            ['NumPy alone', false],
+          ]),
+          q('What does plt.show() do in Matplotlib?', [
+            ['Renders the current figure', true],
+            ['Saves the figure to disk', false],
+            ['Deletes the figure', false],
+            ['Starts a web server', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Design & annotation',
+        videoUrl: TECH.python,
+        quiz: [
+          q('Why add axis labels and a title to a chart?', [
+            [
+              'To make the chart understandable without extra explanation',
+              true,
+            ],
+            ['To increase file size', false],
+            ['To slow down rendering', false],
+            ['Axis labels are optional and rarely needed', false],
+          ]),
+          q('What is "chartjunk"?', [
+            ['Unnecessary visual elements that distract from the data', true],
+            ['A type of chart library', false],
+            ['A file format', false],
+            ['A color palette', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Capstone: a report',
+        videoUrl: TECH.js1,
+        quiz: [
+          q('What should a good data report lead with?', [
+            ['The key finding or takeaway', true],
+            ['A list of every raw data point', false],
+            ["The author's biography", false],
+            ['A blank page', false],
+          ]),
+          q('Why cite your data sources in a report?', [
+            ['So readers can verify and trust the findings', true],
+            ["It's required by matplotlib", false],
+            ['It changes the chart colors', false],
+            ['It compresses the file', false],
+          ]),
+        ],
+      },
     ],
     credits: [
       'Curriculum & instruction: Dept. of Data Science faculty',
@@ -350,9 +555,63 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Functions & scope', videoUrl: TECH.html },
-      { title: 'Arrays & objects', videoUrl: TECH.js3 },
-      { title: 'DOM basics', videoUrl: TECH.python },
+      {
+        title: 'Functions & scope',
+        videoUrl: TECH.html,
+        quiz: [
+          q('What does a function\'s "scope" determine?', [
+            ['Which variables are accessible from within it', true],
+            ['How fast it runs', false],
+            ['Its return type', false],
+            ['Its file size', false],
+          ]),
+          q('What is a closure in JavaScript?', [
+            [
+              "A function that retains access to its outer scope's variables",
+              true,
+            ],
+            ['A syntax error', false],
+            ['A type of loop', false],
+            ['A CSS property', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Arrays & objects',
+        videoUrl: TECH.js3,
+        quiz: [
+          q('Which method adds an item to the end of a JavaScript array?', [
+            ['push()', true],
+            ['shift()', false],
+            ['pop()', false],
+            ['slice()', false],
+          ]),
+          q('How do you access a property on a JavaScript object?', [
+            ['Dot notation or bracket notation', true],
+            ['Only with a for loop', false],
+            ['Only via JSON.parse', false],
+            ['Arrays cannot hold objects', false],
+          ]),
+        ],
+      },
+      {
+        title: 'DOM basics',
+        videoUrl: TECH.python,
+        quiz: [
+          q('What does "DOM" stand for?', [
+            ['Document Object Model', true],
+            ['Data Output Method', false],
+            ['Direct Object Mapping', false],
+            ['Dynamic Order Management', false],
+          ]),
+          q('Which method selects an element by its id in the DOM?', [
+            ['document.getElementById()', true],
+            ['document.createElement()', false],
+            ['document.write()', false],
+            ['window.alert()', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Web Guild'],
   },
@@ -386,9 +645,60 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'State & props', videoUrl: TECH.js2 },
-      { title: 'Hooks in practice', videoUrl: TECH.html },
-      { title: 'Routing & data fetching', videoUrl: TECH.js3 },
+      {
+        title: 'State & props',
+        videoUrl: TECH.js2,
+        quiz: [
+          q('What hook is used to add local state to a function component?', [
+            ['useState', true],
+            ['useEffect', false],
+            ['useContext', false],
+            ['useMemo', false],
+          ]),
+          q('Can a child component modify the props it receives directly?', [
+            ["No — props are read-only from the child's perspective", true],
+            ['Yes, freely', false],
+            ['Only if wrapped in useState', false],
+            ['Only in class components', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Hooks in practice',
+        videoUrl: TECH.html,
+        quiz: [
+          q('What is useEffect commonly used for?', [
+            ['Running side effects like data fetching after render', true],
+            ['Declaring CSS styles', false],
+            ['Compiling JSX', false],
+            ['Routing between pages', false],
+          ]),
+          q('What array controls how often useEffect re-runs?', [
+            ['The dependency array', true],
+            ['The props array', false],
+            ['The state array', false],
+            ['The children array', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Routing & data fetching',
+        videoUrl: TECH.js3,
+        quiz: [
+          q('What does client-side routing let you do?', [
+            ['Change views without a full page reload', true],
+            ['Query a database directly', false],
+            ['Compile TypeScript', false],
+            ['Style components', false],
+          ]),
+          q('What is a common way to fetch data when a component mounts?', [
+            ['Call fetch/axios inside a useEffect hook', true],
+            ['Call fetch inside the JSX return', false],
+            ['Use CSS media queries', false],
+            ['Use useState alone with no effect', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Web Guild'],
   },
@@ -421,9 +731,66 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Filtering & sorting', videoUrl: TECH.js1 },
-      { title: 'Joins', videoUrl: TECH.js2 },
-      { title: 'Aggregation & grouping', videoUrl: TECH.html },
+      {
+        title: 'Filtering & sorting',
+        videoUrl: TECH.js1,
+        quiz: [
+          q('Which clause sorts query results?', [
+            ['ORDER BY', true],
+            ['GROUP BY', false],
+            ['WHERE', false],
+            ['FROM', false],
+          ]),
+          q('What does WHERE age > 18 do in a SQL query?', [
+            ['Filters rows to only those where age is greater than 18', true],
+            ['Sorts rows by age', false],
+            ['Deletes rows where age is 18', false],
+            ['Creates a new column', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Joins',
+        videoUrl: TECH.js2,
+        quiz: [
+          q('What does an INNER JOIN return?', [
+            ['Only rows with matching values in both tables', true],
+            ['All rows from both tables regardless of match', false],
+            ['Only rows from the left table', false],
+            ['Only unmatched rows', false],
+          ]),
+          q('What is typically used to join two tables?', [
+            [
+              'A shared key, like a foreign key referencing a primary key',
+              true,
+            ],
+            ['Alphabetical order', false],
+            ['Table size', false],
+            ['Column color', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Aggregation & grouping',
+        videoUrl: TECH.html,
+        quiz: [
+          q('What does the COUNT() function return?', [
+            ['The number of rows matching a condition', true],
+            ['The average of a column', false],
+            ['The largest value in a column', false],
+            ['A random row', false],
+          ]),
+          q('What is GROUP BY used for?', [
+            [
+              'Aggregating rows that share a value in one or more columns',
+              true,
+            ],
+            ['Sorting alphabetically', false],
+            ['Filtering NULL values only', false],
+            ['Renaming columns', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Dept. of Data Science'],
   },
@@ -460,9 +827,63 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ),
         ],
       },
-      { title: 'Compute & storage basics', videoUrl: TECH.python },
-      { title: 'Networking essentials', videoUrl: TECH.js1 },
-      { title: 'Cost & security basics', videoUrl: TECH.js2 },
+      {
+        title: 'Compute & storage basics',
+        videoUrl: TECH.python,
+        quiz: [
+          q('What AWS service provides scalable virtual servers?', [
+            ['EC2', true],
+            ['S3', false],
+            ['Route 53', false],
+            ['CloudFront', false],
+          ]),
+          q('What is object storage (like S3) best suited for?', [
+            [
+              'Storing large amounts of unstructured data like files and backups',
+              true,
+            ],
+            ['Running a relational database', false],
+            ['Real-time video calls', false],
+            ['DNS resolution', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Networking essentials',
+        videoUrl: TECH.js1,
+        quiz: [
+          q('What is a VPC in cloud computing?', [
+            ['An isolated virtual network within the cloud provider', true],
+            ['A type of storage bucket', false],
+            ['A billing dashboard', false],
+            ['A programming language', false],
+          ]),
+          q('What does a load balancer do?', [
+            ['Distributes incoming traffic across multiple servers', true],
+            ['Encrypts all stored data', false],
+            ['Compiles application code', false],
+            ['Deletes unused resources', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Cost & security basics',
+        videoUrl: TECH.js2,
+        quiz: [
+          q('What is the "pay-as-you-go" model in cloud computing?', [
+            ['Paying only for the resources actually used', true],
+            ['A flat annual fee regardless of usage', false],
+            ['Free usage forever', false],
+            ['Paying upfront for hardware', false],
+          ]),
+          q('What is the principle of least privilege in cloud security?', [
+            ['Granting only the access necessary to perform a task', true],
+            ['Giving every user admin access', false],
+            ['Disabling all logging', false],
+            ['Using one shared password for all accounts', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone DevOps Guild'],
   },
@@ -496,9 +917,69 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Building a pipeline', videoUrl: TECH.js3 },
-      { title: 'Automated testing in CI', videoUrl: TECH.python },
-      { title: 'Deployment strategies', videoUrl: TECH.js1 },
+      {
+        title: 'Building a pipeline',
+        videoUrl: TECH.js3,
+        quiz: [
+          q('What typically triggers a CI pipeline to run?', [
+            ['A code push or pull request', true],
+            ['A scheduled server reboot', false],
+            ['A user login', false],
+            ['A DNS change', false],
+          ]),
+          q('What is a "build artifact"?', [
+            ['The output produced by compiling/packaging code', true],
+            ['A bug report', false],
+            ['A test case', false],
+            ['A commit message', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Automated testing in CI',
+        videoUrl: TECH.python,
+        quiz: [
+          q('Why run automated tests in a CI pipeline?', [
+            ['To catch regressions before code is merged or deployed', true],
+            ['To slow down releases intentionally', false],
+            ['To replace code review entirely', false],
+            ['Tests are optional and rarely useful in CI', false],
+          ]),
+          q(
+            'What is a common signal that a build should be blocked from merging?',
+            [
+              ['One or more tests failing', true],
+              ['All tests passing', false],
+              ['A short commit message', false],
+              ['A large diff', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Deployment strategies',
+        videoUrl: TECH.js1,
+        quiz: [
+          q('What is a "blue-green" deployment?', [
+            [
+              'Running two environments and switching traffic between them',
+              true,
+            ],
+            ['Deploying only on weekends', false],
+            ['A type of database migration', false],
+            ['A code review technique', false],
+          ]),
+          q('What is the main benefit of a canary release?', [
+            [
+              'Rolling out changes to a small subset of users first to catch issues early',
+              true,
+            ],
+            ['Deploying to all users at once', false],
+            ['Skipping testing', false],
+            ['Reducing server costs to zero', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone DevOps Guild'],
   },
@@ -532,9 +1013,66 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Regression & classification', videoUrl: TECH.html },
-      { title: 'Model evaluation', videoUrl: TECH.js3 },
-      { title: 'Overfitting & regularization', videoUrl: TECH.python },
+      {
+        title: 'Regression & classification',
+        videoUrl: TECH.html,
+        quiz: [
+          q('Regression models are used to predict:', [
+            ['A continuous numeric value', true],
+            ['A category or class label', false],
+            ['A database schema', false],
+            ['A file format', false],
+          ]),
+          q('Classification models are used to predict:', [
+            ['A discrete category or class', true],
+            ['A continuous number', false],
+            ['A random seed', false],
+            ['A file size', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Model evaluation',
+        videoUrl: TECH.js3,
+        quiz: [
+          q('What does "accuracy" measure in a classification model?', [
+            ['The proportion of correct predictions', true],
+            ["The model's training speed", false],
+            ['The size of the dataset', false],
+            ['The number of features used', false],
+          ]),
+          q(
+            'Why use a separate test set instead of evaluating on training data?',
+            [
+              ['To estimate how the model performs on unseen data', true],
+              ['Test sets train the model faster', false],
+              ["It's required by law", false],
+              ['It reduces the number of features', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Overfitting & regularization',
+        videoUrl: TECH.python,
+        quiz: [
+          q('What is "overfitting"?', [
+            [
+              'A model that fits training data well but generalizes poorly',
+              true,
+            ],
+            ['A model that trains too quickly', false],
+            ['A model with too few parameters', false],
+            ['A dataset with no missing values', false],
+          ]),
+          q('What is one common technique to reduce overfitting?', [
+            ['Regularization', true],
+            ['Removing all validation data', false],
+            ['Training on less diverse data', false],
+            ['Increasing model complexity indefinitely', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Dept. of Data Science'],
   },
@@ -568,9 +1106,69 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Authentication & access control', videoUrl: TECH.js2 },
-      { title: 'Securing web applications', videoUrl: TECH.html },
-      { title: 'Incident response basics', videoUrl: TECH.js3 },
+      {
+        title: 'Authentication & access control',
+        videoUrl: TECH.js2,
+        quiz: [
+          q(
+            'What does multi-factor authentication (MFA) add beyond a password?',
+            [
+              ['A second, independent proof of identity', true],
+              ["Nothing — it's the same as a password", false],
+              ['A faster login process', false],
+              ['Automatic password sharing', false],
+            ],
+          ),
+          q('What is role-based access control (RBAC)?', [
+            ["Granting permissions based on a user's role", true],
+            ['Granting all users the same access', false],
+            ['A type of firewall', false],
+            ['A password hashing method', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Securing web applications',
+        videoUrl: TECH.html,
+        quiz: [
+          q('What is SQL injection?', [
+            [
+              'An attack that inserts malicious SQL through unsanitized input',
+              true,
+            ],
+            ['A method of backing up a database', false],
+            ['A type of load balancing', false],
+            ['A CSS vulnerability', false],
+          ]),
+          q('What does HTTPS provide that HTTP does not?', [
+            ['Encrypted communication between client and server', true],
+            ['Faster page loads', false],
+            ['Automatic backups', false],
+            ['Free hosting', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Incident response basics',
+        videoUrl: TECH.js3,
+        quiz: [
+          q('What is typically the first step in incident response?', [
+            ['Identifying and containing the incident', true],
+            ['Publicly announcing it before investigation', false],
+            ['Deleting all logs', false],
+            ['Ignoring it until it recurs', false],
+          ]),
+          q('Why keep logs during a security incident?', [
+            [
+              'They help reconstruct what happened and support investigation',
+              true,
+            ],
+            ['They slow down attackers', false],
+            ['They are required only for billing', false],
+            ['They replace the need for monitoring', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Security Lab'],
   },
@@ -604,9 +1202,69 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Branching & merging', videoUrl: TECH.js1 },
-      { title: 'Pull requests & code review', videoUrl: TECH.js2 },
-      { title: 'Resolving conflicts', videoUrl: TECH.html },
+      {
+        title: 'Branching & merging',
+        videoUrl: TECH.js1,
+        quiz: [
+          q('What is the purpose of creating a feature branch?', [
+            [
+              "Isolating new work from the main codebase until it's ready",
+              true,
+            ],
+            ['Deleting old commits', false],
+            ['Backing up the entire repository', false],
+            ['Renaming the repository', false],
+          ]),
+          q('What does "merging" a branch do?', [
+            ['Combines changes from one branch into another', true],
+            ['Deletes the branch permanently', false],
+            ['Reverts all commits', false],
+            ['Creates a new repository', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Pull requests & code review',
+        videoUrl: TECH.js2,
+        quiz: [
+          q('What is the main purpose of a pull request?', [
+            ['Proposing changes for review before merging', true],
+            ['Automatically deploying code to production', false],
+            ['Deleting a branch', false],
+            ['Compiling the project', false],
+          ]),
+          q('Why is code review valuable?', [
+            ['It catches bugs and shares knowledge across the team', true],
+            ['It slows down every release with no benefit', false],
+            ['It replaces automated testing entirely', false],
+            ['It is only useful for junior developers', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Resolving conflicts',
+        videoUrl: TECH.html,
+        quiz: [
+          q('When does a merge conflict occur?', [
+            [
+              'When the same lines of a file are changed differently in two branches',
+              true,
+            ],
+            ['Whenever you commit', false],
+            ['Whenever you clone a repo', false],
+            ['Only when using a GUI tool', false],
+          ]),
+          q('What is a safe first step when resolving a merge conflict?', [
+            [
+              'Carefully review both versions of the conflicting code before choosing',
+              true,
+            ],
+            ['Delete one branch immediately', false],
+            ["Force-push over the other branch's changes blindly", false],
+            ['Ignore the conflict markers', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone DevOps Guild'],
   },
@@ -640,9 +1298,72 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Building REST APIs with Express', videoUrl: TECH.python },
-      { title: 'Working with databases', videoUrl: TECH.js1 },
-      { title: 'Authentication & middleware', videoUrl: TECH.js2 },
+      {
+        title: 'Building REST APIs with Express',
+        videoUrl: TECH.python,
+        quiz: [
+          q('What is Express.js primarily used for?', [
+            ['Building web servers and APIs in Node.js', true],
+            ['Styling web pages', false],
+            ['Managing databases directly', false],
+            ['Compiling TypeScript', false],
+          ]),
+          q('What does app.get("/users", handler) define in Express?', [
+            ['A route that responds to GET requests at /users', true],
+            ['A database table', false],
+            ['A CSS selector', false],
+            ['A background job', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Working with databases',
+        videoUrl: TECH.js1,
+        quiz: [
+          q('What is an ORM used for?', [
+            ['Mapping database rows to application objects', true],
+            ['Compiling JavaScript', false],
+            ['Styling components', false],
+            ['Sending emails', false],
+          ]),
+          q('Why use connection pooling with a database?', [
+            [
+              'To reuse connections efficiently instead of opening a new one per request',
+              true,
+            ],
+            ['To slow down queries intentionally', false],
+            ["It's required for all SELECT statements", false],
+            ['To disable transactions', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Authentication & middleware',
+        videoUrl: TECH.js2,
+        quiz: [
+          q('What is middleware in an Express app?', [
+            [
+              'A function that runs between the request and the final route handler',
+              true,
+            ],
+            ['A database table', false],
+            ['A frontend framework', false],
+            ['A deployment platform', false],
+          ]),
+          q(
+            'What is a common way to represent a logged-in user across requests?',
+            [
+              ['A signed token (e.g. JWT) or session', true],
+              ['Storing the password in plain text in every request', false],
+              [
+                'Re-entering credentials on every API call with no token',
+                false,
+              ],
+              ['A hardcoded username in the URL', false],
+            ],
+          ),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Web Guild'],
   },
@@ -676,9 +1397,75 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Widgets & layout', videoUrl: TECH.js3 },
-      { title: 'State management', videoUrl: TECH.python },
-      { title: 'Publishing your app', videoUrl: TECH.js1 },
+      {
+        title: 'Widgets & layout',
+        videoUrl: TECH.js3,
+        quiz: [
+          q('In Flutter, how is the UI typically composed?', [
+            ['By nesting widgets inside each other', true],
+            ['By writing raw HTML', false],
+            ['By editing XML layout files only', false],
+            ['UI cannot be composed programmatically', false],
+          ]),
+          q(
+            'What is the difference between a StatelessWidget and a StatefulWidget?',
+            [
+              [
+                'A StatefulWidget can change its internal state over time',
+                true,
+              ],
+              ['StatelessWidgets can hold mutable state', false],
+              ['They are functionally identical', false],
+              ["StatefulWidgets can't rebuild", false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'State management',
+        videoUrl: TECH.python,
+        quiz: [
+          q('Why is state management important in larger Flutter apps?', [
+            [
+              'It keeps UI updates consistent as data changes across many widgets',
+              true,
+            ],
+            ["It's only relevant for styling", false],
+            ['It replaces the need for widgets', false],
+            ['It only matters for iOS apps', false],
+          ]),
+          q('What does calling setState() do in a StatefulWidget?', [
+            ['Triggers a rebuild of the widget with updated data', true],
+            ['Deletes the widget', false],
+            ['Publishes the app to the store', false],
+            ['Compiles the Dart code', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Publishing your app',
+        videoUrl: TECH.js1,
+        quiz: [
+          q('What is required before publishing an app to an app store?', [
+            [
+              "Meeting the store's packaging, signing, and review requirements",
+              true,
+            ],
+            ['Nothing — apps publish automatically', false],
+            ['Deleting all test code only', false],
+            ['Removing all images', false],
+          ]),
+          q('Why test on real devices before publishing?', [
+            [
+              "Emulators don't always reflect real-world performance and hardware behavior",
+              true,
+            ],
+            ['Emulators are always identical to real devices', false],
+            ["It's only needed for Android", false],
+            ["It's a store requirement with no practical benefit", false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Web Guild'],
   },
@@ -715,9 +1502,69 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ),
         ],
       },
-      { title: 'Resources & HTTP verbs', videoUrl: TECH.html },
-      { title: 'Status codes & error handling', videoUrl: TECH.js3 },
-      { title: 'Versioning & documentation', videoUrl: TECH.python },
+      {
+        title: 'Resources & HTTP verbs',
+        videoUrl: TECH.html,
+        quiz: [
+          q('In REST, a "resource" is typically represented by:', [
+            ['A URL, like /users/123', true],
+            ['A CSS class', false],
+            ['A database engine', false],
+            ['A compiler flag', false],
+          ]),
+          q(
+            'Which HTTP verb is conventionally used to create a new resource?',
+            [
+              ['POST', true],
+              ['GET', false],
+              ['DELETE', false],
+              ['HEAD', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Status codes & error handling',
+        videoUrl: TECH.js3,
+        quiz: [
+          q('What does a 404 status code mean?', [
+            ['The requested resource was not found', true],
+            ['The request succeeded', false],
+            ['The server crashed', false],
+            ['The user is unauthorized', false],
+          ]),
+          q('What does a 500 status code generally indicate?', [
+            ['An unexpected server-side error', true],
+            ['A successful request', false],
+            ['A client input error', false],
+            ['A redirect', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Versioning & documentation',
+        videoUrl: TECH.python,
+        quiz: [
+          q('Why version an API (e.g. /v1/, /v2/)?', [
+            [
+              'To make breaking changes without disrupting existing clients',
+              true,
+            ],
+            ['To slow down development', false],
+            ["It's purely cosmetic", false],
+            ['To increase server costs', false],
+          ]),
+          q('Why is API documentation important?', [
+            [
+              'It helps consumers understand how to use the API correctly',
+              true,
+            ],
+            ['It replaces the need for testing', false],
+            ["It's only useful for internal APIs", false],
+            ['It has no effect on adoption', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Web Guild'],
   },
@@ -753,9 +1600,66 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Funnels & retention', videoUrl: TALK.jobs },
-      { title: 'Running experiments', videoUrl: TALK.listen },
-      { title: 'Presenting findings', videoUrl: TALK.stress1 },
+      {
+        title: 'Funnels & retention',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q('What does a "funnel" typically visualize?', [
+            [
+              'The steps users take toward a goal, and where they drop off',
+              true,
+            ],
+            ['Total revenue only', false],
+            ['Server uptime', false],
+            ['Employee headcount', false],
+          ]),
+          q('A high drop-off at one funnel step usually signals:', [
+            ['A friction point worth investigating', true],
+            ['A successful feature', false],
+            ['A billing error', false],
+            ['Nothing worth reviewing', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Running experiments',
+        videoUrl: TALK.listen,
+        quiz: [
+          q('What is the purpose of a control group in an A/B test?', [
+            ['A baseline to compare the tested change against', true],
+            ['To receive the new feature first', false],
+            ['To be excluded from analysis', false],
+            ['To increase sample size only', false],
+          ]),
+          q('What does "statistical significance" help determine?', [
+            [
+              'Whether an observed difference is likely real, not just chance',
+              true,
+            ],
+            ['The exact revenue impact', false],
+            ['The color scheme of a dashboard', false],
+            ['Server response time', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Presenting findings',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q("When presenting data findings, it's best to lead with:", [
+            ['The key insight and its implication', true],
+            ['Every raw number collected', false],
+            ['A disclaimer about data quality only', false],
+            ['An unrelated anecdote', false],
+          ]),
+          q('Why tie findings back to a business decision?', [
+            ['It makes the analysis actionable, not just informative', true],
+            ["It's required by every dashboard tool", false],
+            ['It hides uncertainty', false],
+            ['It removes the need for context', false],
+          ]),
+        ],
+      },
     ],
     credits: [
       'Curriculum & instruction: Keystone Business School faculty',
@@ -796,8 +1700,45 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Anchoring & concessions', videoUrl: TALK.soundSmart },
-      { title: 'Closing the deal', videoUrl: TALK.stress2 },
+      {
+        title: 'Anchoring & concessions',
+        videoUrl: TALK.soundSmart,
+        quiz: [
+          q(
+            'Why might making concessions gradually, not all at once, matter in negotiation?',
+            [
+              ['It signals value is being exchanged, not given away', true],
+              ['It has no effect on outcomes', false],
+              ['It always ends the negotiation faster', false],
+              ["It's illegal in most contexts", false],
+            ],
+          ),
+          q('What is a "concession" in negotiation?', [
+            ['Something you give up to move toward agreement', true],
+            ['A legal contract clause', false],
+            ['A type of anchor', false],
+            ['A rejection of the deal', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Closing the deal',
+        videoUrl: TALK.stress2,
+        quiz: [
+          q('What is a good sign that a negotiation is ready to close?', [
+            ['Both sides have addressed their key concerns', true],
+            ['One side has given up completely', false],
+            ['The conversation has gone on the longest', false],
+            ['No terms have been discussed yet', false],
+          ]),
+          q('Why summarize agreed terms before closing?', [
+            ['To confirm mutual understanding and avoid later disputes', true],
+            ['To restart the negotiation', false],
+            ["It's optional and rarely useful", false],
+            ['To introduce new demands', false],
+          ]),
+        ],
+      },
     ],
     credits: [
       'Curriculum & instruction: Keystone Business School faculty',
@@ -835,9 +1776,66 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Budgeting basics', videoUrl: TALK.bodyLanguage },
-      { title: 'Understanding cash flow', videoUrl: TALK.vulnerability },
-      { title: 'Making the business case', videoUrl: TALK.creativity },
+      {
+        title: 'Budgeting basics',
+        videoUrl: TALK.bodyLanguage,
+        quiz: [
+          q('What is the main purpose of a budget?', [
+            ['Planning and controlling how money will be spent', true],
+            ['Tracking employee attendance', false],
+            ['Replacing a business plan', false],
+            ['Setting product prices', false],
+          ]),
+          q('What is a "variance" in budgeting?', [
+            ['The difference between budgeted and actual figures', true],
+            ['A type of tax', false],
+            ['A legal filing', false],
+            ['A hiring metric', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Understanding cash flow',
+        videoUrl: TALK.vulnerability,
+        quiz: [
+          q('What does "cash flow" refer to?', [
+            ['The movement of money in and out of a business over time', true],
+            ['Total company revenue only', false],
+            ['Stock price', false],
+            ['Employee salaries only', false],
+          ]),
+          q('Why can a profitable company still run out of cash?', [
+            ['Revenue may be recorded before cash is actually collected', true],
+            ['Profit and cash are always identical', false],
+            [
+              "It's impossible for a profitable company to run out of cash",
+              false,
+            ],
+            ['Cash flow only matters for startups', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Making the business case',
+        videoUrl: TALK.creativity,
+        quiz: [
+          q('A strong business case should clearly show:', [
+            ['The expected costs, benefits, and risks of a proposal', true],
+            ['Only the costs', false],
+            ['Only the benefits', false],
+            ['The org chart', false],
+          ]),
+          q('Why quantify the expected ROI in a business case?', [
+            [
+              'It helps decision-makers compare it against other priorities',
+              true,
+            ],
+            ["It's a legal requirement", false],
+            ['It guarantees approval', false],
+            ['It replaces the need for a plan', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Business School'],
   },
@@ -871,9 +1869,69 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Positioning & messaging', videoUrl: TALK.listen },
-      { title: 'Channel strategy', videoUrl: TALK.stress1 },
-      { title: 'Measuring what matters', videoUrl: TALK.howToSpeak },
+      {
+        title: 'Positioning & messaging',
+        videoUrl: TALK.listen,
+        quiz: [
+          q('What does "positioning" define for a product?', [
+            [
+              "How it's perceived relative to alternatives in the customer's mind",
+              true,
+            ],
+            ['Its warehouse location', false],
+            ['Its manufacturing cost', false],
+            ['Its legal structure', false],
+          ]),
+          q('Effective messaging typically speaks to:', [
+            ["The customer's needs and desired outcomes", true],
+            ['Only internal company jargon', false],
+            ['Competitor weaknesses exclusively', false],
+            ['Generic industry buzzwords', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Channel strategy',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q('What does "channel strategy" determine?', [
+            ['Which platforms and paths are used to reach customers', true],
+            ["The company's org chart", false],
+            ['Product pricing only', false],
+            ['Legal compliance', false],
+          ]),
+          q('Why might a company use multiple marketing channels?', [
+            [
+              'Different channels reach different segments of the audience',
+              true,
+            ],
+            ['To spend the entire budget as fast as possible', false],
+            ["It's required by regulation", false],
+            ['One channel always works for everyone', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Measuring what matters',
+        videoUrl: TALK.howToSpeak,
+        quiz: [
+          q('What is a "vanity metric" in marketing?', [
+            [
+              "A number that looks impressive but doesn't indicate real business impact",
+              true,
+            ],
+            ['Total revenue', false],
+            ['Customer lifetime value', false],
+            ['Conversion rate', false],
+          ]),
+          q('Why tie marketing metrics to business outcomes?', [
+            ['To ensure marketing spend is actually driving results', true],
+            ["It's only useful for large companies", false],
+            ['It replaces creative work entirely', false],
+            ['Metrics have no relation to strategy', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Growth Academy'],
   },
@@ -907,11 +1965,68 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Scrum roles & ceremonies', videoUrl: TALK.stress2 },
-      { title: 'Backlogs & sprint planning', videoUrl: TALK.sinek },
+      {
+        title: 'Scrum roles & ceremonies',
+        videoUrl: TALK.stress2,
+        quiz: [
+          q(
+            'In Scrum, who is responsible for maximizing the value of the product?',
+            [
+              ['The Product Owner', true],
+              ['The Scrum Master', false],
+              ['The CEO', false],
+              ['Any random team member', false],
+            ],
+          ),
+          q('What is the purpose of a daily stand-up?', [
+            ['A short sync on progress, plans, and blockers', true],
+            ['A formal performance review', false],
+            ['A sales pitch to customers', false],
+            ['A quarterly planning session', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Backlogs & sprint planning',
+        videoUrl: TALK.sinek,
+        quiz: [
+          q('What is a "product backlog"?', [
+            ['A prioritized list of work to be done', true],
+            ['A log of bugs only', false],
+            ['A finished feature list', false],
+            ['A meeting agenda', false],
+          ]),
+          q('What happens during sprint planning?', [
+            [
+              'The team selects and commits to backlog items for the upcoming sprint',
+              true,
+            ],
+            ["The team reviews last year's performance", false],
+            ['The team writes the annual budget', false],
+            ['The company sets its mission statement', false],
+          ]),
+        ],
+      },
       {
         title: 'Retrospectives & continuous improvement',
         videoUrl: TALK.bodyLanguage,
+        quiz: [
+          q('What is the main goal of a sprint retrospective?', [
+            [
+              'Reflecting on what went well and what to improve next sprint',
+              true,
+            ],
+            ['Assigning blame for missed deadlines', false],
+            ["Planning the next quarter's roadmap", false],
+            ['Reviewing the product backlog', false],
+          ]),
+          q('Why hold retrospectives regularly instead of once a year?', [
+            ['Frequent, small improvements compound over time', true],
+            ['Annual reviews are more effective', false],
+            ["It's required by Scrum certification bodies only", false],
+            ['It has no impact on team performance', false],
+          ]),
+        ],
       },
     ],
     credits: PROVIDER_CREDITS['Keystone Business School'],
@@ -945,8 +2060,45 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Structuring emails & memos', videoUrl: TALK.creativity },
-      { title: 'Persuasive writing basics', videoUrl: TALK.jobs },
+      {
+        title: 'Structuring emails & memos',
+        videoUrl: TALK.creativity,
+        quiz: [
+          q('What is a good structure for a business email?', [
+            ['Clear subject, key point up front, then supporting detail', true],
+            ['A long introduction before the main point', false],
+            ['No subject line', false],
+            ['Random ordering of points', false],
+          ]),
+          q('Why use short paragraphs in business writing?', [
+            ["They're easier to scan and understand quickly", true],
+            ['They look less professional', false],
+            ["They're required by law", false],
+            ['They reduce word count to zero', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Persuasive writing basics',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q('What is a key element of persuasive business writing?', [
+            [
+              'Clearly connecting the request to a benefit for the reader',
+              true,
+            ],
+            ['Using as much jargon as possible', false],
+            ['Avoiding any call to action', false],
+            ['Writing as long as possible', false],
+          ]),
+          q('Why anticipate objections in persuasive writing?', [
+            ['It lets you address concerns before they become blockers', true],
+            ['It weakens your argument', false],
+            ["It's unnecessary if the case is strong", false],
+            ['It only applies to legal writing', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Business School'],
   },
@@ -980,9 +2132,69 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'SEO basics', videoUrl: TALK.stress1 },
-      { title: 'Paid advertising fundamentals', videoUrl: TALK.howToSpeak },
-      { title: 'Email & lifecycle marketing', videoUrl: TALK.soundSmart },
+      {
+        title: 'SEO basics',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q('What does SEO stand for?', [
+            ['Search Engine Optimization', true],
+            ['Social Engagement Output', false],
+            ['Site Encryption Overview', false],
+            ['Sales Efficiency Objective', false],
+          ]),
+          q('What is a common factor that influences SEO ranking?', [
+            ['Relevant, high-quality content and backlinks', true],
+            ['Font color', false],
+            ['Number of images on unrelated pages', false],
+            ['Page load time has no effect', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Paid advertising fundamentals',
+        videoUrl: TALK.howToSpeak,
+        quiz: [
+          q('What does CPC stand for in paid advertising?', [
+            ['Cost Per Click', true],
+            ['Customer Purchase Cycle', false],
+            ['Content Publishing Calendar', false],
+            ['Channel Performance Card', false],
+          ]),
+          q('Why set a target audience for a paid ad campaign?', [
+            [
+              'To reach people more likely to convert, improving efficiency',
+              true,
+            ],
+            ["It's required by every ad platform with no benefit", false],
+            ['It guarantees a sale', false],
+            ['Targeting reduces ad visibility to zero', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Email & lifecycle marketing',
+        videoUrl: TALK.soundSmart,
+        quiz: [
+          q('What is "lifecycle marketing"?', [
+            [
+              'Tailoring messaging to where a customer is in their journey',
+              true,
+            ],
+            ['Sending the same email to everyone', false],
+            ['A one-time onboarding email', false],
+            ['A type of paid ad', false],
+          ]),
+          q('Why segment an email list?', [
+            [
+              'To send more relevant messages to different groups of subscribers',
+              true,
+            ],
+            ["It's required for spam compliance only", false],
+            ['It slows down delivery intentionally', false],
+            ['Segmentation has no effect on open rates', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Growth Academy'],
   },
@@ -1016,9 +2228,69 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Discovery & qualifying', videoUrl: TALK.sinek },
-      { title: 'Handling objections', videoUrl: TALK.bodyLanguage },
-      { title: 'Closing techniques', videoUrl: TALK.vulnerability },
+      {
+        title: 'Discovery & qualifying',
+        videoUrl: TALK.sinek,
+        quiz: [
+          q('What is the goal of a discovery call?', [
+            [
+              "Understanding the prospect's needs and whether there's a fit",
+              true,
+            ],
+            ['Closing the deal immediately', false],
+            ['Sending an invoice', false],
+            ['Skipping straight to pricing', false],
+          ]),
+          q('What does BANT (Budget, Authority, Need, Timeline) help assess?', [
+            ['Whether a lead is qualified to buy', true],
+            ['Product pricing', false],
+            ['Marketing channel performance', false],
+            ['Website traffic', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Handling objections',
+        videoUrl: TALK.bodyLanguage,
+        quiz: [
+          q('What is a good first response to a sales objection?', [
+            ['Listen fully and understand the underlying concern', true],
+            ['Immediately offer a discount', false],
+            ['Argue that the objection is wrong', false],
+            ['End the call', false],
+          ]),
+          q(
+            'A common objection category is price. What often actually drives it?',
+            [
+              ['Unclear perceived value relative to cost', true],
+              ['The buyer never has budget concerns', false],
+              ["It's always a firm no", false],
+              ['It means the deal is lost', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Closing techniques',
+        videoUrl: TALK.vulnerability,
+        quiz: [
+          q('What is an "assumptive close"?', [
+            [
+              'Proceeding as though the buyer has already decided to move forward',
+              true,
+            ],
+            ['Waiting indefinitely for the buyer to speak first', false],
+            ['Offering unlimited discounts', false],
+            ['Ending the conversation with no next step', false],
+          ]),
+          q('Why define a clear next step at the end of a sales call?', [
+            ['It keeps the deal moving instead of stalling', true],
+            ["It's optional and rarely matters", false],
+            ['It replaces the need for follow-up', false],
+            ['It guarantees the sale', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Growth Academy'],
   },
@@ -1052,9 +2324,75 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Measuring customer health', videoUrl: TALK.jobs },
-      { title: 'Managing renewals & expansion', videoUrl: TALK.listen },
-      { title: 'Reducing churn', videoUrl: TALK.stress1 },
+      {
+        title: 'Measuring customer health',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q('What might a declining product usage trend indicate?', [
+            ['Rising churn risk for that customer', true],
+            ['Guaranteed renewal', false],
+            ['A billing error', false],
+            ['Nothing worth monitoring', false],
+          ]),
+          q('What is a "health score" typically built from?', [
+            ['A combination of usage, engagement, and support signals', true],
+            ['Only the contract value', false],
+            ["Only the sales rep's opinion", false],
+            ['Random assignment', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Managing renewals & expansion',
+        videoUrl: TALK.listen,
+        quiz: [
+          q(
+            'Why start renewal conversations well before the contract end date?',
+            [
+              [
+                'To address concerns and demonstrate value ahead of the decision',
+                true,
+              ],
+              ['Contracts renew automatically regardless of timing', false],
+              ['It has no effect on renewal likelihood', false],
+              ["It's only needed for annual contracts", false],
+            ],
+          ),
+          q('What is "expansion revenue"?', [
+            [
+              'Additional revenue from existing customers upgrading or buying more',
+              true,
+            ],
+            ['Revenue from brand-new customers only', false],
+            ['One-time discounted revenue', false],
+            ['Revenue that has churned', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Reducing churn',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q('What is "churn" in a subscription business?', [
+            ["Customers who cancel or don't renew", true],
+            ['New customer signups', false],
+            ['Total revenue', false],
+            ['Support ticket volume', false],
+          ]),
+          q(
+            'Why is proactive outreach often more effective than reactive support for reducing churn?',
+            [
+              [
+                'It catches at-risk customers before they decide to leave',
+                true,
+              ],
+              ['It costs more with no benefit', false],
+              ['Reactive support always works better', false],
+              ['Proactive outreach is only for new customers', false],
+            ],
+          ),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Growth Academy'],
   },
@@ -1087,9 +2425,69 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Revenue models', videoUrl: TALK.soundSmart },
-      { title: 'Cost structures', videoUrl: TALK.stress2 },
-      { title: 'Mapping the business model canvas', videoUrl: TALK.sinek },
+      {
+        title: 'Revenue models',
+        videoUrl: TALK.soundSmart,
+        quiz: [
+          q('What is a "freemium" revenue model?', [
+            ['Offering a free tier with paid upgrades for more features', true],
+            ['Charging a one-time fee only', false],
+            ['Giving everything away for free permanently', false],
+            ['A model with no product', false],
+          ]),
+          q('Which is an example of a transactional revenue model?', [
+            ['Charging a fee per individual purchase', true],
+            ['A flat monthly subscription', false],
+            ['A membership fee regardless of use', false],
+            ['Advertising-only revenue', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Cost structures',
+        videoUrl: TALK.stress2,
+        quiz: [
+          q('What is a "fixed cost"?', [
+            [
+              "A cost that doesn't change with production or sales volume",
+              true,
+            ],
+            ['A cost that scales directly with units sold', false],
+            ['A one-time investment only', false],
+            ['Revenue minus profit', false],
+          ]),
+          q('What is a "variable cost"?', [
+            ['A cost that changes with the level of production or sales', true],
+            ['Rent, which stays the same each month', false],
+            ['A cost paid only once', false],
+            ['A tax-exempt cost', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Mapping the business model canvas',
+        videoUrl: TALK.sinek,
+        quiz: [
+          q('What does the Business Model Canvas help teams do?', [
+            [
+              'Visualize all the key building blocks of a business on one page',
+              true,
+            ],
+            ['File tax returns', false],
+            ['Write a legal contract', false],
+            ['Design a company logo', false],
+          ]),
+          q(
+            'Which of these is a building block in the Business Model Canvas?',
+            [
+              ['Customer Segments', true],
+              ['Employee birthdays', false],
+              ['Office floor plan', false],
+              ['Font choices', false],
+            ],
+          ),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Business School'],
   },
@@ -1126,9 +2524,75 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Choosing the right metric', videoUrl: TALK.vulnerability },
-      { title: 'Avoiding common statistical traps', videoUrl: TALK.creativity },
-      { title: 'Communicating data to stakeholders', videoUrl: TALK.jobs },
+      {
+        title: 'Choosing the right metric',
+        videoUrl: TALK.vulnerability,
+        quiz: [
+          q('What makes a metric "actionable"?', [
+            ['Changes in it clearly point to a decision or action', true],
+            ["It's the easiest number to calculate", false],
+            ['It never changes', false],
+            ["It's only visible to executives", false],
+          ]),
+          q('Why is it risky to optimize for a single metric in isolation?', [
+            [
+              'It can create unintended trade-offs elsewhere in the business',
+              true,
+            ],
+            ['Single metrics are always the safest choice', false],
+            ['It guarantees balanced outcomes', false],
+            ['It has no downside', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Avoiding common statistical traps',
+        videoUrl: TALK.creativity,
+        quiz: [
+          q('What is "survivorship bias"?', [
+            [
+              'Drawing conclusions only from the subset that "survived," ignoring what didn\'t',
+              true,
+            ],
+            ['A bias toward the newest data only', false],
+            ['A random sampling error', false],
+            ['A type of data encryption', false],
+          ]),
+          q('Why is a small sample size risky for drawing conclusions?', [
+            ["It can produce results that don't hold up with more data", true],
+            ['Small samples are always more accurate', false],
+            ['Sample size never matters', false],
+            ['It only affects qualitative research', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Communicating data to stakeholders',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q(
+            'What should a data presentation to executives typically emphasize?',
+            [
+              [
+                'The business implication of the findings, not just the numbers',
+                true,
+              ],
+              ['Every technical detail of the analysis', false],
+              ['The programming language used', false],
+              ['Raw, unlabeled tables only', false],
+            ],
+          ),
+          q('Why use visuals when communicating data findings?', [
+            [
+              'They help audiences grasp patterns faster than raw numbers',
+              true,
+            ],
+            ['Visuals are only for external audiences', false],
+            ['They replace the need for accuracy', false],
+            ["They're required by law", false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Business School'],
   },
@@ -1162,9 +2626,66 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Inventory management', videoUrl: TALK.stress1 },
-      { title: 'Logistics & distribution', videoUrl: TALK.howToSpeak },
-      { title: 'Managing supplier relationships', videoUrl: TALK.soundSmart },
+      {
+        title: 'Inventory management',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q('What is a risk of holding too much inventory?', [
+            ['Tied-up capital and increased storage costs', true],
+            ['Never running out of stock', false],
+            ['Lower storage costs', false],
+            ['No risk at all', false],
+          ]),
+          q('What does "stockout" mean?', [
+            ['Running out of inventory for a product', true],
+            ['Having excess inventory', false],
+            ['A pricing strategy', false],
+            ['A shipping method', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Logistics & distribution',
+        videoUrl: TALK.howToSpeak,
+        quiz: [
+          q('What does "logistics" primarily manage?', [
+            [
+              'The movement and storage of goods through the supply chain',
+              true,
+            ],
+            ['Product design', false],
+            ['Marketing campaigns', false],
+            ['Employee hiring', false],
+          ]),
+          q('Why might a company use multiple distribution channels?', [
+            [
+              'To reach different customer segments and reduce dependency on one channel',
+              true,
+            ],
+            ["It's always cheaper to use only one channel", false],
+            ['Regulations require it everywhere', false],
+            ['It eliminates the need for logistics', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Managing supplier relationships',
+        videoUrl: TALK.soundSmart,
+        quiz: [
+          q('Why diversify suppliers rather than relying on just one?', [
+            ['To reduce risk if one supplier fails or has delays', true],
+            ['It always increases costs with no benefit', false],
+            ['Single-supplier reliance has no risk', false],
+            ["It's required by international law", false],
+          ]),
+          q('What is a key factor in evaluating a supplier?', [
+            ['Reliability and consistency of delivery', true],
+            ['Only their logo design', false],
+            ['Their office location exclusively', false],
+            ['Random selection', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Business School'],
   },
@@ -1200,9 +2721,66 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Building a minimum viable product', videoUrl: TALK.sinek },
-      { title: 'Fundraising basics', videoUrl: TALK.bodyLanguage },
-      { title: 'Finding product-market fit', videoUrl: TALK.vulnerability },
+      {
+        title: 'Building a minimum viable product',
+        videoUrl: TALK.sinek,
+        quiz: [
+          q('What is the main purpose of building an MVP?', [
+            ['Testing a core hypothesis with minimal investment', true],
+            ['Launching the most feature-complete product possible', false],
+            ['Skipping customer feedback', false],
+            ['Maximizing initial development cost', false],
+          ]),
+          q('What should be prioritized when scoping an MVP?', [
+            [
+              'The smallest set of features that tests the core value proposition',
+              true,
+            ],
+            ['Every feature customers might eventually want', false],
+            ['Visual polish over functionality', false],
+            ['Features competitors already have', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Fundraising basics',
+        videoUrl: TALK.bodyLanguage,
+        quiz: [
+          q('What is "equity" in the context of startup fundraising?', [
+            ['Ownership stake given in exchange for investment', true],
+            ['A type of loan that must be repaid with interest', false],
+            ['A government grant', false],
+            ['A marketing budget', false],
+          ]),
+          q('What do early-stage investors typically evaluate?', [
+            ['The team, market size, and traction', true],
+            ['Only the company logo', false],
+            ['The office location exclusively', false],
+            ["The founder's favorite color", false],
+          ]),
+        ],
+      },
+      {
+        title: 'Finding product-market fit',
+        videoUrl: TALK.vulnerability,
+        quiz: [
+          q('What does "product-market fit" mean?', [
+            [
+              'A product that strongly satisfies real demand in its target market',
+              true,
+            ],
+            ['A product with the most features', false],
+            ['A product priced the lowest in its category', false],
+            ['A product with a finished logo', false],
+          ]),
+          q('What is a strong early signal of product-market fit?', [
+            ['Customers actively using and recommending the product', true],
+            ['High marketing spend', false],
+            ['A large founding team', false],
+            ['A long list of planned features', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Business School'],
   },
@@ -1241,9 +2819,66 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Delegation & trust', videoUrl: TALK.jobs },
-      { title: 'Feedback that lands', videoUrl: TALK.listen },
-      { title: 'Running effective 1:1s', videoUrl: TALK.stress1 },
+      {
+        title: 'Delegation & trust',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q('What is a common barrier to effective delegation?', [
+            ['A leader believing they must do everything themselves', true],
+            ['Having a skilled team', false],
+            ['Clear expectations', false],
+            ['Trusting the team', false],
+          ]),
+          q('What should accompany a delegated task for it to succeed?', [
+            ['Clear expectations and the authority to act', true],
+            ['No instructions at all', false],
+            ['Constant micromanagement', false],
+            ['Withholding context', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Feedback that lands',
+        videoUrl: TALK.listen,
+        quiz: [
+          q('Effective feedback is generally:', [
+            ['Specific, timely, and focused on behavior', true],
+            ['Vague and delayed', false],
+            ['Focused on personality', false],
+            ['Delivered only in writing', false],
+          ]),
+          q('Why deliver feedback close to the event it relates to?', [
+            ["It's more relevant and actionable while details are fresh", true],
+            ['Delayed feedback is always more effective', false],
+            ['Timing has no effect on impact', false],
+            ["It's only a formality", false],
+          ]),
+        ],
+      },
+      {
+        title: 'Running effective 1:1s',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q('What is a primary purpose of a 1:1 meeting?', [
+            [
+              'Giving the direct report space to raise what matters to them',
+              true,
+            ],
+            ['Delivering only status updates from the manager', false],
+            ['Replacing performance reviews entirely', false],
+            ['A purely social chat with no structure', false],
+          ]),
+          q('Why keep 1:1s consistent and recurring?', [
+            [
+              'It builds trust and creates a reliable space for ongoing dialogue',
+              true,
+            ],
+            ['One-off meetings are always more effective', false],
+            ['Consistency has no impact on team relationships', false],
+            ["It's only useful for new hires", false],
+          ]),
+        ],
+      },
     ],
     credits: [
       'Curriculum & instruction: Keystone Business School faculty',
@@ -1281,9 +2916,66 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Asking powerful questions', videoUrl: TALK.soundSmart },
-      { title: 'Active listening', videoUrl: TALK.stress2 },
-      { title: 'Setting growth goals', videoUrl: TALK.sinek },
+      {
+        title: 'Asking powerful questions',
+        videoUrl: TALK.soundSmart,
+        quiz: [
+          q('What makes a question "powerful" in a coaching context?', [
+            ["It's open-ended and prompts genuine reflection", true],
+            ['It has an obvious yes/no answer', false],
+            ["It's about the coach's own experience", false],
+            ["It's leading toward a predetermined answer", false],
+          ]),
+          q('Why avoid leading questions in coaching?', [
+            [
+              "They can steer someone toward the coach's answer instead of their own",
+              true,
+            ],
+            ['Leading questions always produce better insight', false],
+            ['They save time with no downside', false],
+            ["They're required for good coaching", false],
+          ]),
+        ],
+      },
+      {
+        title: 'Active listening',
+        videoUrl: TALK.stress2,
+        quiz: [
+          q('What does active listening involve beyond just hearing words?', [
+            ["Fully focusing on and reflecting back what's being said", true],
+            ['Planning your response while the other person talks', false],
+            ['Interrupting to share your own story', false],
+            ['Multitasking during the conversation', false],
+          ]),
+          q(
+            'Why paraphrase what someone said during a coaching conversation?',
+            [
+              ["To confirm understanding and show you're engaged", true],
+              ['To change the subject', false],
+              ["It's a filler technique with no purpose", false],
+              ['To correct their point of view', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Setting growth goals',
+        videoUrl: TALK.sinek,
+        quiz: [
+          q('What makes a growth goal effective?', [
+            ["It's specific and tied to the person's own motivation", true],
+            ["It's set entirely by the manager with no input", false],
+            ['It has no timeline', false],
+            ["It's vague enough to fit anything", false],
+          ]),
+          q('Why revisit growth goals periodically?', [
+            ['To track progress and adjust as circumstances change', true],
+            ['Goals should never change once set', false],
+            ["It's unnecessary once a goal is written down", false],
+            ['Revisiting goals slows down growth', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
@@ -1320,12 +3012,75 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'De-escalating tension', videoUrl: TALK.vulnerability },
+      {
+        title: 'De-escalating tension',
+        videoUrl: TALK.vulnerability,
+        quiz: [
+          q(
+            'What is a useful first step when de-escalating a tense conversation?',
+            [
+              [
+                "Staying calm and acknowledging the other person's perspective",
+                true,
+              ],
+              ['Raising your voice to regain control', false],
+              ['Ending the conversation immediately', false],
+              ['Assigning blame right away', false],
+            ],
+          ),
+          q(
+            'Why acknowledge emotions before addressing the facts of a conflict?',
+            [
+              [
+                'People are more able to problem-solve once they feel heard',
+                true,
+              ],
+              ['Emotions are irrelevant to workplace conflict', false],
+              ['It wastes time better spent on facts', false],
+              ['It escalates tension further', false],
+            ],
+          ),
+        ],
+      },
       {
         title: 'Facilitating a resolution conversation',
         videoUrl: TALK.creativity,
+        quiz: [
+          q("What is the facilitator's role in a resolution conversation?", [
+            ['Guiding both sides toward a mutually acceptable outcome', true],
+            ['Deciding who is right unilaterally', false],
+            ["Taking one side's position", false],
+            ['Avoiding any discussion of the issue', false],
+          ]),
+          q('Why set ground rules before a difficult conversation?', [
+            ['It creates a safer, more structured space for dialogue', true],
+            ['Ground rules are unnecessary formalities', false],
+            ['They guarantee agreement', false],
+            ['They replace the need for listening', false],
+          ]),
+        ],
       },
-      { title: 'Following up after conflict', videoUrl: TALK.jobs },
+      {
+        title: 'Following up after conflict',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q('Why follow up after a conflict has been "resolved"?', [
+            [
+              'To confirm the agreement is holding and address any recurrence early',
+              true,
+            ],
+            ['Follow-up is unnecessary once a conversation ends', false],
+            ['It reopens old wounds unnecessarily', false],
+            ["It's only needed for formal HR cases", false],
+          ]),
+          q('What is a sign a resolution may not be holding?', [
+            ['The same underlying issue starts resurfacing', true],
+            ['Both parties report satisfaction', false],
+            ['Communication has improved', false],
+            ['No further incidents occur', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
@@ -1362,9 +3117,78 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Prioritization frameworks', videoUrl: TALK.stress1 },
-      { title: 'Anticipating second-order effects', videoUrl: TALK.howToSpeak },
-      { title: 'Communicating strategy', videoUrl: TALK.soundSmart },
+      {
+        title: 'Prioritization frameworks',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q(
+            'What is the goal of a prioritization framework for a strategic leader?',
+            [
+              [
+                'Focusing limited time and resources on what matters most',
+                true,
+              ],
+              ['Assigning tasks alphabetically', false],
+              ['Avoiding any trade-offs', false],
+              ['Delegating all decisions to a committee', false],
+            ],
+          ),
+          q(
+            'Why revisit priorities periodically rather than setting them once?',
+            [
+              [
+                'Circumstances and information change, so priorities should adapt',
+                true,
+              ],
+              ['Priorities should never change once set', false],
+              ['Revisiting priorities wastes leadership time', false],
+              ['It has no effect on strategic outcomes', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Anticipating second-order effects',
+        videoUrl: TALK.howToSpeak,
+        quiz: [
+          q('Why consider second-order effects before making a decision?', [
+            [
+              'Initial actions can trigger further consequences worth anticipating',
+              true,
+            ],
+            ['Only immediate effects ever matter', false],
+            ['Second-order effects never occur in practice', false],
+            ['It slows decisions with no benefit', false],
+          ]),
+          q('What is a risk of ignoring second-order effects?', [
+            ['Unintended consequences that undermine the original goal', true],
+            ['Faster decision-making with no downside', false],
+            ['Better short-term outcomes always follow', false],
+            ['There is no real risk', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Communicating strategy',
+        videoUrl: TALK.soundSmart,
+        quiz: [
+          q('Why is clarity important when communicating strategy to a team?', [
+            [
+              'It helps everyone understand priorities and align their work',
+              true,
+            ],
+            ['Ambiguity motivates better performance', false],
+            ['Strategy should stay confidential from the team', false],
+            ['Clarity has no effect on execution', false],
+          ]),
+          q('What is a common reason strategy communication fails?', [
+            ["It's communicated once and never reinforced", true],
+            ["It's repeated too often", false],
+            ["It's explained with real examples", false],
+            ['Leaders ask for questions', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
@@ -1398,9 +3222,78 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Managing your reactions', videoUrl: TALK.sinek },
-      { title: 'Reading the room', videoUrl: TALK.bodyLanguage },
-      { title: 'Building empathy', videoUrl: TALK.vulnerability },
+      {
+        title: 'Managing your reactions',
+        videoUrl: TALK.sinek,
+        quiz: [
+          q(
+            'What is a healthy way to manage a strong emotional reaction at work?',
+            [
+              [
+                'Pausing before responding to choose a deliberate reaction',
+                true,
+              ],
+              ['Reacting immediately without reflection', false],
+              ['Suppressing the emotion permanently', false],
+              ['Avoiding the person indefinitely', false],
+            ],
+          ),
+          q('Why does self-regulation matter for leaders?', [
+            [
+              'It helps them respond thoughtfully rather than react impulsively under pressure',
+              true,
+            ],
+            ['It has no effect on team dynamics', false],
+            ['Leaders should show no emotion ever', false],
+            ['It only matters in crisis situations', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Reading the room',
+        videoUrl: TALK.bodyLanguage,
+        quiz: [
+          q('What does "reading the room" involve?', [
+            ['Picking up on group dynamics and unspoken cues', true],
+            ['Only listening to the loudest voice', false],
+            ['Ignoring nonverbal signals', false],
+            ['Following a fixed script regardless of context', false],
+          ]),
+          q('Why is reading the room useful in a meeting?', [
+            [
+              'It helps you adjust your approach to how people are actually reacting',
+              true,
+            ],
+            ['It has no practical use', false],
+            ['It replaces the need for an agenda', false],
+            ['It only applies to large meetings', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Building empathy',
+        videoUrl: TALK.vulnerability,
+        quiz: [
+          q('What does empathy at work primarily involve?', [
+            [
+              "Genuinely understanding another person's perspective and feelings",
+              true,
+            ],
+            ['Agreeing with everyone regardless of the situation', false],
+            ['Avoiding difficult conversations', false],
+            ['Focusing only on your own perspective', false],
+          ]),
+          q('How can empathy improve team performance?', [
+            [
+              'It builds trust and helps address real concerns behind behavior',
+              true,
+            ],
+            ['It has no measurable effect', false],
+            ['It always slows down decision-making', false],
+            ['It replaces the need for accountability', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
@@ -1434,9 +3327,75 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Building a change narrative', videoUrl: TALK.jobs },
-      { title: 'Managing resistance', videoUrl: TALK.listen },
-      { title: 'Sustaining new behaviors', videoUrl: TALK.stress1 },
+      {
+        title: 'Building a change narrative',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q('What should a strong change narrative clearly explain?', [
+            ['Why the change is happening and what it means for people', true],
+            ['Only the new org chart', false],
+            ['Nothing — change should be self-explanatory', false],
+            ['Only the executive rationale, not the impact on staff', false],
+          ]),
+          q(
+            'Why repeat the change narrative multiple times, in multiple ways?',
+            [
+              [
+                'People need repeated exposure to fully absorb and trust new information',
+                true,
+              ],
+              ['One announcement is always sufficient', false],
+              ['Repetition confuses employees', false],
+              ["It's a legal requirement", false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Managing resistance',
+        videoUrl: TALK.listen,
+        quiz: [
+          q(
+            'What is often the most effective response to resistance to change?',
+            [
+              [
+                'Understanding and addressing the specific underlying concern',
+                true,
+              ],
+              ['Ignoring it and hoping it fades', false],
+              ['Punishing anyone who raises concerns', false],
+              ['Mandating compliance with no explanation', false],
+            ],
+          ),
+          q('Why can early resistance sometimes be valuable?', [
+            ['It can surface real risks or gaps in the change plan', true],
+            ['Resistance is always irrational and should be dismissed', false],
+            ['It should always be silenced immediately', false],
+            ['It has no informational value', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Sustaining new behaviors',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q('What helps make a change stick long-term?', [
+            [
+              'Reinforcing new behaviors through systems, habits, and recognition',
+              true,
+            ],
+            ['Announcing the change once and moving on', false],
+            ['Removing all support after the initial rollout', false],
+            ['Assuming people will remember on their own', false],
+          ]),
+          q('Why track progress after a change has been implemented?', [
+            ['To catch backsliding and reinforce the new way of working', true],
+            ['Once implemented, no further monitoring is needed', false],
+            ['Tracking undermines trust', false],
+            ["It's only relevant during the rollout phase", false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Business School'],
   },
@@ -1472,9 +3431,78 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Inclusive hiring practices', videoUrl: TALK.soundSmart },
-      { title: 'Creating psychological safety', videoUrl: TALK.stress2 },
-      { title: 'Equitable recognition & growth', videoUrl: TALK.sinek },
+      {
+        title: 'Inclusive hiring practices',
+        videoUrl: TALK.soundSmart,
+        quiz: [
+          q('What is one way to reduce bias in hiring?', [
+            [
+              'Using structured, consistent interview criteria for all candidates',
+              true,
+            ],
+            ['Relying purely on gut feeling', false],
+            ['Skipping any evaluation criteria', false],
+            ['Interviewing only people from the same background', false],
+          ]),
+          q('Why diversify where you source candidates from?', [
+            [
+              'It widens the pool of qualified candidates and perspectives',
+              true,
+            ],
+            ["It's purely a compliance checkbox with no benefit", false],
+            ['Sourcing diversity has no relation to hiring outcomes', false],
+            ['It guarantees a specific hiring outcome', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Creating psychological safety',
+        videoUrl: TALK.stress2,
+        quiz: [
+          q('What does psychological safety on a team mean?', [
+            [
+              'People feel safe to speak up, ask questions, or admit mistakes',
+              true,
+            ],
+            ['Everyone always agrees with each other', false],
+            ['No one ever receives feedback', false],
+            ['Conflict is avoided at all costs', false],
+          ]),
+          q('How can a leader help build psychological safety?', [
+            [
+              'Responding constructively when someone raises a concern or mistake',
+              true,
+            ],
+            ['Publicly criticizing mistakes', false],
+            ['Discouraging questions in meetings', false],
+            ['Only rewarding agreement', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Equitable recognition & growth',
+        videoUrl: TALK.sinek,
+        quiz: [
+          q('What does equitable recognition aim to ensure?', [
+            [
+              'Contributions are recognized fairly regardless of background or visibility',
+              true,
+            ],
+            ['Only the most vocal team members are recognized', false],
+            ['Recognition is given randomly', false],
+            ['Recognition is based solely on tenure', false],
+          ]),
+          q('Why review growth and promotion patterns across a team?', [
+            [
+              'To catch and correct unintended disparities in opportunity',
+              true,
+            ],
+            ['Reviewing patterns is unnecessary once hiring is done', false],
+            ['It has no bearing on retention', false],
+            ['It only matters for large organizations', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
@@ -1508,9 +3536,72 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Managing nerves', videoUrl: TALK.vulnerability },
-      { title: 'Body language & delivery', videoUrl: TALK.creativity },
-      { title: 'Handling Q&A', videoUrl: TALK.jobs },
+      {
+        title: 'Managing nerves',
+        videoUrl: TALK.vulnerability,
+        quiz: [
+          q('What is an effective way to reduce speaking anxiety?', [
+            ['Thorough preparation and rehearsal', true],
+            ['Avoiding preparation to stay spontaneous', false],
+            ['Memorizing every word with no flexibility', false],
+            ['Speaking as fast as possible to finish quickly', false],
+          ]),
+          q('Why can reframing nervous energy as excitement help?', [
+            [
+              'It channels the same physiological arousal into a more useful mindset',
+              true,
+            ],
+            ['It eliminates all physical symptoms of nerves', false],
+            ['It has no psychological basis', false],
+            ['It only works for experienced speakers', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Body language & delivery',
+        videoUrl: TALK.creativity,
+        quiz: [
+          q(
+            'What does open body language typically communicate to an audience?',
+            [
+              ['Confidence and approachability', true],
+              ['Nervousness', false],
+              ['Disinterest', false],
+              ['Nothing — body language has no effect', false],
+            ],
+          ),
+          q('Why vary vocal tone and pacing during a talk?', [
+            ['It keeps the audience engaged and emphasizes key points', true],
+            ['A flat, constant tone is more persuasive', false],
+            ['Variation distracts from the message', false],
+            ['It has no impact on audience attention', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Handling Q&A',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q(
+            "What is a good approach when you don't know the answer to a question?",
+            [
+              ['Acknowledge it honestly and offer to follow up', true],
+              ['Make up a plausible-sounding answer', false],
+              ['Ignore the question', false],
+              ['Deflect by criticizing the question', false],
+            ],
+          ),
+          q('Why repeat or rephrase a question before answering it?', [
+            [
+              'It ensures you understood it and helps the whole audience hear it',
+              true,
+            ],
+            ['It wastes time with no benefit', false],
+            ["It's only necessary in large venues", false],
+            ['It signals you disagree with the question', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
@@ -1546,9 +3637,72 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Protecting focus time', videoUrl: TALK.stress1 },
-      { title: 'Delegation as a time tool', videoUrl: TALK.howToSpeak },
-      { title: 'Managing your calendar', videoUrl: TALK.soundSmart },
+      {
+        title: 'Protecting focus time',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q('Why block dedicated focus time on a calendar?', [
+            [
+              'To protect time for deep, uninterrupted work on important tasks',
+              true,
+            ],
+            ['To avoid ever meeting with the team', false],
+            ['It has no effect on productivity', false],
+            ["It's only useful for individual contributors", false],
+          ]),
+          q('What is a common threat to protected focus time?', [
+            ['Ad hoc interruptions and unplanned meetings', true],
+            ['A well-planned calendar', false],
+            ['Clear priorities', false],
+            ['Delegated tasks', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Delegation as a time tool',
+        videoUrl: TALK.howToSpeak,
+        quiz: [
+          q('How does delegation help with time management?', [
+            ["It frees up a leader's time for higher-leverage work", true],
+            ['It always takes longer than doing the task yourself', false],
+            ['It has no relationship to time management', false],
+            ['It removes accountability from the leader', false],
+          ]),
+          q(
+            'What is important to provide when delegating a task to save time later?',
+            [
+              ['Clear context and expectations up front', true],
+              ['No information, to encourage independence', false],
+              ['A vague deadline', false],
+              ['Constant check-ins with no autonomy', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Managing your calendar',
+        videoUrl: TALK.soundSmart,
+        quiz: [
+          q(
+            'What is a useful practice for keeping a calendar aligned with priorities?',
+            [
+              ['Regularly reviewing and pruning low-value meetings', true],
+              ['Accepting every meeting invite automatically', false],
+              ['Never reviewing the calendar', false],
+              ['Scheduling every hour with no buffer', false],
+            ],
+          ),
+          q('Why build buffer time between meetings?', [
+            [
+              'It allows time to process, prepare, and avoid running late',
+              true,
+            ],
+            ['Buffers waste the whole day', false],
+            ['Back-to-back meetings are always more productive', false],
+            ['Buffer time has no practical benefit', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Keystone Business School'],
   },
@@ -1582,9 +3736,78 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Structuring constructive feedback', videoUrl: TALK.sinek },
-      { title: 'Receiving feedback well', videoUrl: TALK.bodyLanguage },
-      { title: 'Building a feedback habit', videoUrl: TALK.vulnerability },
+      {
+        title: 'Structuring constructive feedback',
+        videoUrl: TALK.sinek,
+        quiz: [
+          q('What is a widely used structure for constructive feedback?', [
+            [
+              'Describing the specific behavior, its impact, and a suggestion',
+              true,
+            ],
+            ['Vague general statements about personality', false],
+            ['Public criticism with no specifics', false],
+            ['Feedback given only once a year', false],
+          ]),
+          q('Why focus feedback on behavior rather than character?', [
+            [
+              'Behavior can change; character judgments feel like personal attacks',
+              true,
+            ],
+            ['Character feedback is always more effective', false],
+            ['Behavior-focused feedback is less actionable', false],
+            ["There's no meaningful difference", false],
+          ]),
+        ],
+      },
+      {
+        title: 'Receiving feedback well',
+        videoUrl: TALK.bodyLanguage,
+        quiz: [
+          q('What is a helpful mindset when receiving feedback?', [
+            [
+              "Listening fully before responding, even if it's uncomfortable",
+              true,
+            ],
+            ['Immediately defending your actions', false],
+            ['Dismissing feedback you disagree with right away', false],
+            ['Assuming the feedback is always wrong', false],
+          ]),
+          q('Why ask clarifying questions when receiving feedback?', [
+            ['To fully understand the concern before responding', true],
+            ["Questions signal you're rejecting the feedback", false],
+            ["It's unnecessary once feedback is given", false],
+            ['It delays resolution with no benefit', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Building a feedback habit',
+        videoUrl: TALK.vulnerability,
+        quiz: [
+          q(
+            'Why give feedback regularly rather than only during annual reviews?',
+            [
+              [
+                'It allows for timely course correction and avoids surprises',
+                true,
+              ],
+              ['Annual reviews are always sufficient', false],
+              ['Frequent feedback overwhelms people', false],
+              ['It has no effect on performance', false],
+            ],
+          ),
+          q('What helps make feedback a normal part of team culture?', [
+            [
+              'Leaders modeling both giving and receiving feedback openly',
+              true,
+            ],
+            ['Only giving feedback when something goes wrong', false],
+            ['Keeping feedback private and rare', false],
+            ['Avoiding feedback about leaders themselves', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
@@ -1621,9 +3844,75 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ),
         ],
       },
-      { title: 'Building trust without proximity', videoUrl: TALK.jobs },
-      { title: 'Running effective virtual meetings', videoUrl: TALK.listen },
-      { title: 'Measuring outcomes, not hours', videoUrl: TALK.stress1 },
+      {
+        title: 'Building trust without proximity',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q('What helps build trust on a remote team?', [
+            ['Consistent follow-through and transparent communication', true],
+            ['Requiring cameras on at all times', false],
+            ['Monitoring every keystroke', false],
+            ['Avoiding any personal connection', false],
+          ]),
+          q('Why is over-communication often recommended for remote teams?', [
+            [
+              'It compensates for the informal context normally picked up in person',
+              true,
+            ],
+            [
+              'Remote teams need less communication than in-person teams',
+              false,
+            ],
+            ['It has no effect on remote collaboration', false],
+            ['It always leads to information overload with no upside', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Running effective virtual meetings',
+        videoUrl: TALK.listen,
+        quiz: [
+          q('What helps keep a virtual meeting effective?', [
+            ['A clear agenda and defined outcomes', true],
+            ['No agenda, to keep things flexible', false],
+            [
+              'Inviting as many people as possible regardless of relevance',
+              false,
+            ],
+            ['Avoiding any structure', false],
+          ]),
+          q('Why send materials ahead of a virtual meeting when possible?', [
+            [
+              'It lets participants prepare, making discussion time more productive',
+              true,
+            ],
+            ["Pre-reads always waste people's time", false],
+            ["It's unnecessary for virtual meetings specifically", false],
+            ['It replaces the need for a meeting entirely', false],
+          ]),
+        ],
+      },
+      {
+        title: 'Measuring outcomes, not hours',
+        videoUrl: TALK.stress1,
+        quiz: [
+          q(
+            'Why measure remote team performance by outcomes rather than hours online?',
+            [
+              ['Outcomes better reflect actual value delivered', true],
+              ['Hours online always reflect true productivity', false],
+              ['Outcomes are impossible to measure remotely', false],
+              ['It has no bearing on fairness', false],
+            ],
+          ),
+          q('What is a risk of measuring remote workers by time logged in?', [
+            ['It can reward presence over actual results', true],
+            ['It always improves output quality', false],
+            ['It has no downside', false],
+            ['It eliminates the need for goals', false],
+          ]),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
@@ -1657,9 +3946,87 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Weighing incomplete information', videoUrl: TALK.soundSmart },
-      { title: 'Avoiding common biases', videoUrl: TALK.stress2 },
-      { title: 'Deciding and committing', videoUrl: TALK.sinek },
+      {
+        title: 'Weighing incomplete information',
+        videoUrl: TALK.soundSmart,
+        quiz: [
+          q(
+            'When facing incomplete information, a reasonable approach is to:',
+            [
+              [
+                'Make the best decision possible with available evidence and adjust as new information arrives',
+                true,
+              ],
+              ['Wait indefinitely for complete certainty', false],
+              ['Ignore all available data', false],
+              ['Always default to the riskiest option', false],
+            ],
+          ),
+          q(
+            'Why estimate a range of outcomes rather than a single point prediction?',
+            [
+              ['It better reflects genuine uncertainty in the situation', true],
+              ['Single predictions are always more accurate', false],
+              ['Ranges are only useful in finance', false],
+              ['It removes the need for judgment', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Avoiding common biases',
+        videoUrl: TALK.stress2,
+        quiz: [
+          q('What is "anchoring bias"?', [
+            [
+              'Relying too heavily on the first piece of information encountered',
+              true,
+            ],
+            ['Always choosing the newest information', false],
+            ['A bias toward negative outcomes only', false],
+            ['A statistical sampling method', false],
+          ]),
+          q(
+            'How can seeking out disconfirming evidence help decision-making?',
+            [
+              [
+                'It counteracts the tendency to only notice information that confirms existing beliefs',
+                true,
+              ],
+              ['It always leads to worse decisions', false],
+              ["It's unnecessary once a decision feels right", false],
+              ['It has no relation to confirmation bias', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Deciding and committing',
+        videoUrl: TALK.sinek,
+        quiz: [
+          q(
+            'Why is committing to a decision important, even under uncertainty?',
+            [
+              [
+                'Indecision itself carries a cost, and clear commitment enables action',
+                true,
+              ],
+              ['Commitment guarantees the decision was correct', false],
+              ["It's better to never decide than risk being wrong", false],
+              ['Commitment has no effect on execution', false],
+            ],
+          ),
+          q(
+            'What is a healthy way to handle a decision that turns out to be wrong?',
+            [
+              ['Review what was learned and adjust course', true],
+              ['Ignore the outcome entirely', false],
+              ['Avoid all future decisions', false],
+              ['Blame the situation with no reflection', false],
+            ],
+          ),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
@@ -1696,9 +4063,90 @@ const SAMPLE_COURSES: SeedCourse[] = [
           ]),
         ],
       },
-      { title: 'Training managers to coach', videoUrl: TALK.vulnerability },
-      { title: 'Embedding coaching in routines', videoUrl: TALK.creativity },
-      { title: 'Measuring culture change', videoUrl: TALK.jobs },
+      {
+        title: 'Training managers to coach',
+        videoUrl: TALK.vulnerability,
+        quiz: [
+          q('What is a core coaching skill managers need to develop?', [
+            [
+              'Asking questions that help others think through problems themselves',
+              true,
+            ],
+            ['Giving answers as quickly as possible', false],
+            ['Avoiding one-on-one conversations', false],
+            ['Delegating all coaching to HR', false],
+          ]),
+          q(
+            'Why invest in formal training for managers to coach, rather than assuming it comes naturally?',
+            [
+              [
+                'Coaching is a learnable skill that improves with practice and feedback',
+                true,
+              ],
+              ["Coaching ability is fixed and can't be developed", false],
+              ['Untrained coaching is always just as effective', false],
+              ['Training has no measurable impact', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Embedding coaching in routines',
+        videoUrl: TALK.creativity,
+        quiz: [
+          q('How can coaching become part of everyday team routines?', [
+            [
+              'Building it into regular 1:1s and team check-ins, not just special sessions',
+              true,
+            ],
+            ['Reserving it only for annual reviews', false],
+            ['Treating it as unrelated to daily work', false],
+            ['Limiting it to underperforming employees only', false],
+          ]),
+          q(
+            'Why is embedding coaching into routines more effective than one-off workshops?',
+            [
+              ['Consistent practice builds habits that stick over time', true],
+              [
+                'One-off workshops always have a larger long-term impact',
+                false,
+              ],
+              ['Routines have no effect on skill development', false],
+              ['It removes the need for manager buy-in', false],
+            ],
+          ),
+        ],
+      },
+      {
+        title: 'Measuring culture change',
+        videoUrl: TALK.jobs,
+        quiz: [
+          q(
+            'What is one way to measure whether a coaching culture is taking hold?',
+            [
+              [
+                'Tracking whether employees increasingly seek and act on feedback',
+                true,
+              ],
+              ['Counting the number of training slides presented', false],
+              ['Measuring only executive satisfaction', false],
+              ['Culture change cannot be measured', false],
+            ],
+          ),
+          q(
+            'Why use both qualitative and quantitative signals to measure culture change?',
+            [
+              [
+                'Culture shifts show up in both survey data and lived experience, which each capture different things',
+                true,
+              ],
+              ['Only quantitative data is ever meaningful', false],
+              ['Qualitative data is unreliable and should be ignored', false],
+              ['Combining signals adds no value', false],
+            ],
+          ),
+        ],
+      },
     ],
     credits: PROVIDER_CREDITS['Global Leadership Institute'],
   },
