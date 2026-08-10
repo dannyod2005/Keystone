@@ -507,6 +507,82 @@ function KeystonePrototype() {
     return res.json();
   }
 
+  // #139 — Team tab. GET /providers/me 404s for "not a member of a
+  // provider" (see ProvidersService.getMine) — that's a normal, expected
+  // state here (the no-provider view), not an error, so it's translated
+  // to null rather than thrown.
+  async function fetchMyProvider() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
+  async function createProvider(name) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
+  async function joinProvider(inviteCode) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers/join`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ inviteCode }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
+  async function regenerateInviteCode() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers/invite-code/regenerate`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
+  async function leaveProvider() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers/leave`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+  }
+
   async function fetchQuizForEdit(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz/edit`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
@@ -686,6 +762,12 @@ function KeystonePrototype() {
                     onDeleteCourse={deleteCourse}
                     onFetchQuizForEdit={fetchQuizForEdit}
                     onSaveQuiz={saveQuiz}
+                    onFetchProvider={fetchMyProvider}
+                    onCreateProvider={createProvider}
+                    onJoinProvider={joinProvider}
+                    onRegenerateInviteCode={regenerateInviteCode}
+                    onLeaveProvider={leaveProvider}
+                    currentUserId={user?.id}
                   />
                 </AppShell>
               </RequireTrainer>
