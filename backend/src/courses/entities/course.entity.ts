@@ -49,12 +49,13 @@ export class Course {
   @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
   deletedAt: Date | null;
 
-  // #137 — the trainer who created this course. Nullable only because the
-  // 9 original seed courses predate ownership tracking and have no real
-  // owner to backfill; every course created via CoursesService.create
-  // always has this stamped server-side. NULL is treated as "legacy,
-  // exempt from the ownership check" by RequireCourseOwnerGuard, never as
-  // "unowned and therefore editable by no one".
+  // #137 — the trainer who created this course. Nullable only because
+  // seeded/mock courses (src/seeds/seed-courses.ts, #109) predate
+  // ownership tracking and have no real owner to backfill; every course
+  // created via CoursesService.create always has this stamped
+  // server-side. NULL is treated as "legacy, exempt from the ownership
+  // check" by RequireCourseOwnerGuard, never as "unowned and therefore
+  // editable by no one".
   @Column({ name: 'owner_id', type: 'uuid', nullable: true })
   ownerId: string | null;
 

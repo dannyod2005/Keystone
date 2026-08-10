@@ -18,6 +18,16 @@ export const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  // node-postgres doesn't enable TCP keepalive by default. Long-running
+  // scripts that do many sequential round trips (seed-courses.ts,
+  // wipe-test-data.ts) are exactly the workload that trips a silent
+  // connection drop on a managed/pooled Postgres host — surfaces as
+  // "Connection terminated unexpectedly" partway through. Harmless for
+  // the running NestJS app too, so applied here rather than only in the
+  // scripts.
+  extra: {
+    keepAlive: true,
+  },
   entities: [
     Course,
     CourseModule,
