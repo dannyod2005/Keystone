@@ -19,4 +19,11 @@ export class Profile {
 
   @Column({ name: 'daily_goal_min', type: 'int', default: 30 })
   dailyGoalMin: number;
+
+  // #137 — single, optional provider membership. Plain nullable scalar FK
+  // rather than a join table: v1 only needs "at most one provider per
+  // trainer", and a join table (supporting multiple memberships) is
+  // deliberately deferred until that's actually needed.
+  @Column({ name: 'provider_id', type: 'uuid', nullable: true })
+  providerId: string | null;
 }

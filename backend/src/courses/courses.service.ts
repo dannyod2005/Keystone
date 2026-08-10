@@ -5,6 +5,7 @@ import { Course } from './entities/course.entity';
 import { CourseModule } from './entities/course-module.entity';
 import { CourseCredit } from './entities/course-credit.entity';
 import { CourseFaq } from './entities/course-faq.entity';
+import { Profile } from '../profiles/entities/profile.entity';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 
@@ -13,6 +14,8 @@ export class CoursesService {
   constructor(
     @InjectRepository(Course)
     private readonly coursesRepo: Repository<Course>,
+    @InjectRepository(Profile)
+    private readonly profilesRepo: Repository<Profile>,
   ) {}
 
   findAll(): Promise<Course[]> {
@@ -63,7 +66,14 @@ export class CoursesService {
     }
   }
 
-  create(dto: CreateCourseDto): Promise<Course> {
+  async create(dto: CreateCourseDto, ownerId: string): Promise<Course> {
+    // #137 — ownerId always comes from the authenticated caller
+    // (req.user.id), never from the DTO/client. providerId is derived
+    // server-side too, from the owner's own profile — a course is only
+    // ever provider-scoped because its creator belongs to that provider
+    // at creation time, not because anyone asked for it in the request.
+    const owner = await this.profilesRepo.findOne({ where: { id: ownerId } });
+
     const course = this.coursesRepo.create({
       title: dto.title,
       provider: dto.provider,
@@ -72,6 +82,8 @@ export class CoursesService {
       hours: dto.hours,
       color: dto.color,
       blurb: dto.blurb ?? null,
+      ownerId,
+      providerId: owner?.providerId ?? null,
       modules: dto.modules.map((m, i) => ({
         position: i,
         title: m.title,

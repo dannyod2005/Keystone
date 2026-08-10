@@ -7,6 +7,7 @@ import { Course } from './entities/course.entity';
 import { CourseModule } from './entities/course-module.entity';
 import { CourseCredit } from './entities/course-credit.entity';
 import { CourseFaq } from './entities/course-faq.entity';
+import { Profile } from '../profiles/entities/profile.entity';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 
@@ -29,11 +30,16 @@ describe('CoursesService', () => {
     },
   };
 
+  const mockProfilesRepo = {
+    findOne: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CoursesService,
         { provide: getRepositoryToken(Course), useValue: mockRepo },
+        { provide: getRepositoryToken(Profile), useValue: mockProfilesRepo },
       ],
     }).compile();
 
@@ -98,12 +104,15 @@ describe('CoursesService', () => {
       const builtCourse = { title: dto.title } as Course;
       mockRepo.create.mockReturnValue(builtCourse);
       mockRepo.save.mockResolvedValue({ ...builtCourse, id: 'new-id' });
+      mockProfilesRepo.findOne.mockResolvedValue({ id: 'owner-1', providerId: null });
 
-      await service.create(dto);
+      await service.create(dto, 'owner-1');
 
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'New Course',
+          ownerId: 'owner-1',
+          providerId: null,
           modules: [
             { position: 0, title: 'Module One', videoUrl: null },
             { position: 1, title: 'Module Two', videoUrl: null },
@@ -113,6 +122,29 @@ describe('CoursesService', () => {
         }),
       );
       expect(repo.save).toHaveBeenCalledWith(builtCourse);
+    });
+
+    it('stamps the course with the owner\'s providerId when they belong to one', async () => {
+      const dto: CreateCourseDto = {
+        title: 'Team Course',
+        provider: 'Provider',
+        category: 'Technical',
+        level: 'Beginner',
+        hours: 5,
+        color: 'gold',
+        modules: [{ title: 'Module One' }],
+      };
+
+      const builtCourse = { title: dto.title } as Course;
+      mockRepo.create.mockReturnValue(builtCourse);
+      mockRepo.save.mockResolvedValue({ ...builtCourse, id: 'new-id' });
+      mockProfilesRepo.findOne.mockResolvedValue({ id: 'owner-2', providerId: 'provider-1' });
+
+      await service.create(dto, 'owner-2');
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerId: 'owner-2', providerId: 'provider-1' }),
+      );
     });
   });
 

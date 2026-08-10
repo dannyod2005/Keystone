@@ -5,6 +5,7 @@ import { CourseModule } from './courses/entities/course-module.entity';
 import { CourseCredit } from './courses/entities/course-credit.entity';
 import { CourseFaq } from './courses/entities/course-faq.entity';
 import { Profile } from './profiles/entities/profile.entity';
+import { Provider } from './providers/entities/provider.entity';
 import { Enrollment } from './enrollments/entities/enrollment.entity';
 import { QuizQuestion } from './quiz/entities/quiz-question.entity';
 import { QuizOption } from './quiz/entities/quiz-option.entity';
@@ -23,6 +24,7 @@ export const AppDataSource = new DataSource({
     CourseCredit,
     CourseFaq,
     Profile,
+    Provider,
     Enrollment,
     QuizQuestion,
     QuizOption,

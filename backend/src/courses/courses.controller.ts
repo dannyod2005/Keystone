@@ -8,6 +8,7 @@ import { UpdateCourseDto } from './dto/update-course.dto';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RequireTrainerGuard } from '../auth/require-trainer.guard';
+import { RequireCourseOwnerGuard } from './require-course-owner.guard';
 
 interface AuthenticatedRequest extends Request {
   user: { id: string };
@@ -41,12 +42,12 @@ export class CoursesController {
 
   @Post()
   @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
-  create(@Body() dto: CreateCourseDto): Promise<Course> {
-    return this.coursesService.create(dto);
+  create(@Req() req: AuthenticatedRequest, @Body() dto: CreateCourseDto): Promise<Course> {
+    return this.coursesService.create(dto, req.user.id);
   }
 
   @Put(':id')
-  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
+  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard, RequireCourseOwnerGuard)
   update(
     @Param('id') id: string,
     @Body() dto: UpdateCourseDto,
@@ -55,7 +56,7 @@ export class CoursesController {
   }
 
   @Delete(':id')
-  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
+  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard, RequireCourseOwnerGuard)
   @HttpCode(204)
   remove(@Param('id') id: string): Promise<void> {
     return this.coursesService.remove(id);
