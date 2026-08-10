@@ -7,6 +7,7 @@ import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { ModulesModule } from './modules/modules.module';
 import { ActivityModule } from './activity/activity.module';
 import { ProvidersModule } from './providers/providers.module';
+import { ProfilesModule } from './profiles/profiles.module';
 import { SupabaseAuthGuard } from './auth/supabase-auth.guard';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -30,6 +31,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
     ModulesModule,
     ActivityModule,
     ProvidersModule,
+    ProfilesModule,
   ],
   controllers: [AppController],
   providers: [AppService, SupabaseAuthGuard],
