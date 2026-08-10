@@ -49,6 +49,21 @@ export class Course {
   @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
   deletedAt: Date | null;
 
+  // #137 — the trainer who created this course. Nullable only because the
+  // 9 original seed courses predate ownership tracking and have no real
+  // owner to backfill; every course created via CoursesService.create
+  // always has this stamped server-side. NULL is treated as "legacy,
+  // exempt from the ownership check" by RequireCourseOwnerGuard, never as
+  // "unowned and therefore editable by no one".
+  @Column({ name: 'owner_id', type: 'uuid', nullable: true })
+  ownerId: string | null;
+
+  // #137 — optional group ownership. When set, any profile sharing this
+  // providerId also gets edit rights on top of ownerId. Purely an opt-in
+  // upgrade: creating a course never requires belonging to a provider.
+  @Column({ name: 'provider_id', type: 'uuid', nullable: true })
+  providerId: string | null;
+
   @OneToMany(() => CourseModule, (m) => m.course, { cascade: true, orphanedRowAction: 'delete' })
   modules: CourseModule[];
 
