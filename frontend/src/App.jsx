@@ -507,6 +507,19 @@ function KeystonePrototype() {
     return res.json();
   }
 
+  // #143 — course form's locked provider field. Reads from the backend
+  // (profiles.name) rather than the client-cached Supabase user_metadata
+  // set once at signup — the two happen to match today, but only the
+  // backend value stays correct once a profile-editing feature exists.
+  async function fetchMyProfile() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
   // #139 — Team tab. GET /providers/me 404s for "not a member of a
   // provider" (see ProvidersService.getMine) — that's a normal, expected
   // state here (the no-provider view), not an error, so it's translated
@@ -763,6 +776,7 @@ function KeystonePrototype() {
                     onFetchQuizForEdit={fetchQuizForEdit}
                     onSaveQuiz={saveQuiz}
                     onFetchProvider={fetchMyProvider}
+                    onFetchProfile={fetchMyProfile}
                     onCreateProvider={createProvider}
                     onJoinProvider={joinProvider}
                     onRegenerateInviteCode={regenerateInviteCode}

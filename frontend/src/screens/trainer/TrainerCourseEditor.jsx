@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ChevronLeft, BookMarked, Plus, Trash2, Save, Video, ChevronDown, ChevronUp, HelpCircle } from "lucide-react";
 
 const TRAINER_CATEGORIES = ["Technical", "Business", "Leadership"];
@@ -26,7 +26,7 @@ function emptyQuestion() {
   };
 }
 
-export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz }) {
+export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz, onFetchProvider, onFetchProfile }) {
 
   const [quizState, setQuizState] = useState({}); // { [moduleId]: { expanded, loading, loaded, questions, saving, error } }
 
@@ -41,7 +41,12 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
     if (!course) return emptyCourseDraft();
     return {
       title: course.title,
-      provider: course.provider,
+      // #143 — provider is now locked to the trainer's real identity
+      // (Provider.name, or their own profile.name) rather than preserved
+      // free text, even when editing an existing course. Left blank here
+      // and resolved by the effect below, so a course previously saved
+      // with old/stale provider text doesn't flash before being replaced.
+      provider: "",
       category: course.category,
       level: course.level,
       hours: course.hours,
@@ -55,6 +60,32 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+
+  // #143 — resolve the locked provider field: the trainer's Provider name
+  // if they belong to one, else their own profile.name. Runs once on
+  // mount — onFetchProvider/onFetchProfile are recreated on every App.jsx
+  // render (not memoized), same pattern as LearningScreen's per-tab fetch
+  // effects, so they're deliberately left out of the dependency array.
+  const [providerFieldLoading, setProviderFieldLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([onFetchProvider(), onFetchProfile()])
+      .then(([provider, profile]) => {
+        if (cancelled) return;
+        setDraft((d) => ({ ...d, provider: provider?.name || profile?.name || "" }));
+      })
+      .catch(() => {
+        // Leave provider blank — canSave below keeps Save disabled until
+        // this resolves, so there's no silent path to submitting an empty
+        // provider string.
+      })
+      .finally(() => {
+        if (!cancelled) setProviderFieldLoading(false);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function set(field, v) { setDraft((d) => ({ ...d, [field]: v })); }
 
@@ -237,7 +268,10 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
 
   /* ---------- Course save ---------- */
 
-  const canSave = draft.title.trim().length > 1 && draft.modules.some((m) => m.title.trim().length > 0);
+  const canSave =
+    draft.title.trim().length > 1 &&
+    draft.modules.some((m) => m.title.trim().length > 0) &&
+    draft.provider.trim().length > 0;
 
   async function handleSave() {
     if (!canSave) return;
@@ -301,7 +335,18 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
           </div>
           <div style={field}>
             <label style={label}>Provider</label>
-            <input style={rowInput} value={draft.provider} onChange={(e) => set("provider", e.target.value)} placeholder="e.g. Keystone Business School" />
+            <input
+              style={{ ...rowInput, background: "var(--line)", color: "var(--slate)", cursor: "not-allowed" }}
+              value={providerFieldLoading ? "" : draft.provider}
+              placeholder={providerFieldLoading ? "Loading…" : ""}
+              disabled
+              readOnly
+            />
+            <div style={{ fontSize: 11, color: !providerFieldLoading && !draft.provider ? "var(--coral)" : "var(--slate-light)", marginTop: 4 }}>
+              {!providerFieldLoading && !draft.provider
+                ? "Couldn't resolve your name or provider — try reopening the editor."
+                : "Auto-filled from your provider (or your account name) — trainers can't edit this directly."}
+            </div>
           </div>
           <div style={field}>
             <label style={label}>Track</label>
