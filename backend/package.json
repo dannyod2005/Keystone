@@ -24,6 +24,7 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "seed:courses": "ts-node -r tsconfig-paths/register src/seeds/seed-courses.ts",
+    "seed:accounts": "ts-node -r tsconfig-paths/register src/seeds/seed-accounts.ts",
     "wipe:test-data": "ts-node -r tsconfig-paths/register src/scripts/wipe-test-data.ts"
   },
   "dependencies": {
