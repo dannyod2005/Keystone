@@ -23,7 +23,8 @@
     "migration:create": "npm run typeorm -- migration:create",
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
-    "seed:courses": "ts-node -r tsconfig-paths/register src/seeds/seed-courses.ts"
+    "seed:courses": "ts-node -r tsconfig-paths/register src/seeds/seed-courses.ts",
+    "wipe:test-data": "ts-node -r tsconfig-paths/register src/scripts/wipe-test-data.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
