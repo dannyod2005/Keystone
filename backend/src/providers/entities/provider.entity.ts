@@ -1,4 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+} from 'typeorm';
 
 // #137 — a real, first-class entity distinct from courses.provider (which
 // stays a free-text display string). This is the actual auth-relevant
@@ -19,6 +24,13 @@ export class Provider {
   // exists from day one so this migration doesn't need revisiting later.
   @Column({ name: 'invite_code', type: 'text', unique: true })
   inviteCode: string;
+
+  // #138 — the creator, permanently. Independent of current membership
+  // (profiles.provider_id) so ownership survives the owner later leaving.
+  // Gates the regenerate-invite-code endpoint. Nullable/SET NULL — see
+  // migration comment.
+  @Column({ name: 'owner_id', type: 'uuid', nullable: true })
+  ownerId: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
