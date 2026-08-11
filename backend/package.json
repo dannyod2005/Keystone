@@ -26,6 +26,7 @@
     "seed:courses": "ts-node -r tsconfig-paths/register src/seeds/seed-courses.ts",
     "seed:accounts": "ts-node -r tsconfig-paths/register src/seeds/seed-accounts.ts",
     "seed:providers": "ts-node -r tsconfig-paths/register src/seeds/seed-providers.ts",
+    "seed:forum-posts": "ts-node -r tsconfig-paths/register src/seeds/seed-forum-posts.ts",
     "wipe:test-data": "ts-node -r tsconfig-paths/register src/scripts/wipe-test-data.ts"
   },
   "dependencies": {
