@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Course } from './entities/course.entity';
 import { CourseModule } from './entities/course-module.entity';
 import { CourseCredit } from './entities/course-credit.entity';
 import { CourseFaq } from './entities/course-faq.entity';
+import { Profile } from '../profiles/entities/profile.entity';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 
@@ -13,10 +14,17 @@ export class CoursesService {
   constructor(
     @InjectRepository(Course)
     private readonly coursesRepo: Repository<Course>,
+    @InjectRepository(Profile)
+    private readonly profilesRepo: Repository<Profile>,
   ) {}
 
   findAll(): Promise<Course[]> {
     return this.coursesRepo.find({
+      // Catalogue view — soft-deleted courses are excluded here, but this
+      // filter is deliberately local to this query, not baked into the
+      // entity (see Course.deletedAt comment). An enrolled learner's
+      // course join elsewhere is untouched by this.
+      where: { deletedAt: IsNull() },
       relations: { modules: true, credits: true, faqs: true },
       order: {
         modules: { position: 'ASC' },
@@ -28,7 +36,7 @@ export class CoursesService {
 
   async findOne(id: string): Promise<Course> {
     const course = await this.coursesRepo.findOne({
-      where: { id },
+      where: { id, deletedAt: IsNull() },
       relations: { modules: true, credits: true, faqs: true },
       order: {
         modules: { position: 'ASC' },
@@ -44,16 +52,38 @@ export class CoursesService {
     return course;
   }
 
-  create(dto: CreateCourseDto): Promise<Course> {
+  async remove(id: string): Promise<void> {
+    // update() rather than a find-then-save round trip — also naturally
+    // covers "already deleted" as a no-op match failure, which we want to
+    // surface as 404 rather than silently succeeding.
+    const result = await this.coursesRepo.update(
+      { id, deletedAt: IsNull() },
+      { deletedAt: new Date() },
+    );
+
+    if (result.affected === 0) {
+      throw new NotFoundException(`Course with id "${id}" not found`);
+    }
+  }
+
+  async create(dto: CreateCourseDto, ownerId: string): Promise<Course> {
+    // #137 — ownerId always comes from the authenticated caller
+    // (req.user.id), never from the DTO/client. providerId is derived
+    // server-side too, from the owner's own profile — a course is only
+    // ever provider-scoped because its creator belongs to that provider
+    // at creation time, not because anyone asked for it in the request.
+    const owner = await this.profilesRepo.findOne({ where: { id: ownerId } });
+
     const course = this.coursesRepo.create({
       title: dto.title,
       provider: dto.provider,
       category: dto.category,
       level: dto.level,
       hours: dto.hours,
-      projects: dto.projects,
       color: dto.color,
       blurb: dto.blurb ?? null,
+      ownerId,
+      providerId: owner?.providerId ?? null,
       modules: dto.modules.map((m, i) => ({
         position: i,
         title: m.title,
@@ -93,7 +123,6 @@ export class CoursesService {
       course.category = dto.category;
       course.level = dto.level;
       course.hours = dto.hours;
-      course.projects = dto.projects;
       course.color = dto.color;
       course.blurb = dto.blurb ?? null;
 

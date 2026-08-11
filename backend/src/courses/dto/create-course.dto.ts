@@ -37,10 +37,6 @@ export class CreateCourseDto {
   @Min(0)
   hours: number;
 
-  @IsInt()
-  @Min(0)
-  projects: number;
-
   @IsIn(COLORS)
   color: string;
 

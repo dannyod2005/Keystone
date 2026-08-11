@@ -6,14 +6,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { IsNull, QueryFailedError, Repository } from 'typeorm';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { Enrollment } from './entities/enrollment.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
-import { EnrollmentResponseDto } from './dto/enrollment-response.dto';
+import { EnrolledCourseDto, EnrollmentResponseDto } from './dto/enrollment-response.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
+import { ActivityService } from '../activity/activity.service';
 
 @Injectable()
 export class EnrollmentsService {
@@ -24,6 +25,7 @@ export class EnrollmentsService {
     private readonly profilesRepo: Repository<Profile>,
     @InjectRepository(Course)
     private readonly coursesRepo: Repository<Course>,
+    private readonly activityService: ActivityService,
   ) {}
 
   async create(userId: string, dto: CreateEnrollmentDto): Promise<Enrollment> {
@@ -32,7 +34,12 @@ export class EnrollmentsService {
       throw new NotFoundException('Profile not found for this user');
     }
 
-    const course = await this.coursesRepo.findOne({ where: { id: dto.courseId } });
+    // deletedAt filter: a soft-deleted course shouldn't be enrollable —
+    // same NotFoundException as a genuinely missing course, since from the
+    // learner's perspective it no longer exists.
+    const course = await this.coursesRepo.findOne({
+      where: { id: dto.courseId, deletedAt: IsNull() },
+    });
     if (!course) {
       throw new NotFoundException(`Course with id "${dto.courseId}" not found`);
     }
@@ -58,18 +65,15 @@ export class EnrollmentsService {
   async findAllForUser(userId: string): Promise<EnrollmentResponseDto[]> {
     const enrollments = await this.enrollmentsRepo.find({
       where: { user: { id: userId } },
-      relations: { course: true },
-      order: { createdAt: 'DESC' },
+      // course.modules loaded (and embedded below) so the dashboard/
+      // learning screen work off this snapshot rather than re-looking the
+      // course up in the catalogue list, which omits soft-deleted courses
+      // (#41) — see EnrolledCourseDto.
+      relations: { course: { modules: true } },
+      order: { createdAt: 'DESC', course: { modules: { position: 'ASC' } } },
     });
 
-    return enrollments.map((e) => ({
-      id: e.id,
-      courseId: e.course.id,
-      progress: e.progress,
-      status: e.status,
-      lastAccessed: e.lastAccessed,
-      createdAt: e.createdAt,
-    }));
+    return enrollments.map((e) => this.toResponseDto(e));
   }
 
   async updateProgress(
@@ -80,6 +84,7 @@ export class EnrollmentsService {
     const enrollment = await this.enrollmentsRepo.findOne({
       where: { id: enrollmentId },
       relations: { user: true, course: { modules: true } },
+      order: { course: { modules: { position: 'ASC' } } },
     });
 
     if (!enrollment) {
@@ -98,6 +103,14 @@ export class EnrollmentsService {
     // completedModules past the real module count.
     const completedModules = Math.min(dto.completedModules, totalModules);
 
+    // Captured before we overwrite progress below — needed to work out how
+    // many *new* modules this call actually completed, for activity
+    // logging (#37). Rounding a fraction back to a module count is a bit
+    // lossy, but progress is always derived from a module count in the
+    // first place, so it round-trips cleanly in practice.
+    const oldCompletedModules =
+      totalModules > 0 ? Math.round(enrollment.progress * totalModules) : 0;
+
     enrollment.progress = totalModules > 0 ? completedModules / totalModules : 0;
     enrollment.status = completedModules >= totalModules && totalModules > 0
       ? 'complete'
@@ -106,13 +119,49 @@ export class EnrollmentsService {
 
     const saved = await this.enrollmentsRepo.save(enrollment);
 
+    const newlyCompleted = Math.max(completedModules - oldCompletedModules, 0);
+    if (newlyCompleted > 0 && totalModules > 0) {
+      // Estimate: this course's total hours spread evenly across its
+      // modules, scaled by how many modules were newly completed this
+      // call. Not a measured duration — see #37.
+      const minutesPerModule = Math.round(
+        (enrollment.course.hours * 60) / totalModules,
+      );
+      await this.activityService.logEvent(
+        userId,
+        'module_complete',
+        newlyCompleted * minutesPerModule,
+      );
+    }
+
+    // save() returns the same entity reference with its already-loaded
+    // relations intact, so saved.course.modules (fetched above for the
+    // totalModules calc) is still there — no need to re-query.
+    return this.toResponseDto(saved);
+  }
+
+  private toResponseDto(enrollment: Enrollment): EnrollmentResponseDto {
     return {
-      id: saved.id,
+      id: enrollment.id,
       courseId: enrollment.course.id,
-      progress: saved.progress,
-      status: saved.status,
-      lastAccessed: saved.lastAccessed,
-      createdAt: saved.createdAt,
+      progress: enrollment.progress,
+      status: enrollment.status,
+      lastAccessed: enrollment.lastAccessed,
+      createdAt: enrollment.createdAt,
+      course: this.toEnrolledCourseDto(enrollment.course),
+    };
+  }
+
+  private toEnrolledCourseDto(course: Course): EnrolledCourseDto {
+    return {
+      id: course.id,
+      title: course.title,
+      modules: (course.modules ?? []).map((m) => ({
+        id: m.id,
+        position: m.position,
+        title: m.title,
+        videoUrl: m.videoUrl,
+      })),
     };
   }
 

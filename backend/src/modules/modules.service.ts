@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -17,11 +18,23 @@ import { QuizResultDto } from '../quiz/dto/quiz-result.dto';
 import { UpsertNoteDto } from '../notes/dto/upsert-note.dto';
 import { NoteResponseDto } from '../notes/dto/note-response.dto';
 import { CreatePostDto } from '../forum/dto/create-post.dto';
+import { UpdatePostDto } from '../forum/dto/update-post.dto';
 import { PostResponseDto } from '../forum/dto/post-response.dto';
 import { UpsertQuizDto } from '../quiz/dto/upsert-quiz.dto';
 import { QuizOption } from '../quiz/entities/quiz-option.entity';
 import { QuizQuestionEditResponseDto } from '../quiz/dto/quiz-question-edit-response.dto';
+import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
+import { ActivityService } from '../activity/activity.service';
 
+// Fixed per-event minute estimates for actions that aren't naturally
+// scaled by course length the way module completion is (see #37).
+const QUIZ_SUBMIT_MINUTES = 5;
+const NOTE_SAVE_MINUTES = 3;
+const FORUM_POST_MINUTES = 3;
+
+function isEdited(post: ForumPost): boolean {
+  return post.updatedAt.getTime() !== post.createdAt.getTime();
+}
 
 @Injectable()
 export class ModulesService {
@@ -38,6 +51,7 @@ export class ModulesService {
     private readonly notesRepo: Repository<ModuleNote>,
     @InjectRepository(ForumPost)
     private readonly forumPostsRepo: Repository<ForumPost>,
+    private readonly activityService: ActivityService,
   ) {}
 
   async getQuiz(moduleId: string): Promise<QuizQuestionResponseDto[]> {
@@ -205,6 +219,7 @@ export class ModulesService {
       }),
     );
     await this.quizSubmissionsRepo.save(submissionsToSave);
+    await this.activityService.logEvent(userId, 'quiz_submit', QUIZ_SUBMIT_MINUTES);
 
     const results = dto.answers.map((a) =>
       buildResultItem(a.questionId, a.optionId),
@@ -216,6 +231,88 @@ export class ModulesService {
       alreadySubmitted: false,
       results,
     };
+  }
+
+  // #82 — one row per module in the course, for LearningScreen's "Grades"
+  // panel overview. Deliberately queries course_modules directly by
+  // course id rather than going through CoursesService.findOne (which
+  // filters out soft-deleted courses, #41) — an enrolled learner viewing
+  // grades for a course a trainer has since deleted should keep working,
+  // same principle as the enrollment/dashboard fix.
+  async getQuizResultsForCourse(
+    userId: string,
+    courseId: string,
+  ): Promise<ModuleQuizResultDto[]> {
+    const modules = await this.modulesRepo.find({
+      where: { course: { id: courseId } },
+      order: { position: 'ASC' },
+    });
+
+    if (modules.length === 0) {
+      return [];
+    }
+
+    const moduleIds = modules.map((m) => m.id);
+    const questions = await this.quizQuestionsRepo.find({
+      where: { module: { id: In(moduleIds) } },
+      relations: { options: true, module: true },
+    });
+
+    const optionIds = questions.flatMap((q) => q.options.map((o) => o.id));
+    const submissions = optionIds.length > 0
+      ? await this.quizSubmissionsRepo.find({
+          where: { user: { id: userId }, option: { id: In(optionIds) } },
+          relations: { option: true },
+        })
+      : [];
+
+    const questionsByModuleId = new Map<string, QuizQuestion[]>();
+    for (const q of questions) {
+      const list = questionsByModuleId.get(q.module.id) ?? [];
+      list.push(q);
+      questionsByModuleId.set(q.module.id, list);
+    }
+
+    return modules.map((module) => {
+      const moduleQuestions = questionsByModuleId.get(module.id) ?? [];
+      if (moduleQuestions.length === 0) {
+        return {
+          moduleId: module.id,
+          moduleTitle: module.title,
+          hasQuiz: false,
+          taken: false,
+          score: null,
+          total: 0,
+        };
+      }
+
+      const moduleOptionIds = new Set(
+        moduleQuestions.flatMap((q) => q.options.map((o) => o.id)),
+      );
+      const moduleSubmissions = submissions.filter((s) =>
+        moduleOptionIds.has(s.option.id),
+      );
+
+      if (moduleSubmissions.length === 0) {
+        return {
+          moduleId: module.id,
+          moduleTitle: module.title,
+          hasQuiz: true,
+          taken: false,
+          score: null,
+          total: moduleQuestions.length,
+        };
+      }
+
+      return {
+        moduleId: module.id,
+        moduleTitle: module.title,
+        hasQuiz: true,
+        taken: true,
+        score: moduleSubmissions.filter((s) => s.option.isCorrect).length,
+        total: moduleQuestions.length,
+      };
+    });
   }
 
   async getNote(userId: string, moduleId: string): Promise<NoteResponseDto> {
@@ -264,6 +361,7 @@ export class ModulesService {
     }
 
     const saved = await this.notesRepo.save(note);
+    await this.activityService.logEvent(userId, 'note_save', NOTE_SAVE_MINUTES);
 
     return {
       content: saved.content,
@@ -279,7 +377,7 @@ export class ModulesService {
 
     const posts = await this.forumPostsRepo.find({
       where: { module: { id: moduleId } },
-      relations: { user: true },
+      relations: { user: true, parentPost: true },
       order: { createdAt: 'ASC' },
     });
 
@@ -291,6 +389,8 @@ export class ModulesService {
         id: p.user.id,
         name: p.user.name,
       },
+      parentPostId: p.parentPost?.id ?? null,
+      edited: isEdited(p),
     }));
   }
 
@@ -309,13 +409,34 @@ export class ModulesService {
       throw new NotFoundException(`Module with id "${moduleId}" not found`);
     }
 
+    let parentPost: ForumPost | null = null;
+    if (dto.parentPostId) {
+      parentPost = await this.forumPostsRepo.findOne({
+        where: { id: dto.parentPostId },
+        relations: { module: true },
+      });
+      if (!parentPost) {
+        throw new NotFoundException(`Post with id "${dto.parentPostId}" not found`);
+      }
+      // Never trust a client-supplied parentPostId to actually belong to
+      // this module — replying to a post from a different module would
+      // otherwise let a reply show up somewhere it doesn't belong.
+      if (parentPost.module.id !== moduleId) {
+        throw new BadRequestException(
+          'parentPostId does not belong to this module',
+        );
+      }
+    }
+
     const post = this.forumPostsRepo.create({
       module,
       user: profile,
       content: dto.content,
+      parentPost,
     });
 
     const saved = await this.forumPostsRepo.save(post);
+    await this.activityService.logEvent(userId, 'forum_post', FORUM_POST_MINUTES);
 
     return {
       id: saved.id,
@@ -325,6 +446,45 @@ export class ModulesService {
         id: profile.id,
         name: profile.name,
       },
+      parentPostId: parentPost?.id ?? null,
+      edited: isEdited(saved),
+    };
+  }
+
+  async editPost(
+    userId: string,
+    moduleId: string,
+    postId: string,
+    dto: UpdatePostDto,
+  ): Promise<PostResponseDto> {
+    const post = await this.forumPostsRepo.findOne({
+      where: { id: postId, module: { id: moduleId } },
+      relations: { user: true, parentPost: true },
+    });
+    if (!post) {
+      throw new NotFoundException(`Post with id "${postId}" not found`);
+    }
+
+    // Ownership check: only the post's own author can edit it — never
+    // trust the client to only send its own posts, same principle as
+    // enrollment/note ownership checks elsewhere in this service.
+    if (post.user.id !== userId) {
+      throw new ForbiddenException('You can only edit your own posts');
+    }
+
+    post.content = dto.content;
+    const saved = await this.forumPostsRepo.save(post);
+
+    return {
+      id: saved.id,
+      content: saved.content,
+      createdAt: saved.createdAt,
+      author: {
+        id: post.user.id,
+        name: post.user.name,
+      },
+      parentPostId: post.parentPost?.id ?? null,
+      edited: isEdited(saved),
     };
   }
 

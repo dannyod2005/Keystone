@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation
 } from "react-router-dom";
@@ -82,7 +82,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchNote, onSaveNote, onFetchPosts, onCreatePost }) {
+function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
@@ -98,10 +98,13 @@ function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmi
       onSaveProgress={onSaveProgress}
       onFetchQuiz={onFetchQuiz}
       onSubmitQuiz={onSubmitQuiz}
+      onFetchQuizResults={onFetchQuizResults}
       onFetchNote={onFetchNote}
       onSaveNote={onSaveNote}
       onFetchPosts={onFetchPosts}
       onCreatePost={onCreatePost}
+      onEditPost={onEditPost}
+      currentUserId={currentUserId}
       onBack={() => navigate("/dashboard")}
     />
   );
@@ -122,6 +125,15 @@ function KeystonePrototype() {
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
   const [courses, setCourses] = useState([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+  const [enrolledLoading, setEnrolledLoading] = useState(true);
+  const [activitySummary, setActivitySummary] = useState({
+    streak: 0,
+    minutesThisWeek: 0,
+    dailyGoalMin: 30,
+    goalHitDays: 0,
+    week: [],
+  });
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -130,7 +142,8 @@ function KeystonePrototype() {
         return res.json();
       })
       .then((data) => setCourses(data))
-      .catch((err) => console.error("Failed to load courses:", err.message));
+      .catch((err) => console.error("Failed to load courses:", err.message))
+      .finally(() => setCoursesLoading(false));
   }, []);
   // Fetch the logged-in user's real enrollments (#19), replacing the old
   // ENROLLED_DEFAULT mock. Re-runs whenever login state changes; clears
@@ -139,9 +152,11 @@ function KeystonePrototype() {
   useEffect(() => {
     if (!loggedIn || !session) {
       setEnrolled([]);
+      setEnrolledLoading(false);
       return;
     }
 
+    setEnrolledLoading(true);
     fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
@@ -165,14 +180,79 @@ function KeystonePrototype() {
       .catch((err) => {
         console.error("Failed to load enrollments:", err.message);
         setEnrolled([]);
-      });
+      })
+      .finally(() => setEnrolledLoading(false));
   }, [loggedIn, session]);
+
+  // Real streak / minutes-this-week / daily-goal data (#37), replacing the
+  // old LEARNER mock. Re-runs on login state change like enrollments above;
+  // resets to a neutral empty shape on logout.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setActivitySummary({
+        streak: 0,
+        minutesThisWeek: 0,
+        dailyGoalMin: 30,
+        goalHitDays: 0,
+        week: [],
+      });
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/activity/summary`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setActivitySummary)
+      .catch((err) => console.error("Failed to load activity summary:", err.message));
+  }, [loggedIn, session]);
+
+  // Fire-and-forget refresh after an action that logs activity server-side
+  // (module completed, quiz submitted, note saved, forum post made) — so
+  // the dashboard reflects it without needing a full reload. A failure
+  // here shouldn't surface to the user; it just means the dashboard stays
+  // slightly stale until the next natural refetch.
+  async function refetchActivitySummary() {
+    if (!session) return;
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/activity/summary`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      setActivitySummary(await res.json());
+    } catch (err) {
+      console.error("Failed to refresh activity summary:", err.message);
+    }
+  }
 
   const screen = screenKeyFromPath(location.pathname);
 
+  const enrolledIds = enrolled.map((e) => e.courseId);
+
+  // `courses` is the public catalogue (GET /courses) — deliberately
+  // excludes soft-deleted courses (#41). But an enrolled learner's
+  // dashboard/learning screen shouldn't lose access just because a
+  // trainer deleted the course later, so fall back to the lightweight
+  // course snapshot embedded on the enrollment itself (see
+  // EnrolledCourseDto on the backend) for any id the catalogue doesn't
+  // have. Only used for the learner-facing screens below — Trainer Studio
+  // and the public catalogue correctly keep using `courses` as-is.
+  const coursesForLearners = useMemo(() => {
+    const catalogueIds = new Set(courses.map((c) => c.id));
+    return [
+      ...courses,
+      ...enrolled
+        .map((e) => e.course)
+        .filter((c) => c && !catalogueIds.has(c.id)),
+    ];
+  }, [courses, enrolled]);
+
   useEffect(() => {
     const learningCourse =
-      screen === "learning" ? courses.find((c) => `/learning/${c.id}` === location.pathname) : null;
+      screen === "learning" ? coursesForLearners.find((c) => `/learning/${c.id}` === location.pathname) : null;
     const titles = {
       home: "Keystone Learning",
       catalogue: "Catalogue — Keystone",
@@ -181,9 +261,7 @@ function KeystonePrototype() {
       trainer: "Trainer Studio — Keystone",
     };
     document.title = titles[screen] || "Keystone";
-  }, [screen, location.pathname, courses]);
-
-  const enrolledIds = enrolled.map((e) => e.courseId);
+  }, [screen, location.pathname, coursesForLearners]);
 
   async function saveCourse(draft) {
     const isNew = !draft.id;
@@ -219,6 +297,25 @@ function KeystonePrototype() {
     return saved;
   }
 
+  // Soft delete (#41) — backend just stamps deleted_at rather than
+  // removing the row, so existing enrollments/progress aren't touched.
+  // Here that just means removing it from the local catalogue list.
+  async function deleteCourse(courseId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/${courseId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    setCourses((prev) => prev.filter((c) => c.id !== courseId));
+    setToast("Course deleted");
+    setTimeout(() => setToast(null), 2600);
+  }
+
   async function saveProgress(enrollmentId, completedModules) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}`, {
       method: "PATCH",
@@ -242,6 +339,7 @@ function KeystonePrototype() {
           : e,
       ),
     );
+    refetchActivitySummary();
   }
 
   async function fetchNote(moduleId) {
@@ -267,7 +365,9 @@ function KeystonePrototype() {
       throw new Error(body?.message || `Request failed: ${res.status}`);
     }
 
-    return res.json();
+    const result = await res.json();
+    refetchActivitySummary();
+    return result;
   }
 
   function openAuth(mode) {
@@ -345,6 +445,16 @@ function KeystonePrototype() {
       throw new Error(body?.message || `Request failed: ${res.status}`);
     }
 
+    const result = await res.json();
+    refetchActivitySummary();
+    return result;
+  }
+
+  async function fetchCourseQuizResults(courseId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/${courseId}/quiz-results`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
     return res.json();
   }
 
@@ -354,9 +464,32 @@ function KeystonePrototype() {
     return res.json();
   }
 
-  async function createPost(moduleId, content) {
+  async function createPost(moduleId, content, parentPostId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/forum`, {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      // parentPostId omitted entirely (not sent as null) when this is a
+      // top-level post — the backend DTO's @IsOptional() only skips
+      // validation for a genuinely missing key, not an explicit null.
+      body: JSON.stringify(parentPostId ? { content, parentPostId } : { content }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const result = await res.json();
+    refetchActivitySummary();
+    return result;
+  }
+
+  async function editPost(moduleId, postId, content) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/forum/${postId}`, {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
@@ -369,7 +502,98 @@ function KeystonePrototype() {
       throw new Error(body?.message || `Request failed: ${res.status}`);
     }
 
+    // No activity refetch here — editing isn't new activity, deliberately
+    // (an unlimited edit loop shouldn't be a way to farm streak minutes).
     return res.json();
+  }
+
+  // #143 — course form's locked provider field. Reads from the backend
+  // (profiles.name) rather than the client-cached Supabase user_metadata
+  // set once at signup — the two happen to match today, but only the
+  // backend value stays correct once a profile-editing feature exists.
+  async function fetchMyProfile() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
+  // #139 — Team tab. GET /providers/me 404s for "not a member of a
+  // provider" (see ProvidersService.getMine) — that's a normal, expected
+  // state here (the no-provider view), not an error, so it's translated
+  // to null rather than thrown.
+  async function fetchMyProvider() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
+  async function createProvider(name) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
+  async function joinProvider(inviteCode) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers/join`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ inviteCode }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
+  async function regenerateInviteCode() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers/invite-code/regenerate`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
+  async function leaveProvider() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/providers/leave`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
   }
 
   async function fetchQuizForEdit(moduleId) {
@@ -451,7 +675,7 @@ function KeystonePrototype() {
   const shellTitle =
     screen === "dashboard" ? "My learning" :
     screen === "catalogue" ? "Catalogue" :
-    screen === "learning" ? (courses.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
+    screen === "learning" ? (coursesForLearners.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
     screen === "trainer" ? "Trainer studio" : "";
 
   if (authLoading) {
@@ -470,10 +694,10 @@ function KeystonePrototype() {
           element={
             loggedIn ? (
               <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user}>
-                <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} />
+                <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
               </AppShell>
             ) : (
-              <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} />
+              <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
             )
           }
         />
@@ -489,6 +713,7 @@ function KeystonePrototype() {
                 onOpenCourse={setSelectedCourse}
                 enrolledIds={enrolledIds}
                 courses={courses}
+                loading={coursesLoading}
               />
             </AppShell>
           }
@@ -503,9 +728,11 @@ function KeystonePrototype() {
                   enrolled={enrolled}
                   onOpenCourse={setSelectedCourse}
                   onStartLearning={handleStartLearning}
-                  courses={courses}
+                  courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
                   user={user}
+                  activitySummary={activitySummary}
+                  loading={coursesLoading || enrolledLoading}
                 />
               </AppShell>
             </RequireAuth>
@@ -518,15 +745,18 @@ function KeystonePrototype() {
             <RequireAuth loggedIn={loggedIn}>
               <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
                 <LearningRoute
-                  courses={courses}
+                  courses={coursesForLearners}
                   enrolled={enrolled}
                   onSaveProgress={saveProgress}
                   onFetchQuiz={fetchQuiz}
                   onSubmitQuiz={submitQuiz}
+                  onFetchQuizResults={fetchCourseQuizResults}
                   onFetchNote={fetchNote}
                   onSaveNote={saveNote}
                   onFetchPosts={fetchPosts}
                   onCreatePost={createPost}
+                  onEditPost={editPost}
+                  currentUserId={user?.id}
                 />
               </AppShell>
             </RequireAuth>
@@ -542,8 +772,16 @@ function KeystonePrototype() {
                   <TrainerScreen
                     courses={courses}
                     onSaveCourse={saveCourse}
+                    onDeleteCourse={deleteCourse}
                     onFetchQuizForEdit={fetchQuizForEdit}
                     onSaveQuiz={saveQuiz}
+                    onFetchProvider={fetchMyProvider}
+                    onFetchProfile={fetchMyProfile}
+                    onCreateProvider={createProvider}
+                    onJoinProvider={joinProvider}
+                    onRegenerateInviteCode={regenerateInviteCode}
+                    onLeaveProvider={leaveProvider}
+                    currentUserId={user?.id}
                   />
                 </AppShell>
               </RequireTrainer>

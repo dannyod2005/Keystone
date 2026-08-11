@@ -23,9 +23,6 @@ export class Course {
   @Column({ type: 'int', default: 0 })
   hours: number;
 
-  @Column({ type: 'int', default: 0 })
-  projects: number;
-
   @Column({ type: 'decimal', nullable: true })
   rating: number | null;
 
@@ -43,6 +40,30 @@ export class Course {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  // Deliberately a plain column, not @DeleteDateColumn — see the migration
+  // comment for why: TypeORM's built-in soft-delete auto-filters this
+  // entity out of every join, which would hide an already-enrolled
+  // learner's course from their own dashboard. Filtering is applied
+  // explicitly in CoursesService instead, only where it belongs.
+  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
+  // #137 — the trainer who created this course. Nullable only because
+  // seeded/mock courses (src/seeds/seed-courses.ts, #109) predate
+  // ownership tracking and have no real owner to backfill; every course
+  // created via CoursesService.create always has this stamped
+  // server-side. NULL is treated as "legacy, exempt from the ownership
+  // check" by RequireCourseOwnerGuard, never as "unowned and therefore
+  // editable by no one".
+  @Column({ name: 'owner_id', type: 'uuid', nullable: true })
+  ownerId: string | null;
+
+  // #137 — optional group ownership. When set, any profile sharing this
+  // providerId also gets edit rights on top of ownerId. Purely an opt-in
+  // upgrade: creating a course never requires belonging to a provider.
+  @Column({ name: 'provider_id', type: 'uuid', nullable: true })
+  providerId: string | null;
 
   @OneToMany(() => CourseModule, (m) => m.course, { cascade: true, orphanedRowAction: 'delete' })
   modules: CourseModule[];

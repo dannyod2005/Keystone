@@ -10,6 +10,7 @@ import { Profile } from '../profiles/entities/profile.entity';
 import { ModuleNote } from '../notes/entities/module-note.entity';
 import { ForumPost } from '../forum/entities/forum-post.entity';
 import { RequireTrainerGuard } from '../auth/require-trainer.guard';
+import { ActivityModule } from '../activity/activity.module';
 
 @Module({
   imports: [
@@ -22,8 +23,12 @@ import { RequireTrainerGuard } from '../auth/require-trainer.guard';
       ModuleNote,
       ForumPost,
     ]),
+    ActivityModule,
   ],
   controllers: [ModulesController],
   providers: [ModulesService, RequireTrainerGuard],
+  // Exported so CoursesModule can inject it for GET /courses/:id/quiz-results
+  // (#82) — same cross-module pattern already used for ActivityModule.
+  exports: [ModulesService],
 })
 export class ModulesModule {}
