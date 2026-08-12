@@ -49,7 +49,9 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
+      {/* #104 — single column on mobile, 2fr/1fr from md up; column layout
+          is the only breakpoint-dependent property here. */}
+      <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr]" style={{ gap: 20 }}>
         <div>
           {loading ? (
             <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
@@ -57,13 +59,13 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
             </div>
           ) : (
           <>
-          <div style={{ display: "flex", gap: 14, marginBottom: 22 }}>
+          <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
             {[
               { label: "In progress", value: inProgress.length, icon: PlayCircle, tint: "var(--gold-tint)", fg: "var(--gold-dark)" },
               { label: "Completed", value: complete.length, icon: CheckCircle2, tint: "var(--success-tint)", fg: "var(--success)" },
               { label: "Certificates", value: complete.length, icon: Award, tint: "var(--coral-tint)", fg: "var(--coral)" },
             ].map((s) => (
-              <div key={s.label} className="ks-card" style={{ flex: 1, padding: 16 }}>
+              <div key={s.label} className="ks-card" style={{ flex: 1, minWidth: 140, padding: 16 }}>
                 <div style={{ width: 30, height: 30, borderRadius: 8, background: s.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
                   <s.icon size={15} color={s.fg} />
                 </div>

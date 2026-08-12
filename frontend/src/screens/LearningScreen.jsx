@@ -457,7 +457,10 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
           )}
         </div>
       ) : (
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 22 }}>
+      // #104 — single column on mobile (video/tabs above the right rail),
+      // 1fr/300px from md up; column layout is the only breakpoint-dependent
+      // property here.
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_300px]" style={{ gap: 22 }}>
         <div>
           <div className="ks-card" style={{ padding: "12px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Module {activeModule + 1} of {modules.length}</div>

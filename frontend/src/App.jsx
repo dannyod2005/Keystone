@@ -59,19 +59,32 @@ function AppShell({ loggedIn, role, onLogout, title, children, user }) {
 
   const showSidebar = loggedIn;
 
+  // #104 — the sidebar is always in the DOM (needed so it can slide in/out
+  // on mobile rather than mount/unmount), just off-canvas by default below
+  // the md breakpoint. This state only controls that mobile open/closed
+  // state; on md+ the sidebar ignores it entirely (see AppSidebar).
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  function go(key) {
+    setMobileNavOpen(false);
+    navigate(key === "home" ? "/" : `/${key}`);
+  }
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       {showSidebar && (
         <AppSidebar
           screen={screen}
-          onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
+          onGo={go}
           role={role}
           onLogout={onLogout}
           user={user}
+          mobileOpen={mobileNavOpen}
+          onCloseMobile={() => setMobileNavOpen(false)}
         />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {showSidebar && <AppTopbar title={title} />}
+        {showSidebar && <AppTopbar title={title} onMenuClick={() => setMobileNavOpen(true)} />}
         {children}
       </div>
     </div>
