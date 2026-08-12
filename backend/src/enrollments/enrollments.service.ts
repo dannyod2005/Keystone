@@ -123,16 +123,30 @@ export class EnrollmentsService {
     const newlyCompleted = Math.max(completedModules - oldCompletedModules, 0);
     if (newlyCompleted > 0 && totalModules > 0) {
       // Estimate: this course's total hours spread evenly across its
-      // modules, scaled by how many modules were newly completed this
-      // call. Not a measured duration — see #37.
+      // modules. Not a measured duration — see #37.
       const minutesPerModule = Math.round(
         (enrollment.course.hours * 60) / totalModules,
       );
-      await this.activityService.logEvent(
-        userId,
-        'module_complete',
-        newlyCompleted * minutesPerModule,
+
+      // #124 — log per specific module rather than one lump sum for
+      // "however many modules got completed this call", so each module's
+      // estimated minutes can be split across the distinct days *that*
+      // module was actually viewed (see ActivityService.logModuleCompletion)
+      // instead of all landing on whichever day this request happened to
+      // fire. enrollment.course.modules is already ordered by position
+      // (see the query above), and modules are always completed in that
+      // same order, so this slice is exactly the newly-completed ones.
+      const newlyCompletedModules = enrollment.course.modules.slice(
+        oldCompletedModules,
+        completedModules,
       );
+      for (const module of newlyCompletedModules) {
+        await this.activityService.logModuleCompletion(
+          userId,
+          module.id,
+          minutesPerModule,
+        );
+      }
     }
 
     // save() returns the same entity reference with its already-loaded

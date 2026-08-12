@@ -95,7 +95,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onSubmitRating, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
+function LearningRoute({ courses, enrolled, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
@@ -110,6 +110,7 @@ function LearningRoute({ courses, enrolled, onSaveProgress, onSubmitRating, onFe
       enrollment={enrollment}
       onSaveProgress={onSaveProgress}
       onSubmitRating={onSubmitRating}
+      onLogModuleView={onLogModuleView}
       onFetchQuiz={onFetchQuiz}
       onSubmitQuiz={onSubmitQuiz}
       onFetchQuizResults={onFetchQuizResults}
@@ -383,6 +384,19 @@ function KeystonePrototype() {
           : e,
       ),
     );
+  }
+
+  // #124 — fire-and-forget ping so the backend has a per-day "this module
+  // was open" marker to split a module's completion minutes across later
+  // (see ActivityService.logModuleView/logModuleCompletion). No response
+  // body, no local state to update — LearningScreen calls this once per
+  // module focus and doesn't need to await anything beyond error logging.
+  async function logModuleView(moduleId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/view`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   }
 
   async function fetchNote(moduleId) {
@@ -795,6 +809,7 @@ function KeystonePrototype() {
                   enrolled={enrolled}
                   onSaveProgress={saveProgress}
                   onSubmitRating={submitRating}
+                  onLogModuleView={logModuleView}
                   onFetchQuiz={fetchQuiz}
                   onSubmitQuiz={submitQuiz}
                   onFetchQuizResults={fetchCourseQuizResults}

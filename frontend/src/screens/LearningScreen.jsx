@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star } from "lucide-react";
 
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
   const [tab, setTab] = useState("video");
 
   const modules = course?.modules ?? [];
@@ -63,6 +63,20 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const [savingEdit, setSavingEdit] = useState(false);
 
   const currentModule = modules[activeModule];
+
+  // #124 — one ping per module focus, so the backend has a per-day "this
+  // module was open" marker to later split its completion minutes across
+  // (see ActivityService.logModuleView/logModuleCompletion). Fire-and-forget:
+  // no loading/error state here, this is a background signal, not something
+  // the learner is waiting on. Same currentModule.id-only dependency
+  // reasoning as the effects below.
+  useEffect(() => {
+    if (!currentModule || !onLogModuleView) return;
+    onLogModuleView(currentModule.id).catch((err) =>
+      console.error("Failed to log module view:", err.message),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentModule?.id]);
 
   useEffect(() => {
     if (!currentModule || !onFetchQuiz) return;
