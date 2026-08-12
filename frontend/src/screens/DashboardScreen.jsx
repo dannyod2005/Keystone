@@ -16,9 +16,9 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
   // (progress === 0, no lastAccessed yet — the two are set together in
   // the same backend call, so either is an equivalent signal). Kept as a
   // separate split from `inProgress` above rather than redefining it, so
-  // the stat tiles and "learned across N courses" below still count every
   // non-complete enrollment, same as before — only the list rendering
   // distinguishes the two.
+  const enrolledCourseCount = inProgress.length + complete.length;
   const notStarted = inProgress.filter((e) => e.progress === 0);
   const continuing = inProgress.filter((e) => e.progress > 0);
 
@@ -173,7 +173,9 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
           <div className="ks-card" style={{ padding: 18 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>This week</div>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: 26, fontWeight: 500 }}>{activitySummary.minutesThisWeek}<span style={{ fontSize: 13, color: "var(--slate-light)" }}> min</span></div>
-            <div style={{ fontSize: 12, color: "var(--slate-light)" }}>learned across {inProgress.length + complete.length} courses</div>
+            <div style={{ fontSize: 12, color: "var(--slate-light)" }}>learning time logged</div>
+            <hr className="ks-hairline" style={{ margin: "16px 0" }} />
+            <div style={{ fontSize: 12.5, color: "var(--slate)" }}>Enrolled in {enrolledCourseCount} course{enrolledCourseCount === 1 ? "" : "s"}</div>
           </div>
         </div>
       </div>
