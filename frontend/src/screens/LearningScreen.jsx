@@ -159,12 +159,21 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   async function handleSubmitQuiz() {
     if (!currentModule || !onSubmitQuiz) return;
 
-    const answers = quizQuestions.map((q) => ({
-      questionId: q.id,
-      optionId: selectedAnswers[q.id],
-    }));
+    // #40 — selectedAnswers holds an optionId for mcq questions or the
+    // raw typed text for short_answer ones; which field to send depends
+    // on the question's type.
+    const answers = quizQuestions.map((q) =>
+      q.type === "short_answer"
+        ? { questionId: q.id, answerText: selectedAnswers[q.id] }
+        : { questionId: q.id, optionId: selectedAnswers[q.id] }
+    );
 
-    if (answers.some((a) => !a.optionId)) {
+    const incomplete = quizQuestions.some((q) =>
+      q.type === "short_answer"
+        ? !selectedAnswers[q.id]?.trim()
+        : !selectedAnswers[q.id]
+    );
+    if (incomplete) {
       setQuizError("Answer every question before submitting.");
       return;
     }
@@ -458,39 +467,67 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
                     return (
                       <div key={q.id} style={{ marginBottom: 14 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 8 }}>{i + 1}. {q.question}</div>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {q.options.map((o) => {
-                            const isSelected = selectedAnswers[q.id] === o.id;
-                            const isCorrectAnswer = resultForQuestion?.correctOptionId === o.id;
-                            const isWrongSelected = resultForQuestion && isSelected && !resultForQuestion.isCorrect;
+                        {q.type === "short_answer" ? (
+                          <div>
+                            <input
+                              type="text"
+                              value={selectedAnswers[q.id] ?? ""}
+                              onChange={(e) => selectAnswer(q.id, e.target.value)}
+                              disabled={!!quizResult}
+                              placeholder="Type your answer…"
+                              style={{
+                                fontFamily: "var(--font-body)", fontSize: 13, width: "100%", maxWidth: 360,
+                                border: `1px solid ${resultForQuestion ? (resultForQuestion.isCorrect ? "var(--success)" : "var(--coral)") : "var(--line)"}`,
+                                background: resultForQuestion ? (resultForQuestion.isCorrect ? "var(--success-tint)" : "var(--coral-tint)") : "var(--paper-2)",
+                                borderRadius: 8, padding: "8px 10px", outline: "none",
+                              }}
+                            />
+                            {resultForQuestion && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--slate-light)", marginTop: 6 }}>
+                                {resultForQuestion.isCorrect
+                                  ? <CheckCircle2 size={13} color="var(--success)" />
+                                  : <XCircle size={13} color="var(--coral)" />}
+                                {resultForQuestion.isCorrect
+                                  ? "Correct"
+                                  : `Accepted answer${resultForQuestion.acceptableAnswers.length > 1 ? "s" : ""}: ${resultForQuestion.acceptableAnswers.join(", ")}`}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {q.options.map((o) => {
+                              const isSelected = selectedAnswers[q.id] === o.id;
+                              const isCorrectAnswer = resultForQuestion?.correctOptionId === o.id;
+                              const isWrongSelected = resultForQuestion && isSelected && !resultForQuestion.isCorrect;
 
-                            let borderColor = "var(--line)";
-                            let bg = "transparent";
-                            if (resultForQuestion) {
-                              if (isCorrectAnswer) { borderColor = "var(--success)"; bg = "var(--success-tint)"; }
-                              else if (isWrongSelected) { borderColor = "var(--coral)"; bg = "var(--coral-tint)"; }
-                            } else if (isSelected) {
-                              borderColor = "var(--gold-dark)";
-                              bg = "var(--gold-tint)";
-                            }
+                              let borderColor = "var(--line)";
+                              let bg = "transparent";
+                              if (resultForQuestion) {
+                                if (isCorrectAnswer) { borderColor = "var(--success)"; bg = "var(--success-tint)"; }
+                                else if (isWrongSelected) { borderColor = "var(--coral)"; bg = "var(--coral-tint)"; }
+                              } else if (isSelected) {
+                                borderColor = "var(--gold-dark)";
+                                bg = "var(--gold-tint)";
+                              }
 
-                            return (
-                              <span
-                                key={o.id}
-                                onClick={() => selectAnswer(q.id, o.id)}
-                                style={{
-                                  fontSize: 12.5, border: `1px solid ${borderColor}`, background: bg,
-                                  borderRadius: 8, padding: "6px 12px", cursor: quizResult ? "default" : "pointer",
-                                  display: "flex", alignItems: "center", gap: 5,
-                                }}
-                              >
-                                {resultForQuestion && isCorrectAnswer && <CheckCircle2 size={13} color="var(--success)" />}
-                                {resultForQuestion && isWrongSelected && <XCircle size={13} color="var(--coral)" />}
-                                {o.optionText}
-                              </span>
-                            );
-                          })}
-                        </div>
+                              return (
+                                <span
+                                  key={o.id}
+                                  onClick={() => selectAnswer(q.id, o.id)}
+                                  style={{
+                                    fontSize: 12.5, border: `1px solid ${borderColor}`, background: bg,
+                                    borderRadius: 8, padding: "6px 12px", cursor: quizResult ? "default" : "pointer",
+                                    display: "flex", alignItems: "center", gap: 5,
+                                  }}
+                                >
+                                  {resultForQuestion && isCorrectAnswer && <CheckCircle2 size={13} color="var(--success)" />}
+                                  {resultForQuestion && isWrongSelected && <XCircle size={13} color="var(--coral)" />}
+                                  {o.optionText}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

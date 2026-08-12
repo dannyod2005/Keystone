@@ -24,6 +24,13 @@ export class QuizQuestion {
   @Column({ type: 'int' })
   position: number;
 
+  // #40 — 'mcq' (default, matches every pre-existing question) or
+  // 'short_answer'. For 'short_answer' questions, `options` below holds
+  // the acceptable-answer keywords instead of MCQ choices (see the
+  // QuizOption comment) — never sent to learners as selectable options.
+  @Column({ type: 'text', default: 'mcq' })
+  type: 'mcq' | 'short_answer';
+
   @OneToMany(() => QuizOption, (option) => option.question)
   options: QuizOption[];
 }
