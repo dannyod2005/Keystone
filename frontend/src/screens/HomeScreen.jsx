@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronRight} from "lucide-react";
+import { ArrowRight, ChevronRight, BookOpen } from "lucide-react";
 
 import { TESTIMONIALS } from "../data/courses";
 import { Stars, KeystoneArch, CategoryDot } from "../components/common/Primitives";
@@ -91,7 +91,13 @@ export function HomeScreen({ onGo, onAuth, courses, loggedIn, user, enrolled = [
           ) : (
             courses.slice(0, 3).map((c) => (
               <div key={c.id} onClick={() => onGo("catalogue")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, cursor: "pointer" }}>
-                <KeystoneArch progress={c.id === "c1" ? 0.62 : c.id === "c2" ? 0.1 : 0.2} size={40} />
+                {/* #108 — logged-out visitors have no real enrollment/progress,
+                    so this used to fake a progress ring per course id (0.62 /
+                    0.1 / 0.2). A neutral "browse this course" badge instead of
+                    a number that implies personal progress that doesn't exist. */}
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--gold-tint)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <BookOpen size={17} color="var(--gold-dark)" />
+                </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 600 }}>{c.title}</div>
                   <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.provider}</div>
