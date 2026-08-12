@@ -38,6 +38,19 @@ function formatLastAccessed(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+// #110 — Course.rating is a Postgres decimal column, which the pg driver
+// (via TypeORM, no transformer defined) returns as a string, not a
+// number — same quirk as Enrollment.progress (see the comment where
+// enrolled state is set below). Every current frontend usage of rating
+// happens to tolerate a string (Math.round auto-coerces, plain JSX
+// display doesn't care about type), so nothing was visibly broken, but
+// that's incidental, not a guarantee — same "parse once at the API
+// boundary" fix applied here for consistency with progress, so
+// course.rating is an actual number everywhere downstream from here.
+function normalizeCourse(c) {
+  return { ...c, rating: c.rating == null ? null : Number(c.rating) };
+}
+
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
 function AppShell({ loggedIn, role, onLogout, title, children, user }) {
   const location = useLocation();
@@ -143,7 +156,7 @@ function KeystonePrototype() {
         if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         return res.json();
       })
-      .then((data) => setCourses(data))
+      .then((data) => setCourses(data.map(normalizeCourse)))
       .catch((err) => console.error("Failed to load courses:", err.message))
       .finally(() => setCoursesLoading(false));
   }, []);
@@ -288,7 +301,7 @@ function KeystonePrototype() {
       throw new Error(message);
     }
 
-    const saved = await res.json();
+    const saved = normalizeCourse(await res.json());
 
     setCourses((prev) => {
       const exists = prev.some((c) => c.id === saved.id);
