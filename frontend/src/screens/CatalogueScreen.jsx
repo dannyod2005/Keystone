@@ -20,7 +20,7 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
     : byCategory;
 
   return (
-    <div>
+    <div className="ks-page-enter">
       {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
       <div style={{ maxWidth: 1160, margin: "0 auto", padding: "36px 28px 60px" }}>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 30, margin: "0 0 6px" }}>Course catalogue</h1>

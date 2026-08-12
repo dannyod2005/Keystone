@@ -3,6 +3,11 @@ import { X, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { KeystoneMark } from "../common/Primitives";
 
+// #105 — same "always mounted, sometimes null" shape as CourseDetailModal:
+// this component doesn't unmount, it just returns null once `mode` clears.
+// `visible`/`closing` let the close animation play for one more beat
+// before the render actually drops, regardless of which of the several
+// closes (X, backdrop, successful submit) triggered it.
 export function AuthModal({ mode, onClose, onSubmit }) {
   const [tab, setTab] = useState(mode || "login");
   const [showPw, setShowPw] = useState(false);
@@ -11,6 +16,8 @@ export function AuthModal({ mode, onClose, onSubmit }) {
   const [submitting, setSubmitting] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [confirmEmailMessage, setConfirmEmailMessage] = useState(null);
+  const [visible, setVisible] = useState(!!mode);
+  const [closing, setClosing] = useState(false);
 
   React.useEffect(() => {
     if (mode) {
@@ -19,10 +26,21 @@ export function AuthModal({ mode, onClose, onSubmit }) {
       setSubmitting(false);
       setAuthError(null);
       setConfirmEmailMessage(null);
+      setVisible(true);
+      setClosing(false);
+      return;
     }
+    if (visible) {
+      setClosing(true);
+      const timer = setTimeout(() => setVisible(false), 160);
+      return () => clearTimeout(timer);
+    }
+    // Deliberately scoped to `mode` only; see comment above the
+    // component for why `visible` must stay out of this array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  if (!mode) return null;
+  if (!visible) return null;
 
   const emailValid = /\S+@\S+\.\S+/.test(values.email);
   const pwValid = values.password.length >= 8;
@@ -87,8 +105,8 @@ export function AuthModal({ mode, onClose, onSubmit }) {
   const errorText = { fontSize: 11.5, color: "var(--coral)", marginTop: 5 };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} className="ks-card" style={{ width: "100%", maxWidth: 400, padding: 0, overflow: "hidden" }}>
+    <div onClick={onClose} className={`ks-modal-backdrop ${closing ? "ks-modal-closing" : ""}`} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`} style={{ width: "100%", maxWidth: 400, padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "24px 28px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

@@ -408,7 +408,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   }
 
   return (
-    <div style={{ padding: "22px 32px 40px", maxWidth: 1080 }}>
+    <div className="ks-page-enter" style={{ padding: "22px 32px 40px", maxWidth: 1080 }}>
       <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", cursor: "pointer", marginBottom: 14 }}>
         <ChevronLeft size={15} /> Back to My learning
       </div>
@@ -493,6 +493,9 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
             ))}
           </div>
 
+          {/* #105 — key={tab} remounts this wrapper on every tab switch,
+              which replays the ks-tab-panel fade defined in global.css. */}
+          <div key={tab} className="ks-tab-panel">
           {tab === "video" && (
             <p style={{ fontSize: 14, color: "var(--slate)", lineHeight: 1.6 }}>
               This module covers {currentModule.title.toLowerCase()}. Follow along in the video, then apply it in the short exercise before moving to the quiz.
@@ -655,6 +658,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
               )}
             </div>
           )}
+          </div>
 
           <button
             className="ks-btn ks-btn-gold"
