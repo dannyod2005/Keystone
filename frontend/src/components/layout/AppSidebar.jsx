@@ -1,6 +1,7 @@
 import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut } from "lucide-react";
 import { LEARNER } from "../../data/courses";
 import { getDisplayName, getInitials } from "../../lib/userDisplay";
+import { KeystoneMark } from "../common/Primitives";
 
 /* ---------- Logged-in app shell ---------- */
 
@@ -17,7 +18,7 @@ export function AppSidebar({ screen, onGo, role, onLogout, user }) {
   }
   return (
     <aside style={{ width: 220, flexShrink: 0, background: "var(--ink)", color: "var(--paper)", padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, minHeight: "100vh" }}>        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 10px 22px" }}>
-        <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 2 L21 8 V22 H15 V14 H9 V22 H3 V8 Z" fill="var(--gold)" /></svg>
+        <KeystoneMark variant="dark" size={20} />
         <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, color: "var(--paper)" }}>Keystone</span>
       </div>
       {items.map((it) => {

@@ -1,4 +1,5 @@
 import { LogIn } from "lucide-react";
+import { KeystoneMark } from "../common/Primitives";
 
 export function MarketingHeader({ onGo, onAuth }) {
   return (
@@ -6,7 +7,7 @@ export function MarketingHeader({ onGo, onAuth }) {
       <div style={{ maxWidth: 1160, margin: "0 auto", padding: "16px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 34 }}>
           <div onClick={() => onGo("home")} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-            <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 2 L21 8 V22 H15 V14 H9 V22 H3 V8 Z" fill="var(--ink)" /></svg>
+            <KeystoneMark variant="light" size={22} />
             <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 19 }}>Keystone</span>
           </div>
           <nav style={{ display: "flex", gap: 24 }}>

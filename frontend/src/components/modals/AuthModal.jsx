@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { X, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { KeystoneMark } from "../common/Primitives";
 
 export function AuthModal({ mode, onClose, onSubmit }) {
   const [tab, setTab] = useState(mode || "login");
@@ -91,7 +92,7 @@ export function AuthModal({ mode, onClose, onSubmit }) {
         <div style={{ padding: "24px 28px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <svg width="19" height="19" viewBox="0 0 24 24"><path d="M12 2 L21 8 V22 H15 V14 H9 V22 H3 V8 Z" fill="var(--ink)" /></svg>
+              <KeystoneMark variant="light" size={19} />
               <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16 }}>Keystone</span>
             </div>
             <X size={19} color="var(--slate)" style={{ cursor: "pointer" }} onClick={onClose} />
