@@ -1,5 +1,4 @@
 import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut, X } from "lucide-react";
-import { LEARNER } from "../../data/courses";
 import { getDisplayName, getInitials } from "../../lib/userDisplay";
 import { KeystoneMark } from "../common/Primitives";
 
@@ -12,7 +11,7 @@ import { KeystoneMark } from "../common/Primitives";
 // on Tailwind classes (the one thing inline style={{}} genuinely can't
 // express — media queries); everything else (color, padding, layout)
 // stays as the existing inline styles, unchanged.
-export function AppSidebar({ screen, onGo, role, onLogout, user, mobileOpen = false, onCloseMobile }) {
+export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mobileOpen = false, onCloseMobile }) {
   const displayName = getDisplayName(user);
   const initials = getInitials(displayName);
   const items = [
@@ -60,7 +59,11 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, mobileOpen = fa
           <div style={{ width: 30, height: 30, borderRadius: 99, background: "var(--gold)", color: "#2B1E06", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 }}>{initials}</div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--paper)" }}>{displayName}</div>
-            <div style={{ fontSize: 11, color: "#B9C0CC" }}>{role === "trainer" ? "Trainer account" : LEARNER.goal}</div>
+            {/* #107 — goal is null until a learner picks one via the
+                onboarding modal (or if they skipped it); falls back to a
+                generic label rather than showing nothing here, since a
+                blank line under the name would look broken. */}
+            <div style={{ fontSize: 11, color: "#B9C0CC" }}>{role === "trainer" ? "Trainer account" : goal || "Learner account"}</div>
           </div>
         </div>
         {onLogout && (

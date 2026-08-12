@@ -1,13 +1,12 @@
 import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame } from "lucide-react";
 
-import { LEARNER } from "../data/courses";
 import { KeystoneArch } from "../components/common/Primitives";
 import { getDisplayName } from "../lib/userDisplay";
 /* ---------- Screen: Dashboard ---------- */
 
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 30, goalHitDays: 0, week: [] };
 
-export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false }) {
+export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false }) {
   const firstName = getDisplayName(user).split(" ")[0];
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
@@ -41,7 +40,12 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
       <div className="ks-card" style={{ padding: "20px 24px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>Good morning, {firstName}</div>
-          <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>Your goal: <b style={{ color: "var(--ink)" }}>{LEARNER.goal}</b></div>
+          {/* #107 — goal is null until a learner picks one via the
+              onboarding modal (or if they skipped it); hidden entirely
+              rather than showing an empty/placeholder line. */}
+          {goal && (
+            <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>Your goal: <b style={{ color: "var(--ink)" }}>{goal}</b></div>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--gold-tint)", padding: "8px 14px", borderRadius: 100 }}>
           <Flame size={16} color="var(--gold-dark)" />

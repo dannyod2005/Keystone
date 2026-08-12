@@ -10,5 +10,3 @@ export const TESTIMONIALS = [
   { name: "Marcus T.", role: "Data Analyst", quote: "The Python path finally made data structures click. Clear pacing, real practice.", rating: 5 },
   { name: "Elena R.", role: "Team Lead", quote: "Short enough to finish between meetings, deep enough to actually change how I run 1:1s.", rating: 4 },
 ];
-
-export const LEARNER = { name: "Alex Chen", goal: "AI Product Leadership", streak: 4, minutesThisWeek: 186, dailyGoalMin: 30, goalHitDays: 4 };
