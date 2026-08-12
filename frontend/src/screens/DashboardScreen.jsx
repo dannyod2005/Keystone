@@ -37,7 +37,7 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
   }
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 1080 }}>
+    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080 }}>
       <div className="ks-card" style={{ padding: "20px 24px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>Good morning, {firstName}</div>

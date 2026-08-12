@@ -392,7 +392,7 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
   const rowInput = { fontFamily: "var(--font-body)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", fontSize: 13, width: "100%", background: "var(--paper-2)", outline: "none" };
 
   return (
-    <div style={{ padding: "28px 32px 60px", maxWidth: 760 }}>
+    <div className="ks-page-enter" style={{ padding: "28px 32px 60px", maxWidth: 760 }}>
       <div onClick={onCancel} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", cursor: "pointer", marginBottom: 14 }}>
         <ChevronLeft size={15} /> Back to Trainer studio
       </div>

@@ -102,7 +102,7 @@ export function TrainerScreen({
   }
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 1080 }}>
+    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080 }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>Trainer studio</div>
         <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>
@@ -117,6 +117,9 @@ export function TrainerScreen({
         <div className={`ks-tab ${tab === "team" ? "active" : ""}`} onClick={() => setTab("team")}>Team</div>
       </div>
 
+      {/* #105 — key={tab} remounts this wrapper on tab switch, replaying
+          the ks-tab-panel fade defined in global.css. */}
+      <div key={tab} className="ks-tab-panel">
       {tab === "courses" && (
         <>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
@@ -168,13 +171,15 @@ export function TrainerScreen({
           currentUserId={currentUserId}
         />
       )}
+      </div>
 
       {deletingCourse && (
         <div
           onClick={() => !deleting && setDeletingCourse(null)}
+          className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete course?</div>
               <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !deleting && setDeletingCourse(null)} />
