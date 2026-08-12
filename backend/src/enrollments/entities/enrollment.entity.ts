@@ -33,6 +33,15 @@ export class Enrollment {
   @Column({ name: 'last_accessed', type: 'timestamp', nullable: true })
   lastAccessed: Date | null;
 
+  // #106 — the learner's own 1-5 star rating for this course, submitted
+  // after completion (see EnrollmentsService.submitRating). Null until
+  // rated; re-submitting just updates this same column, since an
+  // enrollment is already unique per (user, course) — no separate
+  // ratings table needed. Deliberately not aggregated back into
+  // Course.rating/learners — see the migration comment.
+  @Column({ type: 'smallint', nullable: true })
+  rating: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

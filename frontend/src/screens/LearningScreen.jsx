@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { PlayCircle, CheckCircle2, XCircle, ChevronLeft} from "lucide-react";
+import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star } from "lucide-react";
 
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
   const [tab, setTab] = useState("video");
 
   const modules = course?.modules ?? [];
@@ -13,6 +13,15 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
 
   const [activeModule, setActiveModule] = useState(initialActiveModule);
   const [saving, setSaving] = useState(false);
+
+  // #106 — star-rating prompt on the "Course complete" card. hoverRating
+  // is just for the visual preview as the pointer moves over the stars;
+  // the actual submitted value lives on enrollment.rating (set server-side
+  // and picked up here once the parent's enrolled list updates — same
+  // "don't locally echo, just await the prop function" pattern as
+  // handleMarkComplete/onSaveProgress above).
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [ratingHover, setRatingHover] = useState(0);
 
   // Quiz state — reset whenever the active module changes, since each
   // module has its own separate quiz.
@@ -148,6 +157,19 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
       console.error("Failed to save progress:", err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSubmitRating(stars) {
+    if (!enrollment || !onSubmitRating || ratingSubmitting) return;
+
+    setRatingSubmitting(true);
+    try {
+      await onSubmitRating(enrollment.id, stars);
+    } catch (err) {
+      console.error("Failed to submit rating:", err.message);
+    } finally {
+      setRatingSubmitting(false);
     }
   }
 
@@ -386,6 +408,39 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
           <CheckCircle2 size={32} color="var(--success)" style={{ marginBottom: 10 }} />
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Course complete</div>
           <div style={{ fontSize: 13.5, color: "var(--slate-light)" }}>You've finished all {modules.length} modules.</div>
+
+          {/* #106 — prompt for a rating once complete; enrollment.rating
+              being set (either already, from a past visit, or just now)
+              switches this to a thank-you state instead of re-prompting. */}
+          {enrollment && onSubmitRating && (
+            <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
+              {enrollment.rating ? (
+                <div style={{ fontSize: 13.5, color: "var(--slate)" }}>
+                  Thanks for rating this course {enrollment.rating} star{enrollment.rating === 1 ? "" : "s"}.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>How was this course?</div>
+                  <div style={{ display: "flex", justifyContent: "center", gap: 4 }} onMouseLeave={() => setRatingHover(0)}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star
+                        key={n}
+                        size={26}
+                        fill={n <= ratingHover ? "var(--gold)" : "none"}
+                        color="var(--gold)"
+                        style={{ cursor: ratingSubmitting ? "default" : "pointer" }}
+                        onMouseEnter={() => setRatingHover(n)}
+                        onClick={() => handleSubmitRating(n)}
+                      />
+                    ))}
+                  </div>
+                  {ratingSubmitting && (
+                    <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>Saving…</div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       ) : (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 22 }}>

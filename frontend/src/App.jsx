@@ -82,7 +82,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
+function LearningRoute({ courses, enrolled, onSaveProgress, onSubmitRating, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
@@ -96,6 +96,7 @@ function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmi
       course={course}
       enrollment={enrollment}
       onSaveProgress={onSaveProgress}
+      onSubmitRating={onSubmitRating}
       onFetchQuiz={onFetchQuiz}
       onSubmitQuiz={onSubmitQuiz}
       onFetchQuizResults={onFetchQuizResults}
@@ -341,6 +342,34 @@ function KeystonePrototype() {
       ),
     );
     refetchActivitySummary();
+  }
+
+  // #106 — same pattern as saveProgress: PATCH the enrollment, merge the
+  // returned row into `enrolled` by id so LearningScreen's `enrollment`
+  // prop picks up the new rating on its next render without a refetch.
+  async function submitRating(enrollmentId, rating) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}/rating`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ rating }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const updated = await res.json();
+    setEnrolled((prev) =>
+      prev.map((e) =>
+        e.id === updated.id
+          ? { ...updated, progress: Number(updated.progress), lastAccessed: formatLastAccessed(updated.lastAccessed) }
+          : e,
+      ),
+    );
   }
 
   async function fetchNote(moduleId) {
@@ -752,6 +781,7 @@ function KeystonePrototype() {
                   courses={coursesForLearners}
                   enrolled={enrolled}
                   onSaveProgress={saveProgress}
+                  onSubmitRating={submitRating}
                   onFetchQuiz={fetchQuiz}
                   onSubmitQuiz={submitQuiz}
                   onFetchQuizResults={fetchCourseQuizResults}

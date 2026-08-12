@@ -14,6 +14,7 @@ import { Course } from '../courses/entities/course.entity';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { EnrolledCourseDto, EnrollmentResponseDto } from './dto/enrollment-response.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
+import { SubmitRatingDto } from './dto/submit-rating.dto';
 import { ActivityService } from '../activity/activity.service';
 
 @Injectable()
@@ -149,7 +150,42 @@ export class EnrollmentsService {
       lastAccessed: enrollment.lastAccessed,
       createdAt: enrollment.createdAt,
       course: this.toEnrolledCourseDto(enrollment.course),
+      rating: enrollment.rating,
     };
+  }
+
+  // #106 — only a learner who has actually completed this course can rate
+  // it (mirrors generateCertificate's same status check just below).
+  // Re-submitting overwrites the previous rating rather than erroring,
+  // since there's no reason to force a learner through "delete then
+  // re-add" just to change their mind.
+  async submitRating(
+    userId: string,
+    enrollmentId: string,
+    dto: SubmitRatingDto,
+  ): Promise<EnrollmentResponseDto> {
+    const enrollment = await this.enrollmentsRepo.findOne({
+      where: { id: enrollmentId },
+      relations: { user: true, course: { modules: true } },
+      order: { course: { modules: { position: 'ASC' } } },
+    });
+
+    if (!enrollment) {
+      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+    }
+
+    if (enrollment.user.id !== userId) {
+      throw new ForbiddenException('This enrollment does not belong to you');
+    }
+
+    if (enrollment.status !== 'complete') {
+      throw new BadRequestException('You can only rate a course after completing it');
+    }
+
+    enrollment.rating = dto.rating;
+    const saved = await this.enrollmentsRepo.save(enrollment);
+
+    return this.toResponseDto(saved);
   }
 
   private toEnrolledCourseDto(course: Course): EnrolledCourseDto {

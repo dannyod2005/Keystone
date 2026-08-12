@@ -4,6 +4,7 @@ import { EnrollmentsService } from './enrollments.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { EnrollmentResponseDto } from './dto/enrollment-response.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
+import { SubmitRatingDto } from './dto/submit-rating.dto';
 import { Enrollment } from './entities/enrollment.entity';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 
@@ -38,6 +39,16 @@ export class EnrollmentsController {
     @Body() dto: UpdateProgressDto,
   ): Promise<EnrollmentResponseDto> {
     return this.enrollmentsService.updateProgress(req.user.id, id, dto);
+  }
+
+  @Patch(':id/rating')
+  @UseGuards(SupabaseAuthGuard)
+  submitRating(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: SubmitRatingDto,
+  ): Promise<EnrollmentResponseDto> {
+    return this.enrollmentsService.submitRating(req.user.id, id, dto);
   }
 
   @Get(':id/certificate')
