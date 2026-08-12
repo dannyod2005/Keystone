@@ -5,7 +5,7 @@ import { Stars, CategoryDot } from "../../components/common/Primitives";
 
 /* ---------- Course detail modal ---------- */
 
-export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, isEnrolled }) {
+export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, isEnrolled, enrolling }) {
   if (!course) return null;
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 20 }}>
@@ -79,9 +79,15 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
             credits content above it is (#75). Own background + top
             border so scrolled content doesn't show through underneath it. */}
         <div style={{ position: "sticky", bottom: 0, background: "var(--paper-2)", borderTop: "1px solid var(--line)", padding: "16px 28px" }}>
-          <button className="ks-btn ks-btn-gold" style={{ width: "100%", justifyContent: "center", padding: "12px 0", fontSize: 15 }}
+          <button className="ks-btn ks-btn-gold"
+            style={{ width: "100%", justifyContent: "center", padding: "12px 0", fontSize: 15, opacity: enrolling ? 0.6 : 1, cursor: enrolling ? "default" : "pointer" }}
+            disabled={enrolling}
             onClick={() => (isEnrolled ? onGoToDashboard() : onEnrol(course))}>
-            {isEnrolled ? <><CheckCircle2 size={16} /> Already enrolled — go to My learning</> : <>Enrol now <ArrowRight size={15} /></>}
+            {enrolling
+              ? <>Enrolling…</>
+              : isEnrolled
+              ? <><CheckCircle2 size={16} /> Already enrolled — go to My learning</>
+              : <>Enrol now <ArrowRight size={15} /></>}
           </button>
         </div>
       </div>

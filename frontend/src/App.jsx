@@ -121,6 +121,7 @@ function KeystonePrototype() {
 
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [enrolled, setEnrolled] = useState([]);
+  const [enrolling, setEnrolling] = useState(false); // #154 — the in-flight POST /enrollments request, so CourseDetailModal's Enrol button can disable/show pending state instead of allowing a double-click.
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
@@ -397,6 +398,7 @@ function KeystonePrototype() {
       return;
     }
 
+    setEnrolling(true);
     try {
       const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
         method: "POST",
@@ -418,6 +420,8 @@ function KeystonePrototype() {
     } catch (err) {
       setToast(`Couldn't enrol: ${err.message}`);
       setTimeout(() => setToast(null), 3200);
+    } finally {
+      setEnrolling(false);
     }
 
     setSelectedCourse(null);
@@ -799,6 +803,7 @@ function KeystonePrototype() {
         onEnrol={handleEnrol}
         onGoToDashboard={() => { setSelectedCourse(null); navigate("/dashboard"); }}
         isEnrolled={selectedCourse ? enrolledIds.includes(selectedCourse.id) : false}
+        enrolling={enrolling}
       />
 
       <AuthModal
