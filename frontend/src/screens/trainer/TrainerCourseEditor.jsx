@@ -19,11 +19,40 @@ function emptyCourseDraft() {
 function emptyQuestion() {
   return {
     question: "",
+    // #40 — 'mcq' (default) or 'short_answer'. Both `options` and
+    // `acceptableAnswers` are always kept on the question object so
+    // toggling the type in the UI doesn't lose or need to re-init state;
+    // only the field matching `type` is actually sent to the backend
+    // (see handleSaveQuiz).
+    type: "mcq",
     options: [
       { optionText: "", isCorrect: true },
       { optionText: "", isCorrect: false },
     ],
+    acceptableAnswers: [""],
   };
+}
+
+// #40 — the edit-quiz fetch/save endpoints return QuizQuestionEditResponseDto
+// shape, where a short_answer question's acceptable answers are carried in
+// `options` (isCorrect always true — see the backend QuizOption entity
+// comment). Normalize that into the editor's `acceptableAnswers` array and
+// backfill a blank MCQ options pair, so the shape is uniform regardless of
+// which type the question currently is.
+function normalizeLoadedQuestion(q) {
+  const type = q.type ?? "mcq";
+  if (type === "short_answer") {
+    return {
+      ...q,
+      type,
+      acceptableAnswers: q.options && q.options.length > 0 ? q.options.map((o) => o.optionText) : [""],
+      options: [
+        { optionText: "", isCorrect: true },
+        { optionText: "", isCorrect: false },
+      ],
+    };
+  }
+  return { ...q, type, acceptableAnswers: [""] };
 }
 
 export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz, onFetchProvider, onFetchProfile }) {
@@ -144,7 +173,7 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
           ...prev[moduleId],
           loading: false,
           loaded: true,
-          questions: questions.length > 0 ? questions : [emptyQuestion()],
+          questions: questions.length > 0 ? questions.map(normalizeLoadedQuestion) : [emptyQuestion()],
           error: null,
         },
       }));
@@ -209,12 +238,48 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
     );
   }
 
+  // #40 — question type toggle (mcq / short_answer). Switching type doesn't
+  // clear the other shape's data, so accidental toggles are non-destructive.
+  function setQuestionType(moduleId, qIndex, type) {
+    updateQuestions(moduleId, (qs) => qs.map((q, i) => (i === qIndex ? { ...q, type } : q)));
+  }
+
+  function setAcceptableAnswer(moduleId, qIndex, aIndex, text) {
+    updateQuestions(moduleId, (qs) =>
+      qs.map((q, i) =>
+        i === qIndex
+          ? { ...q, acceptableAnswers: q.acceptableAnswers.map((a, x) => (x === aIndex ? text : a)) }
+          : q,
+      ),
+    );
+  }
+
+  function addAcceptableAnswer(moduleId, qIndex) {
+    updateQuestions(moduleId, (qs) =>
+      qs.map((q, i) => (i === qIndex ? { ...q, acceptableAnswers: [...q.acceptableAnswers, ""] } : q)),
+    );
+  }
+
+  function removeAcceptableAnswer(moduleId, qIndex, aIndex) {
+    updateQuestions(moduleId, (qs) =>
+      qs.map((q, i) =>
+        i === qIndex ? { ...q, acceptableAnswers: q.acceptableAnswers.filter((_, x) => x !== aIndex) } : q,
+      ),
+    );
+  }
+
   function quizValidationError(questions) {
     for (const q of questions) {
       if (!q.question.trim()) return "Every question needs text.";
-      if (q.options.length < 2) return "Every question needs at least 2 options.";
-      if (q.options.some((o) => !o.optionText.trim())) return "Every option needs text.";
-      if (q.options.filter((o) => o.isCorrect).length !== 1) return "Every question needs exactly one correct option.";
+      if (q.type === "short_answer") {
+        if (q.acceptableAnswers.filter((a) => a.trim()).length < 1) {
+          return "Every short-answer question needs at least 1 acceptable answer.";
+        }
+      } else {
+        if (q.options.length < 2) return "Every question needs at least 2 options.";
+        if (q.options.some((o) => !o.optionText.trim())) return "Every option needs text.";
+        if (q.options.filter((o) => o.isCorrect).length !== 1) return "Every question needs exactly one correct option.";
+      }
     }
     return null;
   }
@@ -231,11 +296,16 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       questions: questions.map((q) => ({
         ...(q.id ? { id: q.id } : {}),
         question: q.question,
-        options: q.options.map((o) => ({
-          ...(o.id ? { id: o.id } : {}),
-          optionText: o.optionText,
-          isCorrect: o.isCorrect,
-        })),
+        type: q.type,
+        ...(q.type === "short_answer"
+          ? { acceptableAnswers: q.acceptableAnswers.map((a) => a.trim()).filter((a) => a.length > 0) }
+          : {
+              options: q.options.map((o) => ({
+                ...(o.id ? { id: o.id } : {}),
+                optionText: o.optionText,
+                isCorrect: o.isCorrect,
+              })),
+            }),
       })),
     };
 
@@ -255,7 +325,11 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
 
       setQuizState((prev) => ({
         ...prev,
-        [moduleId]: { ...prev[moduleId], saving: false, questions: saved.length > 0 ? saved : [emptyQuestion()] },
+        [moduleId]: {
+          ...prev[moduleId],
+          saving: false,
+          questions: saved.length > 0 ? saved.map(normalizeLoadedQuestion) : [emptyQuestion()],
+        },
       }));
     } catch (err) {
       if (saveSequenceRef.current[moduleId] !== mySequence) return;
@@ -422,32 +496,65 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                                   onChange={(e) => setQuestionText(m.id, qIndex, e.target.value)}
                                   placeholder={`Question ${qIndex + 1}`}
                                 />
+                                <select
+                                  style={{ ...rowInput, width: "auto", flexShrink: 0 }}
+                                  value={q.type}
+                                  onChange={(e) => setQuestionType(m.id, qIndex, e.target.value)}
+                                  title="Question type"
+                                >
+                                  <option value="mcq">Multiple choice</option>
+                                  <option value="short_answer">Short answer</option>
+                                </select>
                                 <Trash2 size={15} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 9, flexShrink: 0 }} onClick={() => removeQuestion(m.id, qIndex)} />
                               </div>
-                              {q.options.map((o, oIndex) => (
-                                <div key={o.id ?? `newo-${oIndex}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, marginLeft: 12 }}>
-                                  <input
-                                    type="radio"
-                                    name={`correct-${m.id}-${qIndex}`}
-                                    checked={o.isCorrect}
-                                    onChange={() => setCorrectOption(m.id, qIndex, oIndex)}
-                                    title="Mark as correct answer"
-                                  />
-                                  <input
-                                    style={{ ...rowInput, flex: 1 }}
-                                    value={o.optionText}
-                                    onChange={(e) => setOptionText(m.id, qIndex, oIndex, e.target.value)}
-                                    placeholder={`Option ${oIndex + 1}`}
-                                  />
-                                  <Trash2 size={14} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeOption(m.id, qIndex, oIndex)} />
-                                </div>
-                              ))}
-                              <span
-                                onClick={() => addOption(m.id, qIndex)}
-                                style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer", marginLeft: 12 }}
-                              >
-                                + Add option
-                              </span>
+                              {q.type === "short_answer" ? (
+                                <>
+                                  {q.acceptableAnswers.map((a, aIndex) => (
+                                    <div key={aIndex} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, marginLeft: 12 }}>
+                                      <input
+                                        style={{ ...rowInput, flex: 1 }}
+                                        value={a}
+                                        onChange={(e) => setAcceptableAnswer(m.id, qIndex, aIndex, e.target.value)}
+                                        placeholder={`Acceptable answer ${aIndex + 1}`}
+                                      />
+                                      <Trash2 size={14} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeAcceptableAnswer(m.id, qIndex, aIndex)} />
+                                    </div>
+                                  ))}
+                                  <span
+                                    onClick={() => addAcceptableAnswer(m.id, qIndex)}
+                                    style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer", marginLeft: 12 }}
+                                  >
+                                    + Add acceptable answer
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  {q.options.map((o, oIndex) => (
+                                    <div key={o.id ?? `newo-${oIndex}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, marginLeft: 12 }}>
+                                      <input
+                                        type="radio"
+                                        name={`correct-${m.id}-${qIndex}`}
+                                        checked={o.isCorrect}
+                                        onChange={() => setCorrectOption(m.id, qIndex, oIndex)}
+                                        title="Mark as correct answer"
+                                      />
+                                      <input
+                                        style={{ ...rowInput, flex: 1 }}
+                                        value={o.optionText}
+                                        onChange={(e) => setOptionText(m.id, qIndex, oIndex, e.target.value)}
+                                        placeholder={`Option ${oIndex + 1}`}
+                                      />
+                                      <Trash2 size={14} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeOption(m.id, qIndex, oIndex)} />
+                                    </div>
+                                  ))}
+                                  <span
+                                    onClick={() => addOption(m.id, qIndex)}
+                                    style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer", marginLeft: 12 }}
+                                  >
+                                    + Add option
+                                  </span>
+                                </>
+                              )}
                             </div>
                           ))}
 
