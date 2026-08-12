@@ -384,6 +384,22 @@ export class ModulesService {
     });
   }
 
+  // #124 — called once per module focus from the frontend (fire-and-forget,
+  // no response body needed). Existence-checks the module for a clean 404
+  // like the other module-scoped endpoints, but deliberately doesn't
+  // bother looking up the profile first the way saveNote does — there's no
+  // row to attach it to besides the activity_events insert itself, and
+  // ActivityService.logModuleView already dedupes per (user, module, day),
+  // so a lookup here would just be extra latency on a lightweight ping.
+  async logView(userId: string, moduleId: string): Promise<void> {
+    const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
+    if (!module) {
+      throw new NotFoundException(`Module with id "${moduleId}" not found`);
+    }
+
+    await this.activityService.logModuleView(userId, moduleId);
+  }
+
   async getNote(userId: string, moduleId: string): Promise<NoteResponseDto> {
     const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
     if (!module) {
