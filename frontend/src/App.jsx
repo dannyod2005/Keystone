@@ -11,6 +11,7 @@ import { AppTopbar } from "./components/layout/AppTopbar";
 
 import { CourseDetailModal } from "./components/modals/CourseDetailModal";
 import { AuthModal } from "./components/modals/AuthModal";
+import { GoalOnboardingModal } from "./components/modals/GoalOnboardingModal";
 
 import { HomeScreen } from "./screens/HomeScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
@@ -52,7 +53,7 @@ function normalizeCourse(c) {
 }
 
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
-function AppShell({ loggedIn, role, onLogout, title, children, user }) {
+function AppShell({ loggedIn, role, onLogout, title, children, user, goal }) {
   const location = useLocation();
   const screen = screenKeyFromPath(location.pathname);
   const navigate = useNavigate();
@@ -79,6 +80,7 @@ function AppShell({ loggedIn, role, onLogout, title, children, user }) {
           role={role}
           onLogout={onLogout}
           user={user}
+          goal={goal}
           mobileOpen={mobileNavOpen}
           onCloseMobile={() => setMobileNavOpen(false)}
         />
@@ -163,6 +165,14 @@ function KeystonePrototype() {
     goalHitDays: 0,
     week: [],
   });
+  // #107 — profiles.goal: null until a learner picks one via the
+  // onboarding modal below (or never, if they skip — that's a permanent,
+  // fine end state, not a "loading" one). goalLoaded distinguishes "not
+  // fetched yet" from "fetched, confirmed null" so the trigger effect below
+  // never fires on a stale/pre-fetch value.
+  const [learnerGoal, setLearnerGoal] = useState(null);
+  const [goalLoaded, setGoalLoaded] = useState(false);
+  const [showGoalOnboarding, setShowGoalOnboarding] = useState(false);
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -238,6 +248,52 @@ function KeystonePrototype() {
       .then(setActivitySummary)
       .catch((err) => console.error("Failed to load activity summary:", err.message));
   }, [loggedIn, session]);
+
+  // #107 — learner's goal (profiles.goal), replacing the old LEARNER.goal
+  // mock. Same re-run/reset-on-logout pattern as activitySummary above.
+  // A 404 here (shouldn't normally happen — handle_new_user() always
+  // creates a profile row) is treated the same as "no goal set" rather
+  // than surfaced as an error. goalLoaded only flips true once we actually
+  // know the answer (a thrown/network error leaves it false, deliberately
+  // — see the trigger effect below for why that matters), and resets to
+  // false on logout so a stale "loaded" flag can't survive into a
+  // different account's session.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setLearnerGoal(null);
+      setGoalLoaded(false);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/profiles/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((profile) => {
+        setLearnerGoal(profile?.goal ?? null);
+        setGoalLoaded(true);
+      })
+      .catch((err) => console.error("Failed to load profile:", err.message));
+  }, [loggedIn, session]);
+
+  // #107 — shows the onboarding modal once conditions are actually known
+  // to be true, rather than only right after a signup event: signing up
+  // doesn't always yield an immediate session (Supabase's "confirm your
+  // email" flow means the first real session for a lot of accounts is a
+  // later *login*, not the signup itself), so gating this on a signup-only
+  // callback silently never showed it for any account that had to confirm
+  // its email first. Deriving it from "logged in, learner, and we've
+  // confirmed the profile has no goal" instead fires correctly regardless
+  // of how that session came about, and naturally covers pre-existing
+  // accounts (e.g. the seeded demo learners) too. Only runs once per
+  // login — skipping doesn't change any of this effect's dependencies, so
+  // it won't re-trigger itself for the rest of the session; it'll offer
+  // again next login/reload as long as goal is still unset.
+  useEffect(() => {
+    if (loggedIn && role === "learner" && goalLoaded && learnerGoal === null) {
+      setShowGoalOnboarding(true);
+    }
+  }, [loggedIn, role, goalLoaded, learnerGoal]);
 
   // Fire-and-forget refresh after an action that logs activity server-side
   // (module completed, quiz submitted, note saved, forum post made) — so
@@ -593,6 +649,34 @@ function KeystonePrototype() {
     return res.json();
   }
 
+  // #107 — called by GoalOnboardingModal when a learner taps a category.
+  // Throws on failure (the modal catches it and lets them retry) rather
+  // than swallowing the error, unlike most fire-and-forget calls in this
+  // file — this one has a visible loading/retry state in its caller.
+  async function updateGoal(goal) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ goal }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const updated = await res.json();
+    setLearnerGoal(updated.goal);
+    setShowGoalOnboarding(false);
+  }
+
+  function skipGoalOnboarding() {
+    setShowGoalOnboarding(false);
+  }
+
   // #139 — Team tab. GET /providers/me 404s for "not a member of a
   // provider" (see ProvidersService.getMine) — that's a normal, expected
   // state here (the no-provider view), not an error, so it's translated
@@ -766,7 +850,7 @@ function KeystonePrototype() {
           path="/"
           element={
             loggedIn ? (
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user} goal={learnerGoal}>
                 <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
               </AppShell>
             ) : (
@@ -778,7 +862,7 @@ function KeystonePrototype() {
         <Route
           path="/catalogue"
           element={
-            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
               <CatalogueScreen
                 loggedIn={loggedIn}
                 onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
@@ -796,7 +880,7 @@ function KeystonePrototype() {
           path="/dashboard"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
                 <DashboardScreen
                   enrolled={enrolled}
                   onOpenCourse={setSelectedCourse}
@@ -804,6 +888,7 @@ function KeystonePrototype() {
                   courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
                   user={user}
+                  goal={learnerGoal}
                   activitySummary={activitySummary}
                   loading={coursesLoading || enrolledLoading}
                 />
@@ -816,7 +901,7 @@ function KeystonePrototype() {
           path="/learning/:courseId"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
                 <LearningRoute
                   courses={coursesForLearners}
                   enrolled={enrolled}
@@ -843,7 +928,7 @@ function KeystonePrototype() {
           element={
             <RequireAuth loggedIn={loggedIn}>
               <RequireTrainer role={role}>
-                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
+                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
                   <TrainerScreen
                     courses={courses}
                     onSaveCourse={saveCourse}
@@ -881,6 +966,12 @@ function KeystonePrototype() {
         mode={authMode}
         onClose={() => { setAuthMode(null); setPendingCourse(null); }}
         onSubmit={handleAuthSubmit}
+      />
+
+      <GoalOnboardingModal
+        open={showGoalOnboarding}
+        onSelect={updateGoal}
+        onSkip={skipGoalOnboarding}
       />
 
       {toast && (
