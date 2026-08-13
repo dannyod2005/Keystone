@@ -1006,6 +1006,7 @@ function KeystonePrototype() {
                 enrolledIds={enrolledIds}
                 courses={courses}
                 loading={coursesLoading}
+                goal={learnerGoal}
               />
             </AppShell>
           }
