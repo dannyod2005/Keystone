@@ -110,13 +110,30 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
+function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
   const enrollment = enrolled.find((e) => e.courseId === courseId);
 
+  // #181 — `courses` (the public catalogue fetch) and `enrolled` (needed
+  // both for the enrollment lookup below and, via `coursesForLearners`,
+  // for courses a learner is enrolled in that have since left the public
+  // catalogue) are both still empty on a fresh page load — a hard reload
+  // or direct navigation to this URL — until their fetches resolve. A
+  // "not found" redirect here can't be trusted until both have actually
+  // loaded; earlier this fired on that empty-array startup state instead
+  // of waiting, bouncing straight to /dashboard before the real data ever
+  // arrived. Show a loading state instead, and only redirect once loading
+  // is done and the course still genuinely isn't found.
   if (!course) {
+    if (coursesLoading || enrolledLoading) {
+      return (
+        <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
+          Loading course…
+        </div>
+      );
+    }
     return <Navigate to="/dashboard" replace />;
   }
   return (
@@ -905,6 +922,8 @@ function KeystonePrototype() {
                 <LearningRoute
                   courses={coursesForLearners}
                   enrolled={enrolled}
+                  coursesLoading={coursesLoading}
+                  enrolledLoading={enrolledLoading}
                   onSaveProgress={saveProgress}
                   onSubmitRating={submitRating}
                   onLogModuleView={logModuleView}
