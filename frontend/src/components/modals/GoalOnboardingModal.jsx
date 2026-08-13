@@ -7,11 +7,14 @@ const OPTIONS = [
   { value: "Leadership", label: "Leadership", blurb: "Managing people and leading teams.", icon: Compass },
 ];
 
-// #107 — shown once, right after a learner signs up (see App.jsx's
-// handleAuthSubmit; never shown for logins or trainer accounts). Never
-// blocks: skipping just leaves profiles.goal null, same state as an
-// existing account that predates this feature — Dashboard and the sidebar
-// already treat a missing goal as "don't show it" rather than requiring one.
+// #107/#189 — shown to any account (learner or trainer — see App.jsx's
+// trigger effect) the first time we've confirmed their profile has no
+// goal set yet, regardless of how they logged in. Never blocks: skipping
+// just leaves profiles.goal null, same state as an existing account that
+// predates this feature — Dashboard and the sidebar already treat a
+// missing goal as "don't show it" rather than requiring one. For a
+// trainer, this only ever feeds their own learner-facing views
+// (Catalogue/Dashboard) — it has no bearing on Trainer Studio.
 // Same "always mounted, closing animates before actually disappearing"
 // shape as AuthModal/CourseDetailModal (#105), keyed on `open` here since
 // there's no external content (like a course) to preserve through the close.

@@ -26,9 +26,9 @@ export class ProfilesController {
     return this.profilesService.getMine(req.user.id);
   }
 
-  // #107 — onboarding modal calls this once, right after a learner signs
-  // up, to set their interest category. Guard is the same as getMine
-  // (any authenticated user acting on their own row); the
+  // #107/#189 — onboarding modal calls this once a learner or trainer
+  // picks their interest category. Guard is the same as getMine (any
+  // authenticated user acting on their own row, regardless of role) — the
   // profiles_update_own RLS policy mirrors this for direct-Supabase access.
   @Patch('me')
   @UseGuards(SupabaseAuthGuard)

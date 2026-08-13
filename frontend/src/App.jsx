@@ -309,18 +309,24 @@ function KeystonePrototype() {
   // email" flow means the first real session for a lot of accounts is a
   // later *login*, not the signup itself), so gating this on a signup-only
   // callback silently never showed it for any account that had to confirm
-  // its email first. Deriving it from "logged in, learner, and we've
-  // confirmed the profile has no goal" instead fires correctly regardless
-  // of how that session came about, and naturally covers pre-existing
-  // accounts (e.g. the seeded demo learners) too. Only runs once per
-  // login — skipping doesn't change any of this effect's dependencies, so
-  // it won't re-trigger itself for the rest of the session; it'll offer
-  // again next login/reload as long as goal is still unset.
+  // its email first. Deriving it from "logged in and we've confirmed the
+  // profile has no goal" instead fires correctly regardless of how that
+  // session came about, and naturally covers pre-existing accounts (e.g.
+  // the seeded demo learners) too. Only runs once per login — skipping
+  // doesn't change any of this effect's dependencies, so it won't
+  // re-trigger itself for the rest of the session; it'll offer again next
+  // login/reload as long as goal is still unset.
+  //
+  // #189 — no longer gated on role === "learner". A trainer account can
+  // enrol in and take courses just like a learner (Trainer Studio is an
+  // additional capability layered on top, not a separate account type),
+  // so they should get asked for a goal too — it only ever affects their
+  // own learner-facing views (Catalogue/Dashboard), never Trainer Studio.
   useEffect(() => {
-    if (loggedIn && role === "learner" && goalLoaded && learnerGoal === null) {
+    if (loggedIn && goalLoaded && learnerGoal === null) {
       setShowGoalOnboarding(true);
     }
-  }, [loggedIn, role, goalLoaded, learnerGoal]);
+  }, [loggedIn, goalLoaded, learnerGoal]);
 
   // Fire-and-forget refresh after an action that logs activity server-side
   // (module completed, quiz submitted, note saved, forum post made) — so
