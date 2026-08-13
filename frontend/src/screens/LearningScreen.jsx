@@ -12,6 +12,19 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     : 0;
 
   const [activeModule, setActiveModule] = useState(initialActiveModule);
+  // #180 — activeModule doubles as "which module's content is currently
+  // shown" (video/notes/quiz/forum tabs, sidebar highlight) and, before
+  // this fix, was also what the progress bar and checkmarks read from.
+  // The sidebar list's onClick is a preview/jump — it was never meant to
+  // represent real progress — but since it just called setActiveModule
+  // like everything else, previewing module 4 made modules 1-3 look
+  // complete even though nothing had been saved, and reloading (which
+  // re-derives activeModule from the real enrollment.progress) reverted
+  // it, looking like lost progress. completedCount is the actual
+  // persisted progress: seeded from the same enrollment.progress value,
+  // but only ever advanced by handleMarkComplete below — never by
+  // sidebar preview clicks.
+  const [completedCount, setCompletedCount] = useState(initialActiveModule);
   const [saving, setSaving] = useState(false);
 
   // #106 — star-rating prompt on the "Course complete" card. hoverRating
@@ -161,6 +174,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   async function handleMarkComplete() {
     const nextActiveModule = isLastModule ? modules.length : activeModule + 1;
     setActiveModule(nextActiveModule);
+    setCompletedCount(nextActiveModule);
 
     if (!enrollment || !onSaveProgress) return;
 
@@ -675,12 +689,12 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
           <div className="ks-card" style={{ padding: 16, marginBottom: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Course progress</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)" }}>{Math.round((Math.min(activeModule, modules.length) / modules.length) * 100)}%</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)" }}>{Math.round((Math.min(completedCount, modules.length) / modules.length) * 100)}%</span>
             </div>
             <div style={{ height: 8, background: "var(--line)", borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(Math.min(activeModule, modules.length) / modules.length) * 100}%`, background: "var(--gold)", borderRadius: 4, transition: "width .2s ease" }} />
+              <div style={{ height: "100%", width: `${(Math.min(completedCount, modules.length) / modules.length) * 100}%`, background: "var(--gold)", borderRadius: 4, transition: "width .2s ease" }} />
             </div>
-            <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 8, marginBottom: 14 }}>{Math.min(activeModule, modules.length)} of {modules.length} modules complete</div>
+            <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 8, marginBottom: 14 }}>{Math.min(completedCount, modules.length)} of {modules.length} modules complete</div>
             <hr className="ks-hairline" style={{ margin: "0 0 10px" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {modules.map((m, i) => (
@@ -688,7 +702,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                   display: "flex", alignItems: "center", gap: 10, padding: "8px 8px", borderRadius: 8, cursor: "pointer",
                   background: i === activeModule ? "var(--gold-tint)" : "transparent",
                 }}>
-                  {i < activeModule ? <CheckCircle2 size={15} color="var(--success)" /> : i === activeModule ? <PlayCircle size={15} color="var(--gold-dark)" /> : <span style={{ width: 15, height: 15, borderRadius: 99, border: "1.5px solid var(--line)", flexShrink: 0 }} />}
+                  {i < completedCount ? <CheckCircle2 size={15} color="var(--success)" /> : i === activeModule ? <PlayCircle size={15} color="var(--gold-dark)" /> : <span style={{ width: 15, height: 15, borderRadius: 99, border: "1.5px solid var(--line)", flexShrink: 0 }} />}
                   <span style={{ fontSize: 13, fontWeight: i === activeModule ? 600 : 400 }}>{m.title}</span>
                 </div>
               ))}
