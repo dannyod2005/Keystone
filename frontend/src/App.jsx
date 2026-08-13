@@ -13,6 +13,7 @@ import { CourseDetailModal } from "./components/modals/CourseDetailModal";
 import { AuthModal } from "./components/modals/AuthModal";
 import { GoalOnboardingModal } from "./components/modals/GoalOnboardingModal";
 import { RoleOnboardingModal } from "./components/modals/RoleOnboardingModal";
+import { ResetPasswordModal } from "./components/modals/ResetPasswordModal";
 
 import { HomeScreen } from "./screens/HomeScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
@@ -163,7 +164,7 @@ function KeystonePrototype() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const { user, session, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading, passwordRecovery, clearPasswordRecovery } = useAuth();
   const loggedIn = !!user;
   const role = user?.user_metadata?.role || "learner";
 
@@ -892,6 +893,20 @@ function KeystonePrototype() {
     navigate("/");
   }
 
+  // #187 — called by ResetPasswordModal once the PASSWORD_RECOVERY session
+  // (from clicking the emailed reset link) is used to actually set a new
+  // password. Throws on failure — same "let the modal show the error and
+  // allow retry" contract as updateGoal/updateRole above — rather than
+  // swallowing it here.
+  async function handleSetNewPassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+
+    clearPasswordRecovery();
+    setToast("Password updated");
+    setTimeout(() => setToast(null), 2600);
+  }
+
   function handleEnrol(course) {
     if (!loggedIn) {
       setPendingCourse(course);
@@ -1071,6 +1086,12 @@ function KeystonePrototype() {
       <RoleOnboardingModal
         open={showRoleOnboarding}
         onSelect={updateRole}
+      />
+
+      <ResetPasswordModal
+        open={passwordRecovery}
+        onSubmit={handleSetNewPassword}
+        onClose={clearPasswordRecovery}
       />
 
       <GoalOnboardingModal
