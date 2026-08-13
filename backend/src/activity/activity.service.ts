@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { ActivityEvent } from './entities/activity-event.entity';
@@ -26,6 +26,8 @@ const MODULE_VIEW_MINUTES = 3;
 
 @Injectable()
 export class ActivityService {
+  private readonly logger = new Logger(ActivityService.name);
+
   constructor(
     @InjectRepository(ActivityEvent)
     private readonly activityRepo: Repository<ActivityEvent>,
@@ -46,6 +48,17 @@ export class ActivityService {
   // split completion event to the day it was really earned rather than
   // the day "Mark complete" was clicked. Left undefined, TypeORM's
   // @CreateDateColumn behaves exactly as before.
+  //
+  // #178 — that "shouldn't be allowed to fail the action itself" intent
+  // was only actually enforced for the missing-minutes case above; the DB
+  // write itself wasn't guarded, so any failure here (e.g. the
+  // activity_events schema drifting out from under the entity) propagated
+  // straight up and took the caller's whole request down with it — this
+  // is exactly how forum post creation ended up 500ing even though the
+  // post itself had already been saved successfully. Activity logging is
+  // a best-effort side effect, never load-bearing for the action that
+  // triggered it, so failures here are now caught and logged rather than
+  // thrown.
   async logEvent(
     userId: string,
     source: string,
@@ -54,16 +67,22 @@ export class ActivityService {
   ): Promise<void> {
     if (!minutes || minutes <= 0) return;
 
-    const event = this.activityRepo.create({
-      user: { id: userId } as Profile,
-      source,
-      minutes,
-      module: opts?.moduleId ? ({ id: opts.moduleId } as CourseModule) : null,
-    });
-    if (opts?.occurredAt) {
-      event.occurredAt = opts.occurredAt;
+    try {
+      const event = this.activityRepo.create({
+        user: { id: userId } as Profile,
+        source,
+        minutes,
+        module: opts?.moduleId ? ({ id: opts.moduleId } as CourseModule) : null,
+      });
+      if (opts?.occurredAt) {
+        event.occurredAt = opts.occurredAt;
+      }
+      await this.activityRepo.save(event);
+    } catch (err) {
+      this.logger.error(
+        `Failed to log activity event (userId=${userId}, source=${source}): ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
-    await this.activityRepo.save(event);
   }
 
   // #124 — one credit per (user, module, day), regardless of how many
@@ -75,15 +94,27 @@ export class ActivityService {
     const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const dayEnd = addDaysUTC(dayStart, 1);
 
-    const existing = await this.activityRepo.findOne({
-      where: {
-        user: { id: userId },
-        module: { id: moduleId },
-        source: 'module_view',
-        occurredAt: Between(dayStart, dayEnd),
-      },
-    });
-    if (existing) return;
+    // #178 — same fault-tolerance as logEvent below: this dedup check is
+    // itself a DB read against activity_events, so it can fail for the
+    // same reasons logEvent's write can. Guarded the same way, since
+    // logView (the caller) has already done its own real work (confirming
+    // the module exists) by the time this runs.
+    try {
+      const existing = await this.activityRepo.findOne({
+        where: {
+          user: { id: userId },
+          module: { id: moduleId },
+          source: 'module_view',
+          occurredAt: Between(dayStart, dayEnd),
+        },
+      });
+      if (existing) return;
+    } catch (err) {
+      this.logger.error(
+        `Failed to check existing module_view activity (userId=${userId}, moduleId=${moduleId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
 
     await this.logEvent(userId, 'module_view', MODULE_VIEW_MINUTES, { moduleId });
   }
