@@ -43,6 +43,15 @@ export class ModulesController {
     return this.modulesService.submitQuiz(req.user.id, id, dto);
   }
 
+  @Post(':id/view')
+  @UseGuards(SupabaseAuthGuard)
+  logView(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.modulesService.logView(req.user.id, id);
+  }
+
   @Get(':id/notes')
   @UseGuards(SupabaseAuthGuard)
   getNote(

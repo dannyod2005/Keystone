@@ -1,14 +1,13 @@
 import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame } from "lucide-react";
 
-import { LEARNER } from "../data/courses";
 import { KeystoneArch } from "../components/common/Primitives";
-import { getDisplayName } from "../lib/userDisplay";
+import { getDisplayName, getFirstName } from "../lib/userDisplay";
 /* ---------- Screen: Dashboard ---------- */
 
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 30, goalHitDays: 0, week: [] };
 
-export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false }) {
-  const firstName = getDisplayName(user).split(" ")[0];
+export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false }) {
+  const firstName = getFirstName(getDisplayName(user));
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
   // #86 — "in-progress" (not yet complete) splits into two display groups:
@@ -16,9 +15,9 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
   // (progress === 0, no lastAccessed yet — the two are set together in
   // the same backend call, so either is an equivalent signal). Kept as a
   // separate split from `inProgress` above rather than redefining it, so
-  // the stat tiles and "learned across N courses" below still count every
   // non-complete enrollment, same as before — only the list rendering
   // distinguishes the two.
+  const enrolledCourseCount = inProgress.length + complete.length;
   const notStarted = inProgress.filter((e) => e.progress === 0);
   const continuing = inProgress.filter((e) => e.progress > 0);
 
@@ -37,11 +36,16 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
   }
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 1080 }}>
+    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080 }}>
       <div className="ks-card" style={{ padding: "20px 24px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>Good morning, {firstName}</div>
-          <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>Your goal: <b style={{ color: "var(--ink)" }}>{LEARNER.goal}</b></div>
+          {/* #107 — goal is null until a learner picks one via the
+              onboarding modal (or if they skipped it); hidden entirely
+              rather than showing an empty/placeholder line. */}
+          {goal && (
+            <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>Your goal: <b style={{ color: "var(--ink)" }}>{goal}</b></div>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--gold-tint)", padding: "8px 14px", borderRadius: 100 }}>
           <Flame size={16} color="var(--gold-dark)" />
@@ -49,7 +53,9 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
+      {/* #104 — single column on mobile, 2fr/1fr from md up; column layout
+          is the only breakpoint-dependent property here. */}
+      <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr]" style={{ gap: 20 }}>
         <div>
           {loading ? (
             <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
@@ -57,13 +63,13 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
             </div>
           ) : (
           <>
-          <div style={{ display: "flex", gap: 14, marginBottom: 22 }}>
+          <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
             {[
               { label: "In progress", value: inProgress.length, icon: PlayCircle, tint: "var(--gold-tint)", fg: "var(--gold-dark)" },
               { label: "Completed", value: complete.length, icon: CheckCircle2, tint: "var(--success-tint)", fg: "var(--success)" },
               { label: "Certificates", value: complete.length, icon: Award, tint: "var(--coral-tint)", fg: "var(--coral)" },
             ].map((s) => (
-              <div key={s.label} className="ks-card" style={{ flex: 1, padding: 16 }}>
+              <div key={s.label} className="ks-card" style={{ flex: 1, minWidth: 140, padding: 16 }}>
                 <div style={{ width: 30, height: 30, borderRadius: 8, background: s.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
                   <s.icon size={15} color={s.fg} />
                 </div>
@@ -173,7 +179,9 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
           <div className="ks-card" style={{ padding: 18 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>This week</div>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: 26, fontWeight: 500 }}>{activitySummary.minutesThisWeek}<span style={{ fontSize: 13, color: "var(--slate-light)" }}> min</span></div>
-            <div style={{ fontSize: 12, color: "var(--slate-light)" }}>learned across {inProgress.length + complete.length} courses</div>
+            <div style={{ fontSize: 12, color: "var(--slate-light)" }}>learning time logged</div>
+            <hr className="ks-hairline" style={{ margin: "16px 0" }} />
+            <div style={{ fontSize: 12.5, color: "var(--slate)" }}>Enrolled in {enrolledCourseCount} course{enrolledCourseCount === 1 ? "" : "s"}</div>
           </div>
         </div>
       </div>

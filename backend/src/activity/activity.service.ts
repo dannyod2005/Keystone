@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { ActivityEvent } from './entities/activity-event.entity';
 import { Profile } from '../profiles/entities/profile.entity';
+import { CourseModule } from '../courses/entities/course-module.entity';
 import { ActivitySummaryResponseDto } from './dto/activity-summary-response.dto';
 
 // Fixed for now — there's no per-user goal-setting UI yet. Matches the
@@ -14,6 +15,14 @@ const DAILY_GOAL_MIN = 30;
 // query stays cheap; generous enough that no realistic streak in this
 // prototype gets cut short.
 const STREAK_LOOKBACK_DAYS = 120;
+
+// #124 — small credit for a module being open on a given day at all,
+// independent of whether anything else (a note, a quiz) was logged that
+// day. Same scale as NOTE_SAVE_MINUTES/FORUM_POST_MINUTES in
+// modules.service.ts. Its main job isn't really the minutes — it's
+// leaving a per-day marker so logModuleCompletion below knows which days
+// to split a module's completion minutes across.
+const MODULE_VIEW_MINUTES = 3;
 
 @Injectable()
 export class ActivityService {
@@ -31,15 +40,103 @@ export class ActivityService {
   // rather than throwing: the caller has already validated the profile
   // exists as part of doing the real work, and a logging hiccup shouldn't
   // be allowed to fail the action itself.
-  async logEvent(userId: string, source: string, minutes: number): Promise<void> {
+  //
+  // #124 — `opts.occurredAt`, if given, overrides the default "right now"
+  // timestamp. Only logModuleCompletion actually uses this, to backdate a
+  // split completion event to the day it was really earned rather than
+  // the day "Mark complete" was clicked. Left undefined, TypeORM's
+  // @CreateDateColumn behaves exactly as before.
+  async logEvent(
+    userId: string,
+    source: string,
+    minutes: number,
+    opts?: { moduleId?: string; occurredAt?: Date },
+  ): Promise<void> {
     if (!minutes || minutes <= 0) return;
 
     const event = this.activityRepo.create({
       user: { id: userId } as Profile,
       source,
       minutes,
+      module: opts?.moduleId ? ({ id: opts.moduleId } as CourseModule) : null,
     });
+    if (opts?.occurredAt) {
+      event.occurredAt = opts.occurredAt;
+    }
     await this.activityRepo.save(event);
+  }
+
+  // #124 — one credit per (user, module, day), regardless of how many
+  // times the module is opened that day. Called from ModulesService.logView
+  // on every module focus; the dedup check here is what keeps repeated
+  // calls within the same day a no-op rather than stacking up minutes.
+  async logModuleView(userId: string, moduleId: string): Promise<void> {
+    const now = new Date();
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const dayEnd = addDaysUTC(dayStart, 1);
+
+    const existing = await this.activityRepo.findOne({
+      where: {
+        user: { id: userId },
+        module: { id: moduleId },
+        source: 'module_view',
+        occurredAt: Between(dayStart, dayEnd),
+      },
+    });
+    if (existing) return;
+
+    await this.logEvent(userId, 'module_view', MODULE_VIEW_MINUTES, { moduleId });
+  }
+
+  // #124 — the actual fix for the issue: instead of logging a module's
+  // whole estimated `totalMinutes` on the single day it's marked complete,
+  // split it across every distinct day the module was viewed (per
+  // logModuleView above), each dated to the day it happened. Completion
+  // day is always included even if no view was separately logged for it
+  // today — clicking "Mark complete" is itself evidence of work done that
+  // day, matching the old single-day behavior for a module worked in one
+  // sitting.
+  async logModuleCompletion(
+    userId: string,
+    moduleId: string,
+    totalMinutes: number,
+  ): Promise<void> {
+    if (!totalMinutes || totalMinutes <= 0) return;
+
+    const viewedDayKeys = await this.getViewedDayKeys(userId, moduleId);
+    const todayKey = toDateKey(new Date());
+    const dayKeys = Array.from(new Set([...viewedDayKeys, todayKey])).sort();
+
+    const base = Math.floor(totalMinutes / dayKeys.length);
+    let remainder = totalMinutes - base * dayKeys.length;
+
+    // Remainder goes to the most recent day(s) first — the day the
+    // learner actually finished feels like the natural place for the
+    // rounding-up minute(s) to land.
+    for (let i = dayKeys.length - 1; i >= 0; i--) {
+      let minutes = base;
+      if (remainder > 0) {
+        minutes += 1;
+        remainder -= 1;
+      }
+      if (minutes <= 0) continue;
+      await this.logEvent(userId, 'module_complete', minutes, {
+        moduleId,
+        occurredAt: dateKeyToNoonUTC(dayKeys[i]),
+      });
+    }
+  }
+
+  // Distinct UTC date-keys this user has a 'module_view' event for this
+  // module, ascending. Not date-bounded like getSummary's streak lookback
+  // — the result set is naturally small (however many days one learner
+  // spent on one module), so there's no cheap-query reason to cap it.
+  private async getViewedDayKeys(userId: string, moduleId: string): Promise<string[]> {
+    const events = await this.activityRepo.find({
+      where: { user: { id: userId }, module: { id: moduleId }, source: 'module_view' },
+    });
+    const keys = new Set(events.map((e) => toDateKey(e.occurredAt)));
+    return Array.from(keys).sort();
   }
 
   async getSummary(userId: string): Promise<ActivitySummaryResponseDto> {
@@ -101,6 +198,16 @@ function addDaysUTC(date: Date, days: number): Date {
   const d = new Date(date);
   d.setUTCDate(d.getUTCDate() + days);
   return d;
+}
+
+// #124 — noon UTC rather than midnight, so a backdated completion event
+// can never drift onto the adjacent day's date-key when re-read through
+// toDateKey (midnight is right on the UTC day boundary; noon has a full
+// 12-hour margin on both sides — pure defensiveness, toDateKey's own
+// slice(0, 10) wouldn't actually shift it either way, but this way the
+// intent doesn't rely on that).
+function dateKeyToNoonUTC(dateKey: string): Date {
+  return new Date(`${dateKey}T12:00:00.000Z`);
 }
 
 function startOfWeekUTC(date: Date): Date {

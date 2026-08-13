@@ -14,6 +14,7 @@ import { Course } from '../courses/entities/course.entity';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { EnrolledCourseDto, EnrollmentResponseDto } from './dto/enrollment-response.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
+import { SubmitRatingDto } from './dto/submit-rating.dto';
 import { ActivityService } from '../activity/activity.service';
 
 @Injectable()
@@ -122,16 +123,30 @@ export class EnrollmentsService {
     const newlyCompleted = Math.max(completedModules - oldCompletedModules, 0);
     if (newlyCompleted > 0 && totalModules > 0) {
       // Estimate: this course's total hours spread evenly across its
-      // modules, scaled by how many modules were newly completed this
-      // call. Not a measured duration — see #37.
+      // modules. Not a measured duration — see #37.
       const minutesPerModule = Math.round(
         (enrollment.course.hours * 60) / totalModules,
       );
-      await this.activityService.logEvent(
-        userId,
-        'module_complete',
-        newlyCompleted * minutesPerModule,
+
+      // #124 — log per specific module rather than one lump sum for
+      // "however many modules got completed this call", so each module's
+      // estimated minutes can be split across the distinct days *that*
+      // module was actually viewed (see ActivityService.logModuleCompletion)
+      // instead of all landing on whichever day this request happened to
+      // fire. enrollment.course.modules is already ordered by position
+      // (see the query above), and modules are always completed in that
+      // same order, so this slice is exactly the newly-completed ones.
+      const newlyCompletedModules = enrollment.course.modules.slice(
+        oldCompletedModules,
+        completedModules,
       );
+      for (const module of newlyCompletedModules) {
+        await this.activityService.logModuleCompletion(
+          userId,
+          module.id,
+          minutesPerModule,
+        );
+      }
     }
 
     // save() returns the same entity reference with its already-loaded
@@ -149,7 +164,42 @@ export class EnrollmentsService {
       lastAccessed: enrollment.lastAccessed,
       createdAt: enrollment.createdAt,
       course: this.toEnrolledCourseDto(enrollment.course),
+      rating: enrollment.rating,
     };
+  }
+
+  // #106 — only a learner who has actually completed this course can rate
+  // it (mirrors generateCertificate's same status check just below).
+  // Re-submitting overwrites the previous rating rather than erroring,
+  // since there's no reason to force a learner through "delete then
+  // re-add" just to change their mind.
+  async submitRating(
+    userId: string,
+    enrollmentId: string,
+    dto: SubmitRatingDto,
+  ): Promise<EnrollmentResponseDto> {
+    const enrollment = await this.enrollmentsRepo.findOne({
+      where: { id: enrollmentId },
+      relations: { user: true, course: { modules: true } },
+      order: { course: { modules: { position: 'ASC' } } },
+    });
+
+    if (!enrollment) {
+      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+    }
+
+    if (enrollment.user.id !== userId) {
+      throw new ForbiddenException('This enrollment does not belong to you');
+    }
+
+    if (enrollment.status !== 'complete') {
+      throw new BadRequestException('You can only rate a course after completing it');
+    }
+
+    enrollment.rating = dto.rating;
+    const saved = await this.enrollmentsRepo.save(enrollment);
+
+    return this.toResponseDto(saved);
   }
 
   private toEnrolledCourseDto(course: Course): EnrolledCourseDto {

@@ -1,9 +1,23 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
 
+/* #104 — Preflight is disabled (see tailwind.config.js), so this only
+   adds Tailwind's utility classes (including responsive sm:/md:/lg:
+   prefixes) on top of the existing hand-rolled styles below; it doesn't
+   reset anything. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 html, body {
   min-height: 100%;
   background: var(--paper);
   margin: 0;
+  /* #105 — stop the vertical rubber-band overscroll from revealing the
+     browser's default (non-ink) background past the top/bottom edge of
+     the page on mobile; the sticky topbar loses its "always there" feel
+     if the page can bounce past it. Horizontal (edge-swipe back/forward
+     navigation) is left alone. */
+  overscroll-behavior-y: none;
 }
 
 #root {
@@ -36,5 +50,45 @@ html, body {
 .ks-nav-item.active{ background:var(--paper-2); color:var(--ink); }
 .ks-input{ font-family:var(--font-body); border:1px solid var(--line); border-radius:9px; padding:10px 14px 10px 40px; font-size:14px; width:100%; background:var(--paper-2); outline:none; }
 .ks-input:focus{ border-color:var(--gold); }
-.ks-tab{ padding:10px 4px; font-size:14px; font-weight:600; color:var(--slate-light); cursor:pointer; border-bottom:2px solid transparent; }
+.ks-tab{ padding:10px 4px; font-size:14px; font-weight:600; color:var(--slate-light); cursor:pointer; border-bottom:2px solid transparent; transition:color .15s ease, border-color .15s ease; }
 .ks-tab.active{ color:var(--ink); border-bottom-color:var(--gold); }
+
+/* #105 — subtle UI transitions/polish.
+   Kept as a small, reusable set of keyframes + helper classes rather than
+   per-component animations, so every "open/switch/navigate" interaction in
+   the app gets the same feel. Durations are short (140-220ms) and easing
+   is a plain ease/ease-out — deliberately unremarkable, not a demo flourish. */
+@keyframes ks-fade-in{ from{ opacity:0; } to{ opacity:1; } }
+@keyframes ks-fade-slide-in{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+@keyframes ks-backdrop-in{ from{ opacity:0; } to{ opacity:1; } }
+@keyframes ks-backdrop-out{ from{ opacity:1; } to{ opacity:0; } }
+@keyframes ks-modal-in{ from{ opacity:0; transform:scale(.97) translateY(4px); } to{ opacity:1; transform:scale(1) translateY(0); } }
+@keyframes ks-modal-out{ from{ opacity:1; transform:scale(1) translateY(0); } to{ opacity:0; transform:scale(.97) translateY(4px); } }
+
+/* Route transitions — applied to each screen's root element; replays
+   automatically since React Router mounts a fresh component per route. */
+.ks-page-enter{ animation:ks-fade-slide-in 220ms ease both; }
+
+/* Tab-switch content — applied to a tab panel wrapper keyed by the active
+   tab, so switching tabs remounts it and replays the fade. */
+.ks-tab-panel{ animation:ks-fade-in 160ms ease both; }
+
+/* Modal open/close — .ks-modal-closing is added right before a modal
+   unmounts (see CourseDetailModal/AuthModal) so the close also animates
+   instead of the modal just vanishing. */
+.ks-modal-backdrop{ animation:ks-backdrop-in 160ms ease both; }
+.ks-modal-backdrop.ks-modal-closing{ animation:ks-backdrop-out 160ms ease both; }
+.ks-modal-card{ animation:ks-modal-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.ks-modal-card.ks-modal-closing{ animation:ks-modal-out 160ms ease both; }
+
+/* Respect the OS-level reduced-motion preference — every animation/
+   transition above (and anything else on the page) collapses to
+   effectively instant rather than being disabled selectively. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:0.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:0.001ms !important;
+    scroll-behavior:auto !important;
+  }
+}

@@ -11,6 +11,7 @@ import { AppTopbar } from "./components/layout/AppTopbar";
 
 import { CourseDetailModal } from "./components/modals/CourseDetailModal";
 import { AuthModal } from "./components/modals/AuthModal";
+import { GoalOnboardingModal } from "./components/modals/GoalOnboardingModal";
 
 import { HomeScreen } from "./screens/HomeScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
@@ -38,27 +39,54 @@ function formatLastAccessed(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+// #110 — Course.rating is a Postgres decimal column, which the pg driver
+// (via TypeORM, no transformer defined) returns as a string, not a
+// number — same quirk as Enrollment.progress (see the comment where
+// enrolled state is set below). Every current frontend usage of rating
+// happens to tolerate a string (Math.round auto-coerces, plain JSX
+// display doesn't care about type), so nothing was visibly broken, but
+// that's incidental, not a guarantee — same "parse once at the API
+// boundary" fix applied here for consistency with progress, so
+// course.rating is an actual number everywhere downstream from here.
+function normalizeCourse(c) {
+  return { ...c, rating: c.rating == null ? null : Number(c.rating) };
+}
+
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
-function AppShell({ loggedIn, role, onLogout, title, children, user }) {
+function AppShell({ loggedIn, role, onLogout, title, children, user, goal }) {
   const location = useLocation();
   const screen = screenKeyFromPath(location.pathname);
   const navigate = useNavigate();
 
   const showSidebar = loggedIn;
 
+  // #104 — the sidebar is always in the DOM (needed so it can slide in/out
+  // on mobile rather than mount/unmount), just off-canvas by default below
+  // the md breakpoint. This state only controls that mobile open/closed
+  // state; on md+ the sidebar ignores it entirely (see AppSidebar).
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  function go(key) {
+    setMobileNavOpen(false);
+    navigate(key === "home" ? "/" : `/${key}`);
+  }
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       {showSidebar && (
         <AppSidebar
           screen={screen}
-          onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
+          onGo={go}
           role={role}
           onLogout={onLogout}
           user={user}
+          goal={goal}
+          mobileOpen={mobileNavOpen}
+          onCloseMobile={() => setMobileNavOpen(false)}
         />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {showSidebar && <AppTopbar title={title} />}
+        {showSidebar && <AppTopbar title={title} onMenuClick={() => setMobileNavOpen(true)} />}
         {children}
       </div>
     </div>
@@ -82,7 +110,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
+function LearningRoute({ courses, enrolled, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
@@ -96,6 +124,8 @@ function LearningRoute({ courses, enrolled, onSaveProgress, onFetchQuiz, onSubmi
       course={course}
       enrollment={enrollment}
       onSaveProgress={onSaveProgress}
+      onSubmitRating={onSubmitRating}
+      onLogModuleView={onLogModuleView}
       onFetchQuiz={onFetchQuiz}
       onSubmitQuiz={onSubmitQuiz}
       onFetchQuizResults={onFetchQuizResults}
@@ -121,6 +151,7 @@ function KeystonePrototype() {
 
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [enrolled, setEnrolled] = useState([]);
+  const [enrolling, setEnrolling] = useState(false); // #154 — the in-flight POST /enrollments request, so CourseDetailModal's Enrol button can disable/show pending state instead of allowing a double-click.
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
   const [pendingCourse, setPendingCourse] = useState(null);
@@ -134,6 +165,14 @@ function KeystonePrototype() {
     goalHitDays: 0,
     week: [],
   });
+  // #107 — profiles.goal: null until a learner picks one via the
+  // onboarding modal below (or never, if they skip — that's a permanent,
+  // fine end state, not a "loading" one). goalLoaded distinguishes "not
+  // fetched yet" from "fetched, confirmed null" so the trigger effect below
+  // never fires on a stale/pre-fetch value.
+  const [learnerGoal, setLearnerGoal] = useState(null);
+  const [goalLoaded, setGoalLoaded] = useState(false);
+  const [showGoalOnboarding, setShowGoalOnboarding] = useState(false);
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -141,7 +180,7 @@ function KeystonePrototype() {
         if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         return res.json();
       })
-      .then((data) => setCourses(data))
+      .then((data) => setCourses(data.map(normalizeCourse)))
       .catch((err) => console.error("Failed to load courses:", err.message))
       .finally(() => setCoursesLoading(false));
   }, []);
@@ -209,6 +248,52 @@ function KeystonePrototype() {
       .then(setActivitySummary)
       .catch((err) => console.error("Failed to load activity summary:", err.message));
   }, [loggedIn, session]);
+
+  // #107 — learner's goal (profiles.goal), replacing the old LEARNER.goal
+  // mock. Same re-run/reset-on-logout pattern as activitySummary above.
+  // A 404 here (shouldn't normally happen — handle_new_user() always
+  // creates a profile row) is treated the same as "no goal set" rather
+  // than surfaced as an error. goalLoaded only flips true once we actually
+  // know the answer (a thrown/network error leaves it false, deliberately
+  // — see the trigger effect below for why that matters), and resets to
+  // false on logout so a stale "loaded" flag can't survive into a
+  // different account's session.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setLearnerGoal(null);
+      setGoalLoaded(false);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/profiles/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((profile) => {
+        setLearnerGoal(profile?.goal ?? null);
+        setGoalLoaded(true);
+      })
+      .catch((err) => console.error("Failed to load profile:", err.message));
+  }, [loggedIn, session]);
+
+  // #107 — shows the onboarding modal once conditions are actually known
+  // to be true, rather than only right after a signup event: signing up
+  // doesn't always yield an immediate session (Supabase's "confirm your
+  // email" flow means the first real session for a lot of accounts is a
+  // later *login*, not the signup itself), so gating this on a signup-only
+  // callback silently never showed it for any account that had to confirm
+  // its email first. Deriving it from "logged in, learner, and we've
+  // confirmed the profile has no goal" instead fires correctly regardless
+  // of how that session came about, and naturally covers pre-existing
+  // accounts (e.g. the seeded demo learners) too. Only runs once per
+  // login — skipping doesn't change any of this effect's dependencies, so
+  // it won't re-trigger itself for the rest of the session; it'll offer
+  // again next login/reload as long as goal is still unset.
+  useEffect(() => {
+    if (loggedIn && role === "learner" && goalLoaded && learnerGoal === null) {
+      setShowGoalOnboarding(true);
+    }
+  }, [loggedIn, role, goalLoaded, learnerGoal]);
 
   // Fire-and-forget refresh after an action that logs activity server-side
   // (module completed, quiz submitted, note saved, forum post made) — so
@@ -286,7 +371,7 @@ function KeystonePrototype() {
       throw new Error(message);
     }
 
-    const saved = await res.json();
+    const saved = normalizeCourse(await res.json());
 
     setCourses((prev) => {
       const exists = prev.some((c) => c.id === saved.id);
@@ -340,6 +425,47 @@ function KeystonePrototype() {
       ),
     );
     refetchActivitySummary();
+  }
+
+  // #106 — same pattern as saveProgress: PATCH the enrollment, merge the
+  // returned row into `enrolled` by id so LearningScreen's `enrollment`
+  // prop picks up the new rating on its next render without a refetch.
+  async function submitRating(enrollmentId, rating) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}/rating`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ rating }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const updated = await res.json();
+    setEnrolled((prev) =>
+      prev.map((e) =>
+        e.id === updated.id
+          ? { ...updated, progress: Number(updated.progress), lastAccessed: formatLastAccessed(updated.lastAccessed) }
+          : e,
+      ),
+    );
+  }
+
+  // #124 — fire-and-forget ping so the backend has a per-day "this module
+  // was open" marker to split a module's completion minutes across later
+  // (see ActivityService.logModuleView/logModuleCompletion). No response
+  // body, no local state to update — LearningScreen calls this once per
+  // module focus and doesn't need to await anything beyond error logging.
+  async function logModuleView(moduleId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/view`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   }
 
   async function fetchNote(moduleId) {
@@ -397,6 +523,7 @@ function KeystonePrototype() {
       return;
     }
 
+    setEnrolling(true);
     try {
       const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
         method: "POST",
@@ -418,6 +545,8 @@ function KeystonePrototype() {
     } catch (err) {
       setToast(`Couldn't enrol: ${err.message}`);
       setTimeout(() => setToast(null), 3200);
+    } finally {
+      setEnrolling(false);
     }
 
     setSelectedCourse(null);
@@ -518,6 +647,34 @@ function KeystonePrototype() {
 
     if (!res.ok) throw new Error(`Request failed: ${res.status}`);
     return res.json();
+  }
+
+  // #107 — called by GoalOnboardingModal when a learner taps a category.
+  // Throws on failure (the modal catches it and lets them retry) rather
+  // than swallowing the error, unlike most fire-and-forget calls in this
+  // file — this one has a visible loading/retry state in its caller.
+  async function updateGoal(goal) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ goal }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const updated = await res.json();
+    setLearnerGoal(updated.goal);
+    setShowGoalOnboarding(false);
+  }
+
+  function skipGoalOnboarding() {
+    setShowGoalOnboarding(false);
   }
 
   // #139 — Team tab. GET /providers/me 404s for "not a member of a
@@ -693,7 +850,7 @@ function KeystonePrototype() {
           path="/"
           element={
             loggedIn ? (
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user} goal={learnerGoal}>
                 <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
               </AppShell>
             ) : (
@@ -705,7 +862,7 @@ function KeystonePrototype() {
         <Route
           path="/catalogue"
           element={
-            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
               <CatalogueScreen
                 loggedIn={loggedIn}
                 onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
@@ -723,7 +880,7 @@ function KeystonePrototype() {
           path="/dashboard"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
                 <DashboardScreen
                   enrolled={enrolled}
                   onOpenCourse={setSelectedCourse}
@@ -731,6 +888,7 @@ function KeystonePrototype() {
                   courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
                   user={user}
+                  goal={learnerGoal}
                   activitySummary={activitySummary}
                   loading={coursesLoading || enrolledLoading}
                 />
@@ -743,11 +901,13 @@ function KeystonePrototype() {
           path="/learning/:courseId"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
                 <LearningRoute
                   courses={coursesForLearners}
                   enrolled={enrolled}
                   onSaveProgress={saveProgress}
+                  onSubmitRating={submitRating}
+                  onLogModuleView={logModuleView}
                   onFetchQuiz={fetchQuiz}
                   onSubmitQuiz={submitQuiz}
                   onFetchQuizResults={fetchCourseQuizResults}
@@ -768,7 +928,7 @@ function KeystonePrototype() {
           element={
             <RequireAuth loggedIn={loggedIn}>
               <RequireTrainer role={role}>
-                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user}>
+                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
                   <TrainerScreen
                     courses={courses}
                     onSaveCourse={saveCourse}
@@ -799,12 +959,19 @@ function KeystonePrototype() {
         onEnrol={handleEnrol}
         onGoToDashboard={() => { setSelectedCourse(null); navigate("/dashboard"); }}
         isEnrolled={selectedCourse ? enrolledIds.includes(selectedCourse.id) : false}
+        enrolling={enrolling}
       />
 
       <AuthModal
         mode={authMode}
         onClose={() => { setAuthMode(null); setPendingCourse(null); }}
         onSubmit={handleAuthSubmit}
+      />
+
+      <GoalOnboardingModal
+        open={showGoalOnboarding}
+        onSelect={updateGoal}
+        onSkip={skipGoalOnboarding}
       />
 
       {toast && (

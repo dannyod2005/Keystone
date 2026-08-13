@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 
 import { CategoryDot } from "../../components/common/Primitives";
@@ -28,6 +28,42 @@ export function TrainerScreen({
   // anything on the course form itself — provider scoping stays an opt-in
   // upgrade managed from here, never a gate on creating a course.
   const [tab, setTab] = useState("courses");
+
+  // #155 — need the trainer's own providerId to mirror
+  // RequireCourseOwnerGuard's "shared provider member" branch client-side.
+  // Fetched once on mount, same cancelled-flag pattern as
+  // TrainerCourseEditor's onFetchProvider/onFetchProfile effect —
+  // onFetchProfile is recreated every App.jsx render, so it's deliberately
+  // left out of the dependency array.
+  const [myProfile, setMyProfile] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    onFetchProfile().then((profile) => {
+      if (!cancelled) setMyProfile(profile);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // #155 — mirrors RequireCourseOwnerGuard exactly: a NULL ownerId is a
+  // legacy/pre-ownership course, exempted (editable by any trainer);
+  // otherwise the caller must be the owner, or share the course's
+  // provider. Keeping this logic here means the buttons never claim a
+  // course is editable when the server would actually reject the request
+  // — until myProfile has loaded, the provider-sharing branch just can't
+  // pass yet, so at worst a shared course's buttons appear a beat late,
+  // never early.
+  function canEditCourse(course) {
+    if (course.ownerId == null) return true;
+    if (course.ownerId === currentUserId) return true;
+    if (course.providerId && myProfile?.providerId === course.providerId) {
+      return true;
+    }
+    return false;
+  }
 
   const editingCourse =
     editingId === "__new" ? null :
@@ -66,7 +102,7 @@ export function TrainerScreen({
   }
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 1080 }}>
+    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080 }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>Trainer studio</div>
         <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>
@@ -81,6 +117,9 @@ export function TrainerScreen({
         <div className={`ks-tab ${tab === "team" ? "active" : ""}`} onClick={() => setTab("team")}>Team</div>
       </div>
 
+      {/* #105 — key={tab} remounts this wrapper on tab switch, replaying
+          the ks-tab-panel fade defined in global.css. */}
+      <div key={tab} className="ks-tab-panel">
       {tab === "courses" && (
         <>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
@@ -95,14 +134,24 @@ export function TrainerScreen({
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{c.title || "(untitled course)"}</div>
                   <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>{c.provider} · {c.modules.length} modules · {c.hours}h</div>
                 </div>
-                <button className="ks-btn ks-btn-ghost" onClick={() => setEditingId(c.id)}><Pencil size={14} /> Edit</button>
-                <button
-                  className="ks-btn ks-btn-ghost"
-                  style={{ color: "var(--coral)" }}
-                  onClick={() => { setDeletingCourse(c); setDeleteError(null); }}
-                >
-                  <Trash2 size={14} /> Delete
-                </button>
+                {canEditCourse(c) ? (
+                  <>
+                    <button className="ks-btn ks-btn-ghost" onClick={() => setEditingId(c.id)}><Pencil size={14} /> Edit</button>
+                    <button
+                      className="ks-btn ks-btn-ghost"
+                      style={{ color: "var(--coral)" }}
+                      onClick={() => { setDeletingCourse(c); setDeleteError(null); }}
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  </>
+                ) : (
+                  // #155 — not this trainer's course (no ownerId/providerId
+                  // match): no Edit/Delete, and deliberately no click-through
+                  // to the editor either, since that's what was exposing full
+                  // course details for courses CRUD would reject anyway.
+                  <span style={{ fontSize: 12, color: "var(--slate-light)" }}>View only</span>
+                )}
               </div>
             ))}
             {courses.length === 0 && (
@@ -122,13 +171,15 @@ export function TrainerScreen({
           currentUserId={currentUserId}
         />
       )}
+      </div>
 
       {deletingCourse && (
         <div
           onClick={() => !deleting && setDeletingCourse(null)}
+          className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete course?</div>
               <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !deleting && setDeletingCourse(null)} />

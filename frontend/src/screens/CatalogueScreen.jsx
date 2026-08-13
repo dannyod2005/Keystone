@@ -20,7 +20,7 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
     : byCategory;
 
   return (
-    <div>
+    <div className="ks-page-enter">
       {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
       <div style={{ maxWidth: 1160, margin: "0 auto", padding: "36px 28px 60px" }}>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 30, margin: "0 0 6px" }}>Course catalogue</h1>
@@ -34,7 +34,10 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
           </div>
         ) : (
           <>
-            <div style={{ display: "flex", gap: 18, alignItems: "center", marginBottom: 24 }}>
+            {/* #104 — stacked on mobile, side-by-side from md up; flex-direction
+                is the only breakpoint-dependent property here, so it's the
+                only thing on Tailwind classes. */}
+            <div className="flex flex-col items-stretch md:flex-row md:items-center" style={{ gap: 18, marginBottom: 24 }}>
               <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
                 <Search size={15} color="var(--slate-light)" style={{ position: "absolute", left: 13, top: 11 }} />
                 <input
@@ -44,7 +47,7 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {cats.map((c) => (
                   <span key={c} onClick={() => setFilter(c)}
                     style={{ fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
@@ -61,7 +64,10 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
                 No courses match "{search}".
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
+              // #104 — column count is the only breakpoint-dependent property
+              // (1 up to sm, 2 from sm, 3 from md), so it's the only thing on
+              // Tailwind classes; gap stays inline like everywhere else.
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
                 {filtered.map((c) => {
                   const isEnrolled = enrolledIds.includes(c.id);
                   return (

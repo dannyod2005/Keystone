@@ -28,4 +28,7 @@ export class EnrollmentResponseDto {
   lastAccessed: Date | null;
   createdAt: Date;
   course: EnrolledCourseDto;
+  // #106 — this learner's own submitted rating for this course, or null
+  // if they haven't rated it (yet, or their status isn't 'complete' yet).
+  rating: number | null;
 }

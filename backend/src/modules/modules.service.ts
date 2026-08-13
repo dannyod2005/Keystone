@@ -36,6 +36,15 @@ function isEdited(post: ForumPost): boolean {
   return post.updatedAt.getTime() !== post.createdAt.getTime();
 }
 
+// #40 — auto-grading match rule for short-answer questions: trimmed,
+// case-insensitive comparison against each acceptable answer. Simple on
+// purpose (the decision was keyword/exact-match, not fuzzy/NLP-based
+// grading) — a learner's answer is correct if it matches any one
+// acceptable answer for the question after normalizing both sides.
+function normalizeAnswer(text: string): string {
+  return text.trim().toLowerCase();
+}
+
 @Injectable()
 export class ModulesService {
   constructor(
@@ -73,11 +82,17 @@ export class ModulesService {
       id: q.id,
       question: q.question,
       position: q.position,
-      options: q.options.map((o) => ({
-        id: o.id,
-        optionText: o.optionText,
-        position: o.position,
-      })),
+      type: q.type,
+      // #40 — a short_answer question's options are its answer key, not
+      // choices to render — never sent to the learner-facing endpoint.
+      options:
+        q.type === 'short_answer'
+          ? []
+          : q.options.map((o) => ({
+              id: o.id,
+              optionText: o.optionText,
+              position: o.position,
+            })),
     }));
   }
 
@@ -105,70 +120,77 @@ export class ModulesService {
       throw new NotFoundException('This module has no quiz');
     }
 
-    // Build a lookup from every question to its options and correct
-    // answer, and a reverse lookup from optionId -> questionId — used
-    // by both the "already submitted" path and the fresh-grading path
-    // below, so correctOptionId is always derived from real question
-    // data, never trusted from the client.
+    // Lookup from every question to its options/acceptable-answers —
+    // used by both the "already submitted" path and the fresh-grading
+    // path below, so grading is always derived from real question data,
+    // never trusted from the client.
     const questionById = new Map(questions.map((q) => [q.id, q]));
-    const optionIdToQuestionId = new Map<string, string>();
-    const allOptionIds: string[] = [];
-    for (const q of questions) {
-      for (const o of q.options) {
-        optionIdToQuestionId.set(o.id, q.id);
-        allOptionIds.push(o.id);
-      }
-    }
 
-    const buildResultItem = (questionId: string, selectedOptionId: string): {
-      questionId: string;
-      selectedOptionId: string;
-      correctOptionId: string;
-      isCorrect: boolean;
-    } => {
-      const question = questionById.get(questionId);
-      if (!question) {
-        // Should be unreachable in practice — questionId always comes from
-        // either a validated fresh submission or an existing submission's
-        // own option->question lookup, both derived from this same
-        // questions array. Throwing here is a safety net, not an expected path.
-        throw new NotFoundException(`Question "${questionId}" not found in this module's quiz`);
+    // #40 — builds the response shape for a submission that's already
+    // been graded and stored (isCorrect lives on the submission itself
+    // now, for both question types — see the QuizSubmission entity
+    // comment). Used for both the "already submitted" path (existing
+    // rows) and the fresh-submission path (rows just saved) below.
+    const buildResultItem = (
+      question: QuizQuestion,
+      submission: {
+        option: { id: string } | null;
+        answerText: string | null;
+        isCorrect: boolean;
+      },
+    ): QuizResultDto['results'][number] => {
+      if (question.type === 'short_answer') {
+        return {
+          questionId: question.id,
+          type: 'short_answer',
+          isCorrect: submission.isCorrect,
+          submittedText: submission.answerText ?? undefined,
+          acceptableAnswers: question.options.map((o) => o.optionText),
+        };
       }
 
       const correctOption = question.options.find((o) => o.isCorrect);
       if (!correctOption) {
-        // Data-integrity issue: a question with no correct answer marked at
-        // all. Also should be unreachable with well-formed quiz data, but
-        // worth surfacing loudly rather than silently returning a bad result.
-        throw new Error(`Question "${questionId}" has no option marked as correct`);
+        // Data-integrity issue: an MCQ question with no correct answer
+        // marked at all. Should be unreachable with well-formed quiz
+        // data, but worth surfacing loudly rather than a bad result.
+        throw new Error(
+          `Question "${question.id}" has no option marked as correct`,
+        );
       }
 
-      const selected = question.options.find((o) => o.id === selectedOptionId);
-
       return {
-        questionId,
-        selectedOptionId,
+        questionId: question.id,
+        type: 'mcq',
+        isCorrect: submission.isCorrect,
+        selectedOptionId: submission.option?.id,
         correctOptionId: correctOption.id,
-        isCorrect: !!selected?.isCorrect,
       };
     };
 
     // Single-attempt check: does this user already have submissions for
-    // any option belonging to this module's questions?
+    // any of this module's questions? Direct question_id lookup (#40) —
+    // previously this had to join through quiz_options, which had no
+    // equivalent path for a short-answer submission anyway.
     const existingSubmissions = await this.quizSubmissionsRepo.find({
-      where: { user: { id: userId }, option: { id: In(allOptionIds) } },
-      relations: { option: true },
+      where: {
+        user: { id: userId },
+        question: { id: In([...questionById.keys()]) },
+      },
+      relations: { question: true, option: true },
     });
 
     if (existingSubmissions.length > 0) {
       const results = existingSubmissions.map((s) => {
-        const questionId = optionIdToQuestionId.get(s.option.id);
-        if (!questionId) {
+        const question = questionById.get(s.question.id);
+        if (!question) {
+          // Should be unreachable — s.question.id always comes from this
+          // module's own questions, matched via the In() filter above.
           throw new NotFoundException(
-            `Submitted option "${s.option.id}" no longer belongs to a question in this module`,
+            `Submission's question "${s.question.id}" not found in this module's quiz`,
           );
         }
-        return buildResultItem(questionId, s.option.id);
+        return buildResultItem(question, s);
       });
       return {
         score: results.filter((r) => r.isCorrect).length,
@@ -179,8 +201,9 @@ export class ModulesService {
     }
 
     // Fresh submission: validate the answers cover exactly this module's
-    // questions — no missing, no extra — and that each optionId genuinely
-    // belongs to its stated questionId, before grading or storing anything.
+    // questions — no missing, no extra — and that each answer has the
+    // right shape for its question's type, before grading or storing
+    // anything.
     const submittedQuestionIds = new Set(dto.answers.map((a) => a.questionId));
     const realQuestionIds = new Set(questions.map((q) => q.id));
 
@@ -189,7 +212,7 @@ export class ModulesService {
       ![...submittedQuestionIds].every((id) => realQuestionIds.has(id))
     ) {
       throw new BadRequestException(
-        'Answers must cover exactly the questions in this module\'s quiz',
+        "Answers must cover exactly the questions in this module's quiz",
       );
     }
 
@@ -199,30 +222,73 @@ export class ModulesService {
         // Unreachable given the exact-match check above, but keeps this
         // loop self-contained and satisfies TypeScript honestly rather
         // than asserting past it.
-        throw new BadRequestException(`Unknown question "${answer.questionId}"`);
+        throw new BadRequestException(
+          `Unknown question "${answer.questionId}"`,
+        );
       }
 
-      const optionBelongsToQuestion = question.options.some(
-        (o) => o.id === answer.optionId,
-      );
-      if (!optionBelongsToQuestion) {
-        throw new BadRequestException(
-          `Option "${answer.optionId}" does not belong to question "${answer.questionId}"`,
+      if (question.type === 'short_answer') {
+        if (!answer.answerText || !answer.answerText.trim()) {
+          throw new BadRequestException(
+            `Question "${answer.questionId}" requires answerText`,
+          );
+        }
+      } else {
+        if (!answer.optionId) {
+          throw new BadRequestException(
+            `Question "${answer.questionId}" requires optionId`,
+          );
+        }
+        const optionBelongsToQuestion = question.options.some(
+          (o) => o.id === answer.optionId,
         );
+        if (!optionBelongsToQuestion) {
+          throw new BadRequestException(
+            `Option "${answer.optionId}" does not belong to question "${answer.questionId}"`,
+          );
+        }
       }
     }
 
-    const submissionsToSave = dto.answers.map((a) =>
+    // Grade every answer once, up front — isCorrect gets persisted on
+    // the submission (#40), not re-derived on every future read.
+    const graded = dto.answers.map((a) => {
+      const question = questionById.get(a.questionId)!; // validated above
+      if (question.type === 'short_answer') {
+        const acceptable = question.options.map((o) =>
+          normalizeAnswer(o.optionText),
+        );
+        const isCorrect = acceptable.includes(normalizeAnswer(a.answerText!));
+        return { answer: a, question, isCorrect };
+      }
+      const selected = question.options.find((o) => o.id === a.optionId);
+      return { answer: a, question, isCorrect: !!selected?.isCorrect };
+    });
+
+    const submissionsToSave = graded.map((g) =>
       this.quizSubmissionsRepo.create({
         user: profile,
-        option: { id: a.optionId } as any,
+        question: g.question,
+        option: g.question.type === 'mcq' ? { id: g.answer.optionId } : null,
+        answerText:
+          g.question.type === 'short_answer' ? g.answer.answerText : null,
+        isCorrect: g.isCorrect,
       }),
     );
     await this.quizSubmissionsRepo.save(submissionsToSave);
-    await this.activityService.logEvent(userId, 'quiz_submit', QUIZ_SUBMIT_MINUTES);
+    await this.activityService.logEvent(
+      userId,
+      'quiz_submit',
+      QUIZ_SUBMIT_MINUTES,
+    );
 
-    const results = dto.answers.map((a) =>
-      buildResultItem(a.questionId, a.optionId),
+    const results = graded.map((g) =>
+      buildResultItem(g.question, {
+        option: g.question.type === 'mcq' ? { id: g.answer.optionId! } : null,
+        answerText:
+          g.question.type === 'short_answer' ? g.answer.answerText! : null,
+        isCorrect: g.isCorrect,
+      }),
     );
 
     return {
@@ -253,18 +319,23 @@ export class ModulesService {
     }
 
     const moduleIds = modules.map((m) => m.id);
+    // #40 — no longer needs the options relation here at all: scoring
+    // now reads submission.isCorrect directly (stored at submission
+    // time) instead of re-deriving it via option.isCorrect, and the
+    // module grouping below only needs each question's id/module.
     const questions = await this.quizQuestionsRepo.find({
       where: { module: { id: In(moduleIds) } },
-      relations: { options: true, module: true },
+      relations: { module: true },
     });
 
-    const optionIds = questions.flatMap((q) => q.options.map((o) => o.id));
-    const submissions = optionIds.length > 0
-      ? await this.quizSubmissionsRepo.find({
-          where: { user: { id: userId }, option: { id: In(optionIds) } },
-          relations: { option: true },
-        })
-      : [];
+    const questionIds = questions.map((q) => q.id);
+    const submissions =
+      questionIds.length > 0
+        ? await this.quizSubmissionsRepo.find({
+            where: { user: { id: userId }, question: { id: In(questionIds) } },
+            relations: { question: true },
+          })
+        : [];
 
     const questionsByModuleId = new Map<string, QuizQuestion[]>();
     for (const q of questions) {
@@ -286,11 +357,9 @@ export class ModulesService {
         };
       }
 
-      const moduleOptionIds = new Set(
-        moduleQuestions.flatMap((q) => q.options.map((o) => o.id)),
-      );
+      const moduleQuestionIds = new Set(moduleQuestions.map((q) => q.id));
       const moduleSubmissions = submissions.filter((s) =>
-        moduleOptionIds.has(s.option.id),
+        moduleQuestionIds.has(s.question.id),
       );
 
       if (moduleSubmissions.length === 0) {
@@ -309,10 +378,26 @@ export class ModulesService {
         moduleTitle: module.title,
         hasQuiz: true,
         taken: true,
-        score: moduleSubmissions.filter((s) => s.option.isCorrect).length,
+        score: moduleSubmissions.filter((s) => s.isCorrect).length,
         total: moduleQuestions.length,
       };
     });
+  }
+
+  // #124 — called once per module focus from the frontend (fire-and-forget,
+  // no response body needed). Existence-checks the module for a clean 404
+  // like the other module-scoped endpoints, but deliberately doesn't
+  // bother looking up the profile first the way saveNote does — there's no
+  // row to attach it to besides the activity_events insert itself, and
+  // ActivityService.logModuleView already dedupes per (user, module, day),
+  // so a lookup here would just be extra latency on a lightweight ping.
+  async logView(userId: string, moduleId: string): Promise<void> {
+    const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
+    if (!module) {
+      throw new NotFoundException(`Module with id "${moduleId}" not found`);
+    }
+
+    await this.activityService.logModuleView(userId, moduleId);
   }
 
   async getNote(userId: string, moduleId: string): Promise<NoteResponseDto> {
@@ -416,7 +501,9 @@ export class ModulesService {
         relations: { module: true },
       });
       if (!parentPost) {
-        throw new NotFoundException(`Post with id "${dto.parentPostId}" not found`);
+        throw new NotFoundException(
+          `Post with id "${dto.parentPostId}" not found`,
+        );
       }
       // Never trust a client-supplied parentPostId to actually belong to
       // this module — replying to a post from a different module would
@@ -436,7 +523,11 @@ export class ModulesService {
     });
 
     const saved = await this.forumPostsRepo.save(post);
-    await this.activityService.logEvent(userId, 'forum_post', FORUM_POST_MINUTES);
+    await this.activityService.logEvent(
+      userId,
+      'forum_post',
+      FORUM_POST_MINUTES,
+    );
 
     return {
       id: saved.id,
@@ -488,102 +579,177 @@ export class ModulesService {
     };
   }
 
-  async upsertQuiz(moduleId: string, dto: UpsertQuizDto): Promise<QuizQuestionResponseDto[]> {
+  async upsertQuiz(
+    moduleId: string,
+    dto: UpsertQuizDto,
+  ): Promise<QuizQuestionResponseDto[]> {
     const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
     if (!module) {
       throw new NotFoundException(`Module with id "${moduleId}" not found`);
     }
 
     for (const q of dto.questions) {
-      const correctCount = q.options.filter((o) => o.isCorrect).length;
-      if (correctCount !== 1) {
+      const type = q.type ?? 'mcq';
+      if (type === 'mcq') {
+        const correctCount = (q.options ?? []).filter(
+          (o) => o.isCorrect,
+        ).length;
+        if (correctCount !== 1) {
+          throw new BadRequestException(
+            `Question "${q.question}" must have exactly one correct option (found ${correctCount})`,
+          );
+        }
+      } else if (!q.acceptableAnswers || q.acceptableAnswers.length === 0) {
+        // Belt-and-suspenders — UpsertQuizDto's @ValidateIf already
+        // requires this, but a question-level check here keeps the
+        // error message specific to which question is missing it.
         throw new BadRequestException(
-          `Question "${q.question}" must have exactly one correct option (found ${correctCount})`,
+          `Question "${q.question}" needs at least one acceptable answer`,
         );
       }
     }
 
-    return this.quizQuestionsRepo.manager.transaction(async (manager: EntityManager) => {
-      const existingQuestions = await manager.find(QuizQuestion, {
-        where: { module: { id: moduleId } },
-        relations: { options: true },
-      });
+    return this.quizQuestionsRepo.manager.transaction(
+      async (manager: EntityManager) => {
+        const existingQuestions = await manager.find(QuizQuestion, {
+          where: { module: { id: moduleId } },
+          relations: { options: true },
+        });
 
-      const incomingQuestionIds = new Set(
-        dto.questions.map((q) => q.id).filter((id): id is string => !!id),
-      );
-      const questionsToDelete = existingQuestions.filter((q) => !incomingQuestionIds.has(q.id));
-      if (questionsToDelete.length > 0) {
-        await manager.delete(QuizQuestion, questionsToDelete.map((q) => q.id));
-      }
-
-      for (const existingQ of existingQuestions) {
-        if (!incomingQuestionIds.has(existingQ.id)) continue;
-        const incomingQ = dto.questions.find((q) => q.id === existingQ.id);
-        if (!incomingQ) continue; // guarded by the Set check above, but satisfies TS
-
-        const incomingOptionIds = new Set(
-          incomingQ.options.map((o) => o.id).filter((id): id is string => !!id),
+        const incomingQuestionIds = new Set(
+          dto.questions.map((q) => q.id).filter((id): id is string => !!id),
         );
-        const optionsToDelete = existingQ.options.filter((o) => !incomingOptionIds.has(o.id));
-        if (optionsToDelete.length > 0) {
-          await manager.delete(QuizOption, optionsToDelete.map((o) => o.id));
-        }
-      }
-
-      const existingQuestionById = new Map(existingQuestions.map((q) => [q.id, q]));
-
-      for (const [qIndex, q] of dto.questions.entries()) {
-        let questionEntity: QuizQuestion;
-        const matchedExisting = q.id ? existingQuestionById.get(q.id) : undefined;
-
-        if (matchedExisting) {
-          matchedExisting.question = q.question;
-          matchedExisting.position = qIndex;
-          questionEntity = await manager.save(QuizQuestion, matchedExisting);
-        } else {
-          const created = manager.create(QuizQuestion, {
-            module,
-            question: q.question,
-            position: qIndex,
-          });
-          questionEntity = await manager.save(QuizQuestion, created);
+        const questionsToDelete = existingQuestions.filter(
+          (q) => !incomingQuestionIds.has(q.id),
+        );
+        if (questionsToDelete.length > 0) {
+          await manager.delete(
+            QuizQuestion,
+            questionsToDelete.map((q) => q.id),
+          );
         }
 
-        const existingOptionById = new Map(
-          (matchedExisting?.options ?? []).map((o) => [o.id, o]),
-        );
+        // MCQ options are matched/edited/deleted by id (a trainer's edits
+        // to individual options should update those exact rows, since a
+        // learner's MCQ submission references option_id directly). Done
+        // up front for every still-present mcq question, before the main
+        // per-question loop below.
+        for (const existingQ of existingQuestions) {
+          if (!incomingQuestionIds.has(existingQ.id)) continue;
+          const incomingQ = dto.questions.find((q) => q.id === existingQ.id);
+          if (!incomingQ || (incomingQ.type ?? 'mcq') !== 'mcq') continue;
 
-        for (const [oIndex, o] of q.options.entries()) {
-          const matchedOption = o.id ? existingOptionById.get(o.id) : undefined;
-
-          if (matchedOption) {
-            matchedOption.optionText = o.optionText;
-            matchedOption.isCorrect = o.isCorrect;
-            matchedOption.position = oIndex;
-            await manager.save(QuizOption, matchedOption);
-          } else {
-            const createdOption = manager.create(QuizOption, {
-              question: questionEntity,
-              optionText: o.optionText,
-              isCorrect: o.isCorrect,
-              position: oIndex,
-            });
-            await manager.save(QuizOption, createdOption);
+          const incomingOptionIds = new Set(
+            (incomingQ.options ?? [])
+              .map((o) => o.id)
+              .filter((id): id is string => !!id),
+          );
+          const optionsToDelete = existingQ.options.filter(
+            (o) => !incomingOptionIds.has(o.id),
+          );
+          if (optionsToDelete.length > 0) {
+            await manager.delete(
+              QuizOption,
+              optionsToDelete.map((o) => o.id),
+            );
           }
         }
-      }
 
-      // Read back through the same transactional manager, not
-      // this.quizQuestionsRepo — that repo uses a separate connection
-      // which, under READ COMMITTED, can't see these writes until this
-      // transaction commits (commit happens only after this callback
-      // returns). Reading through `manager` sees the writes immediately.
-      return this.fetchQuizForEdit(moduleId, manager);
-    });
+        const existingQuestionById = new Map(
+          existingQuestions.map((q) => [q.id, q]),
+        );
+
+        for (const [qIndex, q] of dto.questions.entries()) {
+          const type = q.type ?? 'mcq';
+          let questionEntity: QuizQuestion;
+          const matchedExisting = q.id
+            ? existingQuestionById.get(q.id)
+            : undefined;
+
+          if (matchedExisting) {
+            matchedExisting.question = q.question;
+            matchedExisting.position = qIndex;
+            matchedExisting.type = type;
+            questionEntity = await manager.save(QuizQuestion, matchedExisting);
+          } else {
+            const created = manager.create(QuizQuestion, {
+              module,
+              question: q.question,
+              position: qIndex,
+              type,
+            });
+            questionEntity = await manager.save(QuizQuestion, created);
+          }
+
+          if (type === 'mcq') {
+            const existingOptionById = new Map(
+              (matchedExisting?.options ?? []).map((o) => [o.id, o]),
+            );
+
+            for (const [oIndex, o] of (q.options ?? []).entries()) {
+              const matchedOption = o.id
+                ? existingOptionById.get(o.id)
+                : undefined;
+
+              if (matchedOption) {
+                matchedOption.optionText = o.optionText;
+                matchedOption.isCorrect = o.isCorrect;
+                matchedOption.position = oIndex;
+                await manager.save(QuizOption, matchedOption);
+              } else {
+                const createdOption = manager.create(QuizOption, {
+                  question: questionEntity,
+                  optionText: o.optionText,
+                  isCorrect: o.isCorrect,
+                  position: oIndex,
+                });
+                await manager.save(QuizOption, createdOption);
+              }
+            }
+          } else {
+            // #40 — short_answer acceptable answers are plain strings from
+            // the trainer's editor, not id-tracked rows, so the simplest
+            // correct approach is replace-on-save rather than the MCQ
+            // match-by-id dance above. Safe to do unconditionally: unlike
+            // MCQ options, nothing ever points an option_id at one of
+            // these rows (a short-answer submission stores answer_text
+            // directly — see the QuizSubmission entity), so there's no
+            // risk of cascade-deleting a learner's prior submissions by
+            // replacing these.
+            if (matchedExisting?.options?.length) {
+              await manager.delete(
+                QuizOption,
+                matchedExisting.options.map((o) => o.id),
+              );
+            }
+            const acceptableAnswers = q.acceptableAnswers ?? [];
+            await manager.save(
+              QuizOption,
+              acceptableAnswers.map((text, oIndex) =>
+                manager.create(QuizOption, {
+                  question: questionEntity,
+                  optionText: text,
+                  isCorrect: true,
+                  position: oIndex,
+                }),
+              ),
+            );
+          }
+        }
+
+        // Read back through the same transactional manager, not
+        // this.quizQuestionsRepo — that repo uses a separate connection
+        // which, under READ COMMITTED, can't see these writes until this
+        // transaction commits (commit happens only after this callback
+        // returns). Reading through `manager` sees the writes immediately.
+        return this.fetchQuizForEdit(moduleId, manager);
+      },
+    );
   }
 
-  async getQuizForEdit(moduleId: string): Promise<QuizQuestionEditResponseDto[]> {
+  async getQuizForEdit(
+    moduleId: string,
+  ): Promise<QuizQuestionEditResponseDto[]> {
     const module = await this.modulesRepo.findOne({ where: { id: moduleId } });
     if (!module) {
       throw new NotFoundException(`Module with id "${moduleId}" not found`);
@@ -609,6 +775,7 @@ export class ModulesService {
       id: q.id,
       question: q.question,
       position: q.position,
+      type: q.type,
       options: q.options.map((o) => ({
         id: o.id,
         optionText: o.optionText,

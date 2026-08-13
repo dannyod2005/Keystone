@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { PlayCircle, CheckCircle2, XCircle, ChevronLeft} from "lucide-react";
+import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star } from "lucide-react";
 
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
   const [tab, setTab] = useState("video");
 
   const modules = course?.modules ?? [];
@@ -13,6 +13,15 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
 
   const [activeModule, setActiveModule] = useState(initialActiveModule);
   const [saving, setSaving] = useState(false);
+
+  // #106 — star-rating prompt on the "Course complete" card. hoverRating
+  // is just for the visual preview as the pointer moves over the stars;
+  // the actual submitted value lives on enrollment.rating (set server-side
+  // and picked up here once the parent's enrolled list updates — same
+  // "don't locally echo, just await the prop function" pattern as
+  // handleMarkComplete/onSaveProgress above).
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [ratingHover, setRatingHover] = useState(0);
 
   // Quiz state — reset whenever the active module changes, since each
   // module has its own separate quiz.
@@ -54,6 +63,20 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   const [savingEdit, setSavingEdit] = useState(false);
 
   const currentModule = modules[activeModule];
+
+  // #124 — one ping per module focus, so the backend has a per-day "this
+  // module was open" marker to later split its completion minutes across
+  // (see ActivityService.logModuleView/logModuleCompletion). Fire-and-forget:
+  // no loading/error state here, this is a background signal, not something
+  // the learner is waiting on. Same currentModule.id-only dependency
+  // reasoning as the effects below.
+  useEffect(() => {
+    if (!currentModule || !onLogModuleView) return;
+    onLogModuleView(currentModule.id).catch((err) =>
+      console.error("Failed to log module view:", err.message),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentModule?.id]);
 
   useEffect(() => {
     if (!currentModule || !onFetchQuiz) return;
@@ -151,6 +174,19 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
     }
   }
 
+  async function handleSubmitRating(stars) {
+    if (!enrollment || !onSubmitRating || ratingSubmitting) return;
+
+    setRatingSubmitting(true);
+    try {
+      await onSubmitRating(enrollment.id, stars);
+    } catch (err) {
+      console.error("Failed to submit rating:", err.message);
+    } finally {
+      setRatingSubmitting(false);
+    }
+  }
+
   function selectAnswer(questionId, optionId) {
     if (quizResult) return; // locked once submitted
     setSelectedAnswers((prev) => ({ ...prev, [questionId]: optionId }));
@@ -159,12 +195,21 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   async function handleSubmitQuiz() {
     if (!currentModule || !onSubmitQuiz) return;
 
-    const answers = quizQuestions.map((q) => ({
-      questionId: q.id,
-      optionId: selectedAnswers[q.id],
-    }));
+    // #40 — selectedAnswers holds an optionId for mcq questions or the
+    // raw typed text for short_answer ones; which field to send depends
+    // on the question's type.
+    const answers = quizQuestions.map((q) =>
+      q.type === "short_answer"
+        ? { questionId: q.id, answerText: selectedAnswers[q.id] }
+        : { questionId: q.id, optionId: selectedAnswers[q.id] }
+    );
 
-    if (answers.some((a) => !a.optionId)) {
+    const incomplete = quizQuestions.some((q) =>
+      q.type === "short_answer"
+        ? !selectedAnswers[q.id]?.trim()
+        : !selectedAnswers[q.id]
+    );
+    if (incomplete) {
       setQuizError("Answer every question before submitting.");
       return;
     }
@@ -363,7 +408,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
   }
 
   return (
-    <div style={{ padding: "22px 32px 40px", maxWidth: 1080 }}>
+    <div className="ks-page-enter" style={{ padding: "22px 32px 40px", maxWidth: 1080 }}>
       <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", cursor: "pointer", marginBottom: 14 }}>
         <ChevronLeft size={15} /> Back to My learning
       </div>
@@ -377,9 +422,45 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
           <CheckCircle2 size={32} color="var(--success)" style={{ marginBottom: 10 }} />
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Course complete</div>
           <div style={{ fontSize: 13.5, color: "var(--slate-light)" }}>You've finished all {modules.length} modules.</div>
+
+          {/* #106 — prompt for a rating once complete; enrollment.rating
+              being set (either already, from a past visit, or just now)
+              switches this to a thank-you state instead of re-prompting. */}
+          {enrollment && onSubmitRating && (
+            <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
+              {enrollment.rating ? (
+                <div style={{ fontSize: 13.5, color: "var(--slate)" }}>
+                  Thanks for rating this course {enrollment.rating} star{enrollment.rating === 1 ? "" : "s"}.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>How was this course?</div>
+                  <div style={{ display: "flex", justifyContent: "center", gap: 4 }} onMouseLeave={() => setRatingHover(0)}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star
+                        key={n}
+                        size={26}
+                        fill={n <= ratingHover ? "var(--gold)" : "none"}
+                        color="var(--gold)"
+                        style={{ cursor: ratingSubmitting ? "default" : "pointer" }}
+                        onMouseEnter={() => setRatingHover(n)}
+                        onClick={() => handleSubmitRating(n)}
+                      />
+                    ))}
+                  </div>
+                  {ratingSubmitting && (
+                    <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>Saving…</div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       ) : (
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 22 }}>
+      // #104 — single column on mobile (video/tabs above the right rail),
+      // 1fr/300px from md up; column layout is the only breakpoint-dependent
+      // property here.
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_300px]" style={{ gap: 22 }}>
         <div>
           <div className="ks-card" style={{ padding: "12px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Module {activeModule + 1} of {modules.length}</div>
@@ -412,6 +493,9 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
             ))}
           </div>
 
+          {/* #105 — key={tab} remounts this wrapper on every tab switch,
+              which replays the ks-tab-panel fade defined in global.css. */}
+          <div key={tab} className="ks-tab-panel">
           {tab === "video" && (
             <p style={{ fontSize: 14, color: "var(--slate)", lineHeight: 1.6 }}>
               This module covers {currentModule.title.toLowerCase()}. Follow along in the video, then apply it in the short exercise before moving to the quiz.
@@ -458,39 +542,67 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
                     return (
                       <div key={q.id} style={{ marginBottom: 14 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 8 }}>{i + 1}. {q.question}</div>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {q.options.map((o) => {
-                            const isSelected = selectedAnswers[q.id] === o.id;
-                            const isCorrectAnswer = resultForQuestion?.correctOptionId === o.id;
-                            const isWrongSelected = resultForQuestion && isSelected && !resultForQuestion.isCorrect;
+                        {q.type === "short_answer" ? (
+                          <div>
+                            <input
+                              type="text"
+                              value={selectedAnswers[q.id] ?? ""}
+                              onChange={(e) => selectAnswer(q.id, e.target.value)}
+                              disabled={!!quizResult}
+                              placeholder="Type your answer…"
+                              style={{
+                                fontFamily: "var(--font-body)", fontSize: 13, width: "100%", maxWidth: 360,
+                                border: `1px solid ${resultForQuestion ? (resultForQuestion.isCorrect ? "var(--success)" : "var(--coral)") : "var(--line)"}`,
+                                background: resultForQuestion ? (resultForQuestion.isCorrect ? "var(--success-tint)" : "var(--coral-tint)") : "var(--paper-2)",
+                                borderRadius: 8, padding: "8px 10px", outline: "none",
+                              }}
+                            />
+                            {resultForQuestion && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--slate-light)", marginTop: 6 }}>
+                                {resultForQuestion.isCorrect
+                                  ? <CheckCircle2 size={13} color="var(--success)" />
+                                  : <XCircle size={13} color="var(--coral)" />}
+                                {resultForQuestion.isCorrect
+                                  ? "Correct"
+                                  : `Accepted answer${resultForQuestion.acceptableAnswers.length > 1 ? "s" : ""}: ${resultForQuestion.acceptableAnswers.join(", ")}`}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {q.options.map((o) => {
+                              const isSelected = selectedAnswers[q.id] === o.id;
+                              const isCorrectAnswer = resultForQuestion?.correctOptionId === o.id;
+                              const isWrongSelected = resultForQuestion && isSelected && !resultForQuestion.isCorrect;
 
-                            let borderColor = "var(--line)";
-                            let bg = "transparent";
-                            if (resultForQuestion) {
-                              if (isCorrectAnswer) { borderColor = "var(--success)"; bg = "var(--success-tint)"; }
-                              else if (isWrongSelected) { borderColor = "var(--coral)"; bg = "var(--coral-tint)"; }
-                            } else if (isSelected) {
-                              borderColor = "var(--gold-dark)";
-                              bg = "var(--gold-tint)";
-                            }
+                              let borderColor = "var(--line)";
+                              let bg = "transparent";
+                              if (resultForQuestion) {
+                                if (isCorrectAnswer) { borderColor = "var(--success)"; bg = "var(--success-tint)"; }
+                                else if (isWrongSelected) { borderColor = "var(--coral)"; bg = "var(--coral-tint)"; }
+                              } else if (isSelected) {
+                                borderColor = "var(--gold-dark)";
+                                bg = "var(--gold-tint)";
+                              }
 
-                            return (
-                              <span
-                                key={o.id}
-                                onClick={() => selectAnswer(q.id, o.id)}
-                                style={{
-                                  fontSize: 12.5, border: `1px solid ${borderColor}`, background: bg,
-                                  borderRadius: 8, padding: "6px 12px", cursor: quizResult ? "default" : "pointer",
-                                  display: "flex", alignItems: "center", gap: 5,
-                                }}
-                              >
-                                {resultForQuestion && isCorrectAnswer && <CheckCircle2 size={13} color="var(--success)" />}
-                                {resultForQuestion && isWrongSelected && <XCircle size={13} color="var(--coral)" />}
-                                {o.optionText}
-                              </span>
-                            );
-                          })}
-                        </div>
+                              return (
+                                <span
+                                  key={o.id}
+                                  onClick={() => selectAnswer(q.id, o.id)}
+                                  style={{
+                                    fontSize: 12.5, border: `1px solid ${borderColor}`, background: bg,
+                                    borderRadius: 8, padding: "6px 12px", cursor: quizResult ? "default" : "pointer",
+                                    display: "flex", alignItems: "center", gap: 5,
+                                  }}
+                                >
+                                  {resultForQuestion && isCorrectAnswer && <CheckCircle2 size={13} color="var(--success)" />}
+                                  {resultForQuestion && isWrongSelected && <XCircle size={13} color="var(--coral)" />}
+                                  {o.optionText}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -546,6 +658,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onFetchQuiz
               )}
             </div>
           )}
+          </div>
 
           <button
             className="ks-btn ks-btn-gold"

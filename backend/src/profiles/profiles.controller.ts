@@ -1,7 +1,8 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { ProfilesService } from './profiles.service';
 import { Profile } from './entities/profile.entity';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 
 interface AuthenticatedRequest extends Request {
@@ -23,5 +24,18 @@ export class ProfilesController {
   @UseGuards(SupabaseAuthGuard)
   getMine(@Req() req: AuthenticatedRequest): Promise<Profile> {
     return this.profilesService.getMine(req.user.id);
+  }
+
+  // #107 — onboarding modal calls this once, right after a learner signs
+  // up, to set their interest category. Guard is the same as getMine
+  // (any authenticated user acting on their own row); the
+  // profiles_update_own RLS policy mirrors this for direct-Supabase access.
+  @Patch('me')
+  @UseGuards(SupabaseAuthGuard)
+  updateMine(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<Profile> {
+    return this.profilesService.updateGoal(req.user.id, dto.goal);
   }
 }
