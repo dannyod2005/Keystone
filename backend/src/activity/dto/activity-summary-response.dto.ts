@@ -9,6 +9,7 @@ export class ActivitySummaryResponseDto {
   minutesThisWeek: number;
   dailyGoalMin: number;
   goalHitDays: number;
-  // Monday -> Sunday of the current week (UTC), 7 entries.
+  // #183 — Monday -> Sunday (UTC), 7 entries, for the requested
+  // weekOffset (default: the current week).
   week: ActivityDayDto[];
 }
