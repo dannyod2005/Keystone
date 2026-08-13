@@ -181,12 +181,27 @@ export class ActivityService {
     const weekEnd = addDaysUTC(weekStart, 7);
     const historyStart = addDaysUTC(weekStart, -STREAK_LOOKBACK_DAYS);
 
-    const events = await this.activityRepo.find({
-      where: {
-        user: { id: userId },
-        occurredAt: Between(historyStart, weekEnd),
-      },
-    });
+    // #179 — this is a read endpoint, not a side-effect, so it can't
+    // "swallow and continue" the way #178's write paths do — there's no
+    // real action to protect here, just this data itself. But the safest
+    // failure mode is still a zeroed summary rather than a hard 500: if
+    // the query fails (e.g. the same activity_events schema drift behind
+    // #178/#179), fall back to an empty event list, which flows through
+    // the exact same computation below to a legitimate "nothing logged
+    // yet" response instead of taking the whole dashboard down with it.
+    let events: ActivityEvent[] = [];
+    try {
+      events = await this.activityRepo.find({
+        where: {
+          user: { id: userId },
+          occurredAt: Between(historyStart, weekEnd),
+        },
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to load activity events for summary (userId=${userId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     const minutesByDate = new Map<string, number>();
     for (const e of events) {
