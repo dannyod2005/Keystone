@@ -66,8 +66,13 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
     }
   }
 
+  // #204 — Catalogue/Discover center their content (maxWidth + margin:
+  // "0 auto"); this only ever had the maxWidth half, so on a wide
+  // viewport it hugged the left edge instead of centering like the rest
+  // of the app. maxWidth stays 1080 (unchanged) — that's sized for this
+  // screen's 2fr/1fr stats+calendar layout, not a copy of Catalogue's 1160.
   return (
-    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080 }}>
+    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080, margin: "0 auto" }}>
       <div className="ks-card" style={{ padding: "20px 24px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>Good morning, {firstName}</div>
