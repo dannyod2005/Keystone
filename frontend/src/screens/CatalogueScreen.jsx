@@ -19,13 +19,30 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
       )
     : byCategory;
 
+  // #184 — the subheading used to always show the unfiltered
+  // courses.length, even once a search or category chip narrowed the
+  // grid down. Reflect whatever's actually showing instead, only
+  // falling back to the generic "N courses across..." blurb when
+  // nothing's filtered.
+  const hasActiveFilter = filter !== "All" || query.length > 0;
+  const filteredSubheading = (() => {
+    const n = filtered.length;
+    const trackLabel = filter === "All" ? "course" : `${filter} course`;
+    const base = `${n} ${trackLabel}${n === 1 ? "" : "s"}`;
+    return query ? `${base} matching "${search.trim()}".` : `${base}.`;
+  })();
+
   return (
     <div className="ks-page-enter">
       {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
       <div style={{ maxWidth: 1160, margin: "0 auto", padding: "36px 28px 60px" }}>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 30, margin: "0 0 6px" }}>Course catalogue</h1>
         <p style={{ color: "var(--slate)", fontSize: 14, margin: "0 0 22px" }}>
-          {loading ? "Loading courses…" : `${courses.length} courses across technical, business, and leadership tracks.`}
+          {loading
+            ? "Loading courses…"
+            : hasActiveFilter
+              ? filteredSubheading
+              : `${courses.length} courses across technical, business, and leadership tracks.`}
         </p>
 
         {loading ? (
