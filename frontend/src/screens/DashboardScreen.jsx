@@ -6,7 +6,7 @@ import { getDisplayName, getFirstName } from "../lib/userDisplay";
 
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 30, goalHitDays: 0, week: [] };
 
-export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false }) {
+export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek }) {
   const firstName = getFirstName(getDisplayName(user));
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
@@ -153,9 +153,22 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
           <div className="ks-card" style={{ padding: 18, marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <span style={{ fontSize: 13.5, fontWeight: 600 }}>{monthLabel}</span>
-              <div style={{ display: "flex", gap: 6, opacity: 0.35 }}>
-                <ChevronLeft size={14} color="var(--slate-light)" style={{ cursor: "not-allowed" }} />
-                <ChevronRight size={14} color="var(--slate-light)" style={{ cursor: "not-allowed" }} />
+              <div style={{ display: "flex", gap: 6 }}>
+                {/* #183 — pages the day grid to an adjacent 7-day week;
+                    "next" stops at the real current week — there's
+                    nothing to look ahead to yet. */}
+                <ChevronLeft
+                  size={14}
+                  color="var(--slate-light)"
+                  style={{ cursor: "pointer" }}
+                  onClick={onPrevWeek}
+                />
+                <ChevronRight
+                  size={14}
+                  color={calendarWeekOffset >= 0 ? "var(--line)" : "var(--slate-light)"}
+                  style={{ cursor: calendarWeekOffset >= 0 ? "not-allowed" : "pointer" }}
+                  onClick={calendarWeekOffset >= 0 ? undefined : onNextWeek}
+                />
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, textAlign: "center" }}>

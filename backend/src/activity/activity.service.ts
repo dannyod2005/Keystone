@@ -170,16 +170,37 @@ export class ActivityService {
     return Array.from(keys).sort();
   }
 
-  async getSummary(userId: string): Promise<ActivitySummaryResponseDto> {
+  // #183 — weekOffset pages the calendar card's day grid to an adjacent
+  // week (-1 = last week, 1 = next week, 0/default = the real current
+  // week) without disturbing streak/minutesThisWeek/goalHitDays, which
+  // stay pinned to the real current week regardless — those back the
+  // separate "This week" card and the streak badge, neither of which the
+  // calendar's arrows are meant to page.
+  async getSummary(
+    userId: string,
+    weekOffset = 0,
+  ): Promise<ActivitySummaryResponseDto> {
     const profile = await this.profilesRepo.findOne({ where: { id: userId } });
     if (!profile) {
       throw new NotFoundException('Profile not found for this user');
     }
 
     const now = new Date();
-    const weekStart = startOfWeekUTC(now);
-    const weekEnd = addDaysUTC(weekStart, 7);
-    const historyStart = addDaysUTC(weekStart, -STREAK_LOOKBACK_DAYS);
+    const currentWeekStart = startOfWeekUTC(now);
+    const currentWeekEnd = addDaysUTC(currentWeekStart, 7);
+    const historyStart = addDaysUTC(currentWeekStart, -STREAK_LOOKBACK_DAYS);
+
+    const viewedWeekStart = addDaysUTC(currentWeekStart, weekOffset * 7);
+    const viewedWeekEnd = addDaysUTC(viewedWeekStart, 7);
+
+    // Widen the fetch window to cover whichever is further out: the
+    // streak lookback, or the week actually being viewed — a learner can
+    // page further back than STREAK_LOOKBACK_DAYS, or forward past the
+    // current week (harmless; nothing will be logged there).
+    const fetchStart =
+      viewedWeekStart < historyStart ? viewedWeekStart : historyStart;
+    const fetchEnd =
+      viewedWeekEnd > currentWeekEnd ? viewedWeekEnd : currentWeekEnd;
 
     // #179 — this is a read endpoint, not a side-effect, so it can't
     // "swallow and continue" the way #178's write paths do — there's no
@@ -194,7 +215,7 @@ export class ActivityService {
       events = await this.activityRepo.find({
         where: {
           user: { id: userId },
-          occurredAt: Between(historyStart, weekEnd),
+          occurredAt: Between(fetchStart, fetchEnd),
         },
       });
     } catch (err) {
@@ -212,17 +233,15 @@ export class ActivityService {
     const todayKey = toDateKey(now);
     const streak = computeStreak(minutesByDate, now);
 
-    const week = Array.from({ length: 7 }, (_, i) => {
-      const date = addDaysUTC(weekStart, i);
-      const key = toDateKey(date);
-      const minutes = minutesByDate.get(key) ?? 0;
-      return { date: key, minutes, goalHit: minutes >= DAILY_GOAL_MIN };
-    });
+    const week = buildWeek(viewedWeekStart, minutesByDate);
 
-    // Only count days up to and including today — a day later this week
-    // that hasn't happened yet shouldn't drag the average down or block a
-    // "goal hit" count that's meant to reflect what's actually happened.
-    const daysSoFar = week.filter((d) => d.date <= todayKey);
+    // Always the real current week, independent of weekOffset — see the
+    // note above. Only count days up to and including today within that
+    // week — a day later this week that hasn't happened yet shouldn't
+    // drag the average down or block a "goal hit" count that's meant to
+    // reflect what's actually happened.
+    const currentWeekDays = buildWeek(currentWeekStart, minutesByDate);
+    const daysSoFar = currentWeekDays.filter((d) => d.date <= todayKey);
     const minutesThisWeek = daysSoFar.reduce((sum, d) => sum + d.minutes, 0);
     const goalHitDays = daysSoFar.filter((d) => d.goalHit).length;
 
@@ -234,6 +253,15 @@ export class ActivityService {
       week,
     };
   }
+}
+
+function buildWeek(weekStart: Date, minutesByDate: Map<string, number>) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = addDaysUTC(weekStart, i);
+    const key = toDateKey(date);
+    const minutes = minutesByDate.get(key) ?? 0;
+    return { date: key, minutes, goalHit: minutes >= DAILY_GOAL_MIN };
+  });
 }
 
 function toDateKey(date: Date): string {

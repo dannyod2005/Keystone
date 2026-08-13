@@ -175,6 +175,11 @@ function KeystonePrototype() {
   const [courses, setCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [enrolledLoading, setEnrolledLoading] = useState(true);
+  // #183 — which 7-day week the Dashboard's mini-calendar is showing,
+  // in weeks relative to the current one (0 = this week, -1 = last
+  // week, ...). Lives here rather than in DashboardScreen so it resets
+  // naturally on logout along with the rest of this section's state.
+  const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
   const [activitySummary, setActivitySummary] = useState({
     streak: 0,
     minutesThisWeek: 0,
@@ -252,10 +257,15 @@ function KeystonePrototype() {
         goalHitDays: 0,
         week: [],
       });
+      setCalendarWeekOffset(0);
       return;
     }
 
-    fetch(`${process.env.REACT_APP_API_URL}/activity/summary`, {
+    // #183 — weekOffset pages the calendar's day grid only; the backend
+    // keeps streak/minutesThisWeek/goalHitDays pinned to the real
+    // current week regardless, so those don't flicker as the calendar is
+    // browsed.
+    fetch(`${process.env.REACT_APP_API_URL}/activity/summary?weekOffset=${calendarWeekOffset}`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
       .then((res) => {
@@ -264,7 +274,7 @@ function KeystonePrototype() {
       })
       .then(setActivitySummary)
       .catch((err) => console.error("Failed to load activity summary:", err.message));
-  }, [loggedIn, session]);
+  }, [loggedIn, session, calendarWeekOffset]);
 
   // #107 — learner's goal (profiles.goal), replacing the old LEARNER.goal
   // mock. Same re-run/reset-on-logout pattern as activitySummary above.
@@ -908,6 +918,9 @@ function KeystonePrototype() {
                   goal={learnerGoal}
                   activitySummary={activitySummary}
                   loading={coursesLoading || enrolledLoading}
+                  calendarWeekOffset={calendarWeekOffset}
+                  onPrevWeek={() => setCalendarWeekOffset((n) => n - 1)}
+                  onNextWeek={() => setCalendarWeekOffset((n) => n + 1)}
                 />
               </AppShell>
             </RequireAuth>
