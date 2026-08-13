@@ -446,8 +446,13 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     );
   }
 
+  // #212 — same fix as Dashboard (#204): maxWidth alone doesn't center a
+  // block-level element, it just caps its width, so on a wide viewport
+  // this hugged the left edge instead of centering like Catalogue/
+  // Discover (which both pair maxWidth with margin: "0 auto"). maxWidth
+  // stays 1080, unchanged.
   return (
-    <div className="ks-page-enter" style={{ padding: "22px 32px 40px", maxWidth: 1080 }}>
+    <div className="ks-page-enter" style={{ padding: "22px 32px 40px", maxWidth: 1080, margin: "0 auto" }}>
       <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", cursor: "pointer", marginBottom: 14 }}>
         <ChevronLeft size={15} /> Back to My learning
       </div>
