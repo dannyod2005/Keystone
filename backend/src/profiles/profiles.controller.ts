@@ -3,6 +3,7 @@ import { Request } from 'express';
 import { ProfilesService } from './profiles.service';
 import { Profile } from './entities/profile.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 
 interface AuthenticatedRequest extends Request {
@@ -37,5 +38,20 @@ export class ProfilesController {
     @Body() dto: UpdateProfileDto,
   ): Promise<Profile> {
     return this.profilesService.updateGoal(req.user.id, dto.goal);
+  }
+
+  // #186 — RoleOnboardingModal calls this once, right after a Google
+  // sign-up picks learner or trainer. Separate route (rather than folding
+  // role into PATCH /profiles/me alongside goal) so this endpoint's single
+  // job — writing the value RequireTrainerGuard authorizes against — stays
+  // easy to reason about on its own. Same guard as the rest of this
+  // controller: any authenticated user acting on their own row.
+  @Patch('me/role')
+  @UseGuards(SupabaseAuthGuard)
+  updateRole(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateRoleDto,
+  ): Promise<Profile> {
+    return this.profilesService.updateRole(req.user.id, dto.role);
   }
 }
