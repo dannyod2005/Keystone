@@ -367,7 +367,7 @@ function KeystonePrototype() {
   async function refetchActivitySummary() {
     if (!session) return;
     try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/activity/summary`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/activity/summary?weekOffset=${calendarWeekOffset}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (!res.ok) return;
@@ -375,6 +375,31 @@ function KeystonePrototype() {
     } catch (err) {
       console.error("Failed to refresh activity summary:", err.message);
     }
+  }
+
+  // #188 — DashboardScreen's inline editor calls this. Refetches the whole
+  // summary afterward rather than patching activitySummary.dailyGoalMin in
+  // place: goalHit per day (and therefore goalHitDays) is computed
+  // server-side against dailyGoalMin, so a new goal value changes more
+  // than just the number shown — refetching is what keeps the calendar's
+  // highlighted days and "N of 7 days hit" in sync with it, same as any
+  // other action that calls refetchActivitySummary above.
+  async function updateDailyGoal(dailyGoalMin) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me/daily-goal`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ dailyGoalMin }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    await refetchActivitySummary();
   }
 
   const screen = screenKeyFromPath(location.pathname);
@@ -1004,6 +1029,7 @@ function KeystonePrototype() {
                   calendarWeekOffset={calendarWeekOffset}
                   onPrevWeek={() => setCalendarWeekOffset((n) => n - 1)}
                   onNextWeek={() => setCalendarWeekOffset((n) => n + 1)}
+                  onUpdateDailyGoal={updateDailyGoal}
                 />
               </AppShell>
             </RequireAuth>

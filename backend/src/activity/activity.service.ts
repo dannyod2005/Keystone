@@ -6,10 +6,12 @@ import { Profile } from '../profiles/entities/profile.entity';
 import { CourseModule } from '../courses/entities/course-module.entity';
 import { ActivitySummaryResponseDto } from './dto/activity-summary-response.dto';
 
-// Fixed for now — there's no per-user goal-setting UI yet. Matches the
-// value the old LEARNER mock used, so the dashboard doesn't visually jump
-// when this lands.
-const DAILY_GOAL_MIN = 30;
+// #188 — used only as a last-resort fallback (a profile row that
+// somehow has a null dailyGoalMin — shouldn't happen given the column's
+// DB default, but this keeps goalHit/buildWeek from doing math against
+// undefined if it ever does). The real, per-learner value now comes from
+// profile.dailyGoalMin, set at signup and editable from the dashboard.
+const DEFAULT_DAILY_GOAL_MIN = 30;
 
 // How far back to pull events when walking the streak. Bounded so the
 // query stays cheap; generous enough that no realistic streak in this
@@ -184,6 +186,7 @@ export class ActivityService {
     if (!profile) {
       throw new NotFoundException('Profile not found for this user');
     }
+    const dailyGoalMin = profile.dailyGoalMin ?? DEFAULT_DAILY_GOAL_MIN;
 
     const now = new Date();
     const currentWeekStart = startOfWeekUTC(now);
@@ -233,14 +236,18 @@ export class ActivityService {
     const todayKey = toDateKey(now);
     const streak = computeStreak(minutesByDate, now);
 
-    const week = buildWeek(viewedWeekStart, minutesByDate);
+    const week = buildWeek(viewedWeekStart, minutesByDate, dailyGoalMin);
 
     // Always the real current week, independent of weekOffset — see the
     // note above. Only count days up to and including today within that
     // week — a day later this week that hasn't happened yet shouldn't
     // drag the average down or block a "goal hit" count that's meant to
     // reflect what's actually happened.
-    const currentWeekDays = buildWeek(currentWeekStart, minutesByDate);
+    const currentWeekDays = buildWeek(
+      currentWeekStart,
+      minutesByDate,
+      dailyGoalMin,
+    );
     const daysSoFar = currentWeekDays.filter((d) => d.date <= todayKey);
     const minutesThisWeek = daysSoFar.reduce((sum, d) => sum + d.minutes, 0);
     const goalHitDays = daysSoFar.filter((d) => d.goalHit).length;
@@ -248,19 +255,23 @@ export class ActivityService {
     return {
       streak,
       minutesThisWeek,
-      dailyGoalMin: DAILY_GOAL_MIN,
+      dailyGoalMin,
       goalHitDays,
       week,
     };
   }
 }
 
-function buildWeek(weekStart: Date, minutesByDate: Map<string, number>) {
+function buildWeek(
+  weekStart: Date,
+  minutesByDate: Map<string, number>,
+  dailyGoalMin: number,
+) {
   return Array.from({ length: 7 }, (_, i) => {
     const date = addDaysUTC(weekStart, i);
     const key = toDateKey(date);
     const minutes = minutesByDate.get(key) ?? 0;
-    return { date: key, minutes, goalHit: minutes >= DAILY_GOAL_MIN };
+    return { date: key, minutes, goalHit: minutes >= dailyGoalMin };
   });
 }
 

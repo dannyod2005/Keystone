@@ -1,4 +1,5 @@
-import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame } from "lucide-react";
+import { useState } from "react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil } from "lucide-react";
 
 import { KeystoneArch } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
@@ -6,8 +7,38 @@ import { getDisplayName, getFirstName } from "../lib/userDisplay";
 
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 30, goalHitDays: 0, week: [] };
 
-export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek }) {
+// #188 — presets rather than a free-text/number input: the dashboard card
+// is a tight space, and a handful of realistic options (matching
+// UpdateDailyGoalDto's 5–240 min bounds on the backend) covers the
+// realistic range without needing input validation UI here too.
+const DAILY_GOAL_PRESETS = [15, 30, 45, 60, 90];
+
+export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal }) {
   const firstName = getFirstName(getDisplayName(user));
+  // #188 — the DB column already existed; this is the first real UI for
+  // it. Inline on the dashboard card rather than a separate settings
+  // screen (there isn't one yet) or folded into the #107 goal-onboarding
+  // modal (that's a one-tap "pick a track" flow — adding a second,
+  // differently-shaped question to it would complicate a flow that's
+  // deliberately kept to a single click today).
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [savingGoal, setSavingGoal] = useState(false);
+
+  async function handlePickDailyGoal(minutes) {
+    if (savingGoal || minutes === activitySummary.dailyGoalMin) {
+      setEditingGoal(false);
+      return;
+    }
+    setSavingGoal(true);
+    try {
+      await onUpdateDailyGoal(minutes);
+      setEditingGoal(false);
+    } catch (err) {
+      console.error("Failed to update daily goal:", err.message);
+    } finally {
+      setSavingGoal(false);
+    }
+  }
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
   // #86 — "in-progress" (not yet complete) splits into two display groups:
@@ -185,7 +216,33 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
               })}
             </div>
             <hr className="ks-hairline" style={{ margin: "16px 0" }} />
-            <div style={{ fontSize: 12.5, color: "var(--slate)" }}>Daily goal · {activitySummary.dailyGoalMin} min</div>
+            {editingGoal ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {DAILY_GOAL_PRESETS.map((m) => (
+                  <span
+                    key={m}
+                    onClick={() => handlePickDailyGoal(m)}
+                    style={{
+                      fontSize: 12, fontWeight: 600, padding: "5px 10px", borderRadius: 100,
+                      cursor: savingGoal ? "default" : "pointer", opacity: savingGoal ? 0.6 : 1,
+                      background: m === activitySummary.dailyGoalMin ? "var(--ink)" : "var(--paper-2)",
+                      color: m === activitySummary.dailyGoalMin ? "var(--paper)" : "var(--slate)",
+                      border: "1px solid var(--line)",
+                    }}
+                  >
+                    {m}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div
+                onClick={() => setEditingGoal(true)}
+                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--slate)", cursor: "pointer" }}
+              >
+                Daily goal · {activitySummary.dailyGoalMin} min
+                <Pencil size={11} color="var(--slate-light)" />
+              </div>
+            )}
             <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>{activitySummary.goalHitDays} of 7 days hit this week</div>
           </div>
 

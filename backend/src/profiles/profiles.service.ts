@@ -40,4 +40,17 @@ export class ProfilesService {
     profile.role = role;
     return this.profilesRepo.save(profile);
   }
+
+  // #188 — the DB already had a per-learner dailyGoalMin column; nothing
+  // ever wrote to it, and ActivityService.getSummary ignored it too (see
+  // that fix). This is the write side — DashboardScreen's inline editor
+  // calls it directly, no onboarding-modal step needed.
+  async updateDailyGoal(
+    userId: string,
+    dailyGoalMin: number,
+  ): Promise<Profile> {
+    const profile = await this.getMine(userId);
+    profile.dailyGoalMin = dailyGoalMin;
+    return this.profilesRepo.save(profile);
+  }
 }
