@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, QueryFailedError, Repository } from 'typeorm';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
+import * as fontkit from '@pdf-lib/fontkit';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 import { Enrollment } from './entities/enrollment.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
@@ -241,11 +244,28 @@ export class EnrollmentsService {
     );
 
     const pdfDoc = await PDFDocument.create();
+
+    // #177 — pdf-lib's built-in StandardFonts only support WinAnsi
+    // encoding (Latin-1), so any learner name with Vietnamese
+    // diacritics (or other extended-Latin characters) threw an
+    // uncaught "cannot encode" error here, surfacing to the frontend
+    // as a plain 500. DejaVu Sans has full Vietnamese/extended-Latin
+    // coverage; it's bundled under src/assets/fonts (copied to
+    // dist/assets/fonts by nest-cli's asset config, see
+    // nest-cli.json) and embedded via fontkit instead of relying on
+    // the limited standard 14 fonts.
+    pdfDoc.registerFontkit(fontkit);
+    const fontsDir = join(__dirname, '../assets/fonts');
+    const [regularBytes, boldBytes] = await Promise.all([
+      readFile(join(fontsDir, 'DejaVuSans.ttf')),
+      readFile(join(fontsDir, 'DejaVuSans-Bold.ttf')),
+    ]);
+
     const page = pdfDoc.addPage([842, 595]); // A4 landscape, in points
     const { width, height } = page.getSize();
 
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(boldBytes);
+    const fontRegular = await pdfDoc.embedFont(regularBytes);
 
     const ink = rgb(0.086, 0.137, 0.239); // matches --ink from the app's design tokens
     const gold = rgb(0.78, 0.6, 0.16);
