@@ -33,6 +33,14 @@ function screenKeyFromPath(pathname) {
   return "home";
 }
 
+// #207 — sessionStorage key for a course a logged-out learner clicked
+// "Enrol" on. pendingCourse (React state) is enough for the email-signup
+// flow, which resolves synchronously in the same page load, but Google
+// sign-in (#186) is a full-page redirect that clears all in-memory state
+// including pendingCourse — this is the survives-a-redirect mirror of it,
+// consumed by the effect near completeEnrol below.
+const PENDING_ENROL_STORAGE_KEY = "ks_pendingEnrolCourseId";
+
 // Backend returns lastAccessed as an ISO timestamp or null (a fresh
 // enrollment has never been "accessed" yet). Format to something short
 // for display; DashboardScreen just interpolates this string raw.
@@ -642,6 +650,25 @@ function KeystonePrototype() {
     navigate("/dashboard");
   }
 
+  // #207 — the other half of the sessionStorage mirror set in handleEnrol:
+  // picks up a pending enrollment that survived a Google OAuth redirect
+  // (which clears pendingCourse along with all other in-memory state,
+  // unlike the synchronous email-signup path handleAuthSubmit handles
+  // directly). Runs whenever loggedIn/coursesLoading change, but the key
+  // is removed the moment it's read regardless of what happens next — a
+  // course that's since been deleted just silently drops the pending
+  // enrollment rather than retrying — so this only ever acts once per
+  // stored value and can't loop or leak into a later signup.
+  useEffect(() => {
+    if (!loggedIn || coursesLoading) return;
+    const pendingId = sessionStorage.getItem(PENDING_ENROL_STORAGE_KEY);
+    if (!pendingId) return;
+    sessionStorage.removeItem(PENDING_ENROL_STORAGE_KEY);
+    const course = courses.find((c) => c.id === pendingId);
+    if (course) completeEnrol(course);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedIn, coursesLoading]);
+
   async function fetchQuiz(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz`);
     if (!res.ok) throw new Error(`Request failed: ${res.status}`);
@@ -908,6 +935,11 @@ function KeystonePrototype() {
     if (pendingCourse) {
       completeEnrol(pendingCourse);
       setPendingCourse(null);
+      // #207 — this (synchronous email-signup) path resolves the pending
+      // enrollment directly, so the sessionStorage mirror handleEnrol set
+      // is no longer needed — clear it so a later, unrelated signup on
+      // this browser can't pick up a stale value.
+      sessionStorage.removeItem(PENDING_ENROL_STORAGE_KEY);
     } else {
       navigate("/dashboard");
     }
@@ -937,6 +969,10 @@ function KeystonePrototype() {
       setPendingCourse(course);
       setSelectedCourse(null);
       setAuthMode("signup");
+      // #207 — mirrored to sessionStorage so the enrollment can still be
+      // completed if the learner picks Google from the auth modal (see
+      // PENDING_ENROL_STORAGE_KEY above).
+      sessionStorage.setItem(PENDING_ENROL_STORAGE_KEY, course.id);
       return;
     }
     completeEnrol(course);
@@ -1106,7 +1142,15 @@ function KeystonePrototype() {
 
       <AuthModal
         mode={authMode}
-        onClose={() => { setAuthMode(null); setPendingCourse(null); }}
+        onClose={() => {
+          setAuthMode(null);
+          setPendingCourse(null);
+          // #207 — closing without completing signup abandons the intent
+          // to enrol; clear the sessionStorage mirror too so it can't
+          // surface as a surprise auto-enrol on some later, unrelated
+          // signup in this browser.
+          sessionStorage.removeItem(PENDING_ENROL_STORAGE_KEY);
+        }}
         onSubmit={handleAuthSubmit}
       />
 
