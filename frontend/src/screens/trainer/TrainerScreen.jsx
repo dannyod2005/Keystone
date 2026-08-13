@@ -79,8 +79,17 @@ export function TrainerScreen({
       ? courses
       : courses.filter((c) => (ownerFilter === "Mine" ? canEditCourse(c) : !canEditCourse(c)));
   const query = courseSearch.trim().toLowerCase();
+  // #206 — match provider too, same as Catalogue's search
+  // (title.includes || provider.includes) — a trainer hunting for a
+  // course by the team/provider it belongs to, not its exact title,
+  // was coming up empty here even though Catalogue's identical-looking
+  // search box already supported that.
   const filteredCourses = query
-    ? byOwnership.filter((c) => (c.title || "").toLowerCase().includes(query))
+    ? byOwnership.filter(
+        (c) =>
+          (c.title || "").toLowerCase().includes(query) ||
+          (c.provider || "").toLowerCase().includes(query),
+      )
     : byOwnership;
 
   const editingCourse =
