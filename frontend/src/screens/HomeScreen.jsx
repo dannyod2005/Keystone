@@ -3,13 +3,13 @@ import { ArrowRight, ChevronRight, BookOpen } from "lucide-react";
 import { TESTIMONIALS } from "../data/courses";
 import { Stars, KeystoneArch, CategoryDot } from "../components/common/Primitives";
 import { MarketingHeader } from "../components/layout/MarketingHeader";
-import { getDisplayName } from "../lib/userDisplay";
+import { getDisplayName, getFirstName } from "../lib/userDisplay";
 
 /* ---------- Screen: Home (marketing for logged-out visitors, a
    welcome-back landing for logged-in users) ---------- */
 
 export function HomeScreen({ onGo, onAuth, courses, loggedIn, user, enrolled = [] }) {
-  const firstName = loggedIn ? getDisplayName(user).split(" ")[0] : null;
+  const firstName = loggedIn ? getFirstName(getDisplayName(user)) : null;
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
 

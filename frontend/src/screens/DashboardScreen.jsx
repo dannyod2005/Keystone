@@ -1,13 +1,13 @@
 import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame } from "lucide-react";
 
 import { KeystoneArch } from "../components/common/Primitives";
-import { getDisplayName } from "../lib/userDisplay";
+import { getDisplayName, getFirstName } from "../lib/userDisplay";
 /* ---------- Screen: Dashboard ---------- */
 
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 30, goalHitDays: 0, week: [] };
 
 export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false }) {
-  const firstName = getDisplayName(user).split(" ")[0];
+  const firstName = getFirstName(getDisplayName(user));
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
   // #86 — "in-progress" (not yet complete) splits into two display groups:
