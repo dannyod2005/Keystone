@@ -51,7 +51,13 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   // effect below, and refetched after a fresh submission so it stays in
   // sync without a page reload.
   const [quizResultsOverview, setQuizResultsOverview] = useState([]);
-  const [quizResultsLoading, setQuizResultsLoading] = useState(false);
+  // #205 — starts true (not false): the effect below kicks off a fetch on
+  // mount, and initializing this as "not loading" would let the
+  // quiz-completion gate below read an empty quizResultsOverview as "no
+  // quiz on any module" for the one render before that effect's
+  // setQuizResultsLoading(true) actually lands, flashing the Mark
+  // Complete button unlocked for an instant on every course load.
+  const [quizResultsLoading, setQuizResultsLoading] = useState(true);
 
   // Notes state
   const [noteContent, setNoteContent] = useState("");
@@ -171,7 +177,26 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const isComplete = activeModule >= modules.length;
   const isLastModule = activeModule >= modules.length - 1;
 
+  // #205 — quizResultsOverview (fetched once per course, keyed by
+  // moduleId) is the authoritative "does this module have a quiz, and
+  // has it already been taken" signal, rather than the per-module
+  // quizQuestions/quizResult state above: quizResult resets to null on
+  // every module switch (see the quiz effect), so a module whose quiz
+  // was actually completed in an earlier session would otherwise look
+  // falsely "not taken" the moment you navigate back to it. quizResult
+  // still matters on top of that for the *current* session's
+  // just-submitted case, since quizResultsOverview's own refetch after a
+  // submit (see handleSubmitQuiz below) is async and may not have
+  // resolved yet by the time this renders.
+  const currentQuizStatus = quizResultsOverview.find((r) => r.moduleId === currentModule?.id);
+  const quizAlreadySatisfied = !!quizResult || !!currentQuizStatus?.taken;
+  const quizBlocksCompletion = quizResultsLoading
+    ? true // don't know yet whether this module has a quiz — block rather than flash unlocked
+    : !!currentQuizStatus?.hasQuiz && !quizAlreadySatisfied;
+
   async function handleMarkComplete() {
+    if (quizBlocksCompletion) return; // defense in depth — the button is already disabled for this
+
     const nextActiveModule = isLastModule ? modules.length : activeModule + 1;
     setActiveModule(nextActiveModule);
     setCompletedCount(nextActiveModule);
@@ -676,12 +701,17 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
 
           <button
             className="ks-btn ks-btn-gold"
-            style={{ marginTop: 20, opacity: saving ? 0.7 : 1 }}
-            disabled={saving}
+            style={{ marginTop: 20, opacity: (saving || quizBlocksCompletion) ? 0.7 : 1 }}
+            disabled={saving || quizBlocksCompletion}
+            title={quizBlocksCompletion ? "Submit this module's quiz to continue" : undefined}
             onClick={handleMarkComplete}
           >
             <CheckCircle2 size={16} />
-            {saving ? "Saving…" : isLastModule ? "Mark complete & finish" : "Mark complete & continue"}
+            {saving
+              ? "Saving…"
+              : quizBlocksCompletion
+                ? "Complete the quiz to continue"
+                : isLastModule ? "Mark complete & finish" : "Mark complete & continue"}
           </button>
         </div>
 

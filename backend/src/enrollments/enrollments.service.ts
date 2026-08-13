@@ -19,6 +19,7 @@ import { EnrolledCourseDto, EnrollmentResponseDto } from './dto/enrollment-respo
 import { UpdateProgressDto } from './dto/update-progress.dto';
 import { SubmitRatingDto } from './dto/submit-rating.dto';
 import { ActivityService } from '../activity/activity.service';
+import { ModulesService } from '../modules/modules.service';
 
 @Injectable()
 export class EnrollmentsService {
@@ -30,6 +31,7 @@ export class EnrollmentsService {
     @InjectRepository(Course)
     private readonly coursesRepo: Repository<Course>,
     private readonly activityService: ActivityService,
+    private readonly modulesService: ModulesService,
   ) {}
 
   async create(userId: string, dto: CreateEnrollmentDto): Promise<Enrollment> {
@@ -114,6 +116,38 @@ export class EnrollmentsService {
     // first place, so it round-trips cleanly in practice.
     const oldCompletedModules =
       totalModules > 0 ? Math.round(enrollment.progress * totalModules) : 0;
+
+    // #205 — server-side mirror of LearningScreen's Mark Complete gate: a
+    // module with a quiz can't be counted as complete until that quiz has
+    // actually been submitted, so a client can't bypass the frontend gate
+    // by just calling this endpoint directly with a bumped
+    // completedModules. Only checked when progress is actually advancing
+    // (a same-or-lower value has nothing newly "completed" to validate).
+    // getQuizResultsForCourse is the same lookup CoursesModule's
+    // GET /courses/:id/quiz-results already uses, so "taken" here means
+    // exactly what the frontend's quizResultsOverview shows.
+    if (completedModules > oldCompletedModules) {
+      const newlyCompletedModules = enrollment.course.modules.slice(
+        oldCompletedModules,
+        completedModules,
+      );
+      const quizResults = await this.modulesService.getQuizResultsForCourse(
+        userId,
+        enrollment.course.id,
+      );
+      const quizStatusByModuleId = new Map(
+        quizResults.map((r) => [r.moduleId, r]),
+      );
+      const blockedModule = newlyCompletedModules.find((m) => {
+        const status = quizStatusByModuleId.get(m.id);
+        return status?.hasQuiz && !status.taken;
+      });
+      if (blockedModule) {
+        throw new BadRequestException(
+          `Complete the quiz for "${blockedModule.title}" before marking it as done`,
+        );
+      }
+    }
 
     enrollment.progress = totalModules > 0 ? completedModules / totalModules : 0;
     enrollment.status = completedModules >= totalModules && totalModules > 0
