@@ -8,8 +8,13 @@ export class Profile {
   @Column({ type: 'text', nullable: true })
   name: string | null;
 
-  @Column({ type: 'text', default: 'learner' })
-  role: string; // learner | trainer
+  // #186 — nullable: NULL means "hasn't picked a role yet" (currently only
+  // reachable via Google sign-in, which has no role-toggle step before the
+  // OAuth redirect). Email signup always sends a role at signUp() time, so
+  // those accounts never see NULL here. See MakeProfileRoleNullable
+  // migration for why this mirrors `goal`'s nullable "unset" pattern.
+  @Column({ type: 'text', nullable: true })
+  role: string | null; // learner | trainer | null (not chosen yet)
 
   @Column({ type: 'text', nullable: true })
   goal: string | null;

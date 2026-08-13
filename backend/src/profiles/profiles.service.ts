@@ -29,4 +29,15 @@ export class ProfilesService {
     profile.goal = goal;
     return this.profilesRepo.save(profile);
   }
+
+  // #186 — the Google sign-in role-picker's write path. `role` starts NULL
+  // for a Google sign-up (no role in its OAuth metadata — see the
+  // MakeProfileRoleNullable migration), so this is what turns "picked
+  // learner/trainer" into the value RequireTrainerGuard actually checks.
+  // Same general-purpose reasoning as updateGoal above.
+  async updateRole(userId: string, role: string): Promise<Profile> {
+    const profile = await this.getMine(userId);
+    profile.role = role;
+    return this.profilesRepo.save(profile);
+  }
 }

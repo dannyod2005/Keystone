@@ -51,6 +51,23 @@ export function AuthModal({ mode, onClose, onSubmit }) {
     setValues((prev) => ({ ...prev, [field]: v }));
   }
 
+  // #186 — full-page redirect to Google, then back. There's no session to
+  // hand to onSubmit() synchronously the way the email flow has one: the
+  // redirect leaves this component (and pendingCourse/auth-modal state)
+  // behind entirely, and the returning session is picked up by
+  // AuthContext's onAuthStateChange listener instead once the browser is
+  // back on the app. Any account without a role yet (a first-time Google
+  // sign-up — see MakeProfileRoleNullable) gets asked via the separate
+  // role-onboarding modal once App.jsx's profile fetch confirms it, not here.
+  async function handleGoogleSignIn() {
+    setAuthError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) setAuthError(error.message || "Something went wrong. Please try again.");
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setTouched(true);
@@ -201,13 +218,10 @@ export function AuthModal({ mode, onClose, onSubmit }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0" }}>
             <hr className="ks-hairline" style={{ flex: 1 }} /><span style={{ fontSize: 11.5, color: "var(--slate-light)" }}>OR</span><hr className="ks-hairline" style={{ flex: 1 }} />
           </div>
-          {/* Google OAuth requires a redirect flow (dashboard config + a
-              return route) that doesn't fit this modal's synchronous
-              submit pattern. Disabled for now — see #22's PR notes. */}
-          <button type="button" className="ks-btn ks-btn-ghost" style={{ width: "100%", justifyContent: "center", padding: "10px 0", opacity: 0.5, cursor: "not-allowed" }}
-            disabled title="Coming soon">
+          <button type="button" className="ks-btn ks-btn-ghost" style={{ width: "100%", justifyContent: "center", padding: "10px 0" }}
+            onClick={handleGoogleSignIn}>
             <svg width="15" height="15" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.47a5.54 5.54 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.82z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.91l-3.88-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.27v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.27 14.28A7.2 7.2 0 0 1 4.89 12c0-.79.14-1.56.38-2.28v-3.1H1.27A12 12 0 0 0 0 12c0 1.94.46 3.77 1.27 5.38l4-3.1z"/><path fill="#EA4335" d="M12 4.75c1.76 0 3.34.6 4.58 1.79l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.27 6.62l4 3.1C6.22 6.86 8.87 4.75 12 4.75z"/></svg>
-            Continue with Google (coming soon)
+            Continue with Google
           </button>
 
           <div style={{ fontSize: 11.5, color: "var(--slate-light)", textAlign: "center", marginTop: 18, lineHeight: 1.5 }}>

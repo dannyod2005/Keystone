@@ -12,6 +12,7 @@ import { AppTopbar } from "./components/layout/AppTopbar";
 import { CourseDetailModal } from "./components/modals/CourseDetailModal";
 import { AuthModal } from "./components/modals/AuthModal";
 import { GoalOnboardingModal } from "./components/modals/GoalOnboardingModal";
+import { RoleOnboardingModal } from "./components/modals/RoleOnboardingModal";
 
 import { HomeScreen } from "./screens/HomeScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
@@ -195,6 +196,14 @@ function KeystonePrototype() {
   const [learnerGoal, setLearnerGoal] = useState(null);
   const [goalLoaded, setGoalLoaded] = useState(false);
   const [showGoalOnboarding, setShowGoalOnboarding] = useState(false);
+  // #186 — profiles.role, fetched alongside goal below (same /profiles/me
+  // call). NULL only ever happens for a Google sign-up that hasn't picked
+  // learner/trainer yet — see MakeProfileRoleNullable. Kept separate from
+  // `role` (the user_metadata-derived value used for gating everywhere
+  // else) since this one specifically tracks "what does the DB say right
+  // now," which is what the trigger effect below needs to know.
+  const [profileRole, setProfileRole] = useState(null);
+  const [showRoleOnboarding, setShowRoleOnboarding] = useState(false);
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -289,6 +298,7 @@ function KeystonePrototype() {
     if (!loggedIn || !session) {
       setLearnerGoal(null);
       setGoalLoaded(false);
+      setProfileRole(null);
       return;
     }
 
@@ -298,6 +308,7 @@ function KeystonePrototype() {
       .then((res) => (res.ok ? res.json() : null))
       .then((profile) => {
         setLearnerGoal(profile?.goal ?? null);
+        setProfileRole(profile?.role ?? null);
         setGoalLoaded(true);
       })
       .catch((err) => console.error("Failed to load profile:", err.message));
@@ -322,11 +333,30 @@ function KeystonePrototype() {
   // additional capability layered on top, not a separate account type),
   // so they should get asked for a goal too — it only ever affects their
   // own learner-facing views (Catalogue/Dashboard), never Trainer Studio.
+  // #186 — role must be resolved first: a fresh Google sign-up has both
+  // role and goal null, and showing both onboarding modals at once would
+  // stack two full-screen backdrops. Gating this on `profileRole !== null`
+  // means it simply doesn't fire until the role effect below has run its
+  // course (either role was already set — the normal email-signup case,
+  // so this behaves exactly as before — or the learner/trainer picker just
+  // resolved it), at which point goal onboarding proceeds same as always.
   useEffect(() => {
-    if (loggedIn && goalLoaded && learnerGoal === null) {
+    if (loggedIn && goalLoaded && learnerGoal === null && profileRole !== null) {
       setShowGoalOnboarding(true);
     }
-  }, [loggedIn, goalLoaded, learnerGoal]);
+  }, [loggedIn, goalLoaded, learnerGoal, profileRole]);
+
+  // #186 — mirrors the goal-onboarding trigger above: fires once we've
+  // actually confirmed (via the /profiles/me fetch) that this account has
+  // no role yet, rather than off a signup-specific callback — same
+  // reasoning as #107's comment above, and it covers the Google OAuth
+  // redirect-return case for free since that's just another way `session`
+  // ends up set.
+  useEffect(() => {
+    if (loggedIn && goalLoaded && profileRole === null) {
+      setShowRoleOnboarding(true);
+    }
+  }, [loggedIn, goalLoaded, profileRole]);
 
   // Fire-and-forget refresh after an action that logs activity server-side
   // (module completed, quiz submitted, note saved, forum post made) — so
@@ -710,6 +740,38 @@ function KeystonePrototype() {
     setShowGoalOnboarding(false);
   }
 
+  // #186 — called by RoleOnboardingModal when a Google sign-up picks
+  // learner or trainer. Writes both halves of the role split found while
+  // building this: `profiles.role` (what RequireTrainerGuard actually
+  // authorizes trainer-only endpoints against) via the backend, and
+  // Supabase Auth's user_metadata.role (what the `role` variable above —
+  // and therefore all frontend nav/route gating — reads) via updateUser().
+  // The updateUser() call fires a USER_UPDATED auth-state-change event that
+  // AuthContext's existing listener already picks up, so `user` refreshes
+  // on its own with no extra plumbing here.
+  async function updateRole(role) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me/role`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ role }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const { error } = await supabase.auth.updateUser({ data: { role } });
+    if (error) throw error;
+
+    const updated = await res.json();
+    setProfileRole(updated.role);
+    setShowRoleOnboarding(false);
+  }
+
   // #139 — Team tab. GET /providers/me 404s for "not a member of a
   // provider" (see ProvidersService.getMine) — that's a normal, expected
   // state here (the no-provider view), not an error, so it's translated
@@ -1004,6 +1066,11 @@ function KeystonePrototype() {
         mode={authMode}
         onClose={() => { setAuthMode(null); setPendingCourse(null); }}
         onSubmit={handleAuthSubmit}
+      />
+
+      <RoleOnboardingModal
+        open={showRoleOnboarding}
+        onSelect={updateRole}
       />
 
       <GoalOnboardingModal
