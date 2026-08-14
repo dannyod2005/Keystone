@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 
-import { Stars, CategoryDot } from "../components/common/Primitives";
+import { Stars, CategoryDot, PageHeader } from "../components/common/Primitives";
 import { MarketingHeader } from "../components/layout/MarketingHeader";
 
 // #190 — a curated row, not a dumping ground for every course in the
@@ -89,14 +89,20 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
     <div className="ks-page-enter">
       {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
       <div style={{ maxWidth: 1160, margin: "0 auto", padding: "36px 28px 60px" }}>
-        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 30, margin: "0 0 6px" }}>Course catalogue</h1>
-        <p style={{ color: "var(--slate)", fontSize: 14, margin: "0 0 22px" }}>
-          {loading
-            ? "Loading courses…"
-            : hasActiveFilter
-              ? filteredSubheading
-              : `${courses.length} courses across technical, business, and leadership tracks.`}
-        </p>
+        {/* #213 — was an inline h1/p; now the shared PageHeader primitive
+            (same 30px/font-display/600 title, same subtitle styling) so
+            Dashboard/Discover can match this scale exactly instead of
+            each hand-rolling their own heading size. */}
+        <PageHeader
+          title="Course catalogue"
+          subtitle={
+            loading
+              ? "Loading courses…"
+              : hasActiveFilter
+                ? filteredSubheading
+                : `${courses.length} courses across technical, business, and leadership tracks.`
+          }
+        />
 
         {loading ? (
           <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>

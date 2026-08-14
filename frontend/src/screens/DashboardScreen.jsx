@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil } from "lucide-react";
 
-import { KeystoneArch } from "../components/common/Primitives";
+import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
 /* ---------- Screen: Dashboard ---------- */
 
@@ -66,13 +66,22 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
     }
   }
 
-  // #204 — Catalogue/Discover center their content (maxWidth + margin:
-  // "0 auto"); this only ever had the maxWidth half, so on a wide
+  // #204/#213 — Catalogue/Discover center their content (maxWidth +
+  // margin: "0 auto"); this only ever had the maxWidth half, so on a wide
   // viewport it hugged the left edge instead of centering like the rest
-  // of the app. maxWidth stays 1080 (unchanged) — that's sized for this
-  // screen's 2fr/1fr stats+calendar layout, not a copy of Catalogue's 1160.
+  // of the app (#204). maxWidth was later raised from 1080 to 1160 to
+  // match Catalogue/Discover exactly (#213) — the 2fr/1fr stats+calendar
+  // layout below just gets a little more breathing room at that width,
+  // nothing structural needed changing.
   return (
-    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080, margin: "0 auto" }}>
+    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1160, margin: "0 auto" }}>
+      {/* #213 — Dashboard had no page-level title at all (its largest
+          text was this card's 15px greeting line), unlike Catalogue's
+          30px h1 — PageHeader closes that gap with the same shared scale.
+          No subtitle: the greeting card right below already carries
+          personalized context (name, goal, streak), so a second
+          "welcome" line here would just be repetitive. */}
+      <PageHeader title="My learning" />
       <div className="ks-card" style={{ padding: "20px 24px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>Good morning, {firstName}</div>
