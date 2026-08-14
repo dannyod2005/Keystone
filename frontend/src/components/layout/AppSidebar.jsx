@@ -4,13 +4,20 @@ import { KeystoneMark } from "../common/Primitives";
 
 /* ---------- Logged-in app shell ---------- */
 
-// #104 — off-canvas on mobile (< md), a normal in-flow sidebar on md+.
-// mobileOpen/onCloseMobile only matter below md; the md: classes below
-// override them back to a static, always-visible sidebar exactly like
-// before this issue, so desktop is unaffected. Position/visibility live
-// on Tailwind classes (the one thing inline style={{}} genuinely can't
-// express — media queries); everything else (color, padding, layout)
-// stays as the existing inline styles, unchanged.
+// #104/#218 — off-canvas on mobile (< md), a sticky in-flow sidebar on
+// md+. mobileOpen/onCloseMobile only matter below md; the md: classes
+// below override the mobile fixed/off-canvas positioning back to a
+// normal flex item that also stays pinned to the viewport top while the
+// page content scrolls (md:sticky + md:top-0), rather than #104's
+// original md:static, which let the sidebar scroll away with the page
+// on any content taller than one screen (#218). md:self-start stops the
+// flex row's default align-items: stretch from forcing the aside's box
+// to match the (possibly much taller) main content's height — without
+// it, "sticky" has nothing to stick within because the box is already
+// as tall as the whole page. Position/visibility live on Tailwind
+// classes (the one thing inline style={{}} genuinely can't express —
+// media queries); everything else (color, padding, layout) stays as the
+// existing inline styles, unchanged.
 export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mobileOpen = false, onCloseMobile }) {
   const displayName = getDisplayName(user);
   const initials = getInitials(displayName);
@@ -33,7 +40,7 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 transform transition-transform duration-200 md:static md:translate-x-0 md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-40 transform transition-transform duration-200 md:sticky md:top-0 md:self-start md:translate-x-0 md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{ width: 220, flexShrink: 0, background: "var(--ink)", color: "var(--paper)", padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, minHeight: "100vh" }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "0 10px 22px" }}>
