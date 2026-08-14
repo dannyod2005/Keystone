@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Milestone } from "lucide-react";
 
 import { Stars, CategoryDot, PageHeader } from "../components/common/Primitives";
 import { MarketingHeader } from "../components/layout/MarketingHeader";
@@ -12,7 +12,20 @@ import { MarketingHeader } from "../components/layout/MarketingHeader";
 // "good," not just catalogue order.
 const RECOMMENDED_LIMIT = 6;
 
-export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolledIds, courses, loading = false, goal = null }) {
+export function CatalogueScreen({
+  loggedIn,
+  onGo,
+  onOpenCourse,
+  onAuth,
+  enrolledIds,
+  courses,
+  loading = false,
+  goal = null,
+  learningPaths = [],
+  onOpenPath,
+  enrolledPathIds = [],
+  pathsLoading = false,
+}) {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
   const cats = ["All", "Technical", "Business", "Leadership"];
@@ -86,6 +99,27 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
     );
   }
 
+  // #224 — a slimmer card than renderCourseCard: no rating/hours/level
+  // line since a path doesn't carry any of its own (those are per-course),
+  // just how many courses it bundles plus whatever description the
+  // trainer wrote.
+  function renderPathCard(p) {
+    const isEnrolled = enrolledPathIds.includes(p.id);
+    return (
+      <div key={p.id} className="ks-card" onClick={() => onOpenPath(p)} style={{ padding: 18, cursor: "pointer", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Milestone size={13} color="var(--gold-dark)" />
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{p.courses.length} courses</span>
+          </div>
+          {isEnrolled && <span className="ks-badge" style={{ background: "var(--success-tint)", color: "var(--success)" }}>Enrolled</span>}
+        </div>
+        <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
+        <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, flex: 1 }}>{p.description}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="ks-page-enter">
       {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
@@ -111,6 +145,24 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
           </div>
         ) : (
           <>
+            {/* #224 — "Learning paths": its own section, entirely separate
+                from the course search/category filter below (a path isn't
+                a course, so it doesn't belong in that grid or its filter
+                predicate). Hidden while paths are still loading or there
+                simply aren't any yet. */}
+            {!pathsLoading && learningPaths.length > 0 && (
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Learning paths</div>
+                <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>
+                  Guided, multi-course sequences curated by trainers.
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
+                  {learningPaths.map(renderPathCard)}
+                </div>
+                <hr className="ks-hairline" style={{ margin: "28px 0 0" }} />
+              </div>
+            )}
+
             {/* #190 — "Recommended for you": additive, above the untouched
                 full grid below. Hidden entirely once search/filter narrows
                 the view, or for any learner/trainer with no goal set. */}
