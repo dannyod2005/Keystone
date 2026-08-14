@@ -3,7 +3,7 @@ import { Trophy } from "lucide-react";
 
 import { PageHeader } from "../components/common/Primitives";
 
-// #231 — global, opt-in leaderboard ranked by weekly learning minutes.
+// #231/#246 — global, opt-in leaderboard ranked by weekly learning points.
 // Fetch-on-mount with a cancelled guard, same shape as
 // CourseAnalyticsView's onFetchAnalytics effect — onFetchLeaderboard is
 // recreated every App.jsx render, so it's deliberately left out of the
@@ -37,7 +37,7 @@ export function LeaderboardScreen({ onFetchLeaderboard }) {
     <div className="ks-page-enter" style={{ padding: "28px 32px 60px", maxWidth: 720, margin: "0 auto" }}>
       <PageHeader
         title="Leaderboard"
-        subtitle="Ranked by learning minutes logged this week. Only learners who've opted in appear here."
+        subtitle="Ranked by learning points logged this week. Only learners who've opted in appear here."
       />
 
       {loading ? (
@@ -74,7 +74,7 @@ export function LeaderboardScreen({ onFetchLeaderboard }) {
                 {e.name}{e.isSelf ? " (you)" : ""}
               </div>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--slate)" }}>
-                {e.weeklyMinutes} min
+                {e.weeklyPoints} pts
               </div>
             </div>
           ))}

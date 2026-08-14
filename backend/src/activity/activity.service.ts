@@ -5,25 +5,40 @@ import { ActivityEvent } from './entities/activity-event.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { ActivitySummaryResponseDto } from './dto/activity-summary-response.dto';
 
+// #246 — the scaling factor between the old minutes-based estimates
+// (module_view=3, quiz_submit=5, etc. — see modules.service.ts) and the
+// points now actually stored/tracked. Exported so every other file that
+// used to log/compare raw minute counts converts through this same
+// single constant rather than each picking its own scale. Purely
+// cosmetic on its own (10x everything changes no proportions), but
+// keeps point values feeling substantial once a module-completion
+// event's grade multiplier (see EnrollmentsService.updateProgress)
+// starts producing fractional-of-the-base amounts.
+export const POINTS_PER_MINUTE = 10;
+
 // #188 — used only as a last-resort fallback (a profile row that
-// somehow has a null dailyGoalMin — shouldn't happen given the column's
-// DB default, but this keeps goalHit/buildWeek from doing math against
-// undefined if it ever does). The real, per-learner value now comes from
-// profile.dailyGoalMin, set at signup and editable from the dashboard.
-const DEFAULT_DAILY_GOAL_MIN = 30;
+// somehow has a null dailyGoalPoints — shouldn't happen given the
+// column's DB default, but this keeps goalHit/buildWeek from doing math
+// against undefined if it ever does). The real, per-learner value now
+// comes from profile.dailyGoalPoints, set at signup and editable from
+// the dashboard. #246 — 300, not 30: the pre-existing 30-minute default
+// converted through POINTS_PER_MINUTE during the daily-goal migration,
+// so a learner who never touched their goal sees the same relative
+// target as before, just in the new unit.
+const DEFAULT_DAILY_GOAL_POINTS = 30 * POINTS_PER_MINUTE;
 
 // How far back to pull events when walking the streak. Bounded so the
 // query stays cheap; generous enough that no realistic streak in this
 // prototype gets cut short.
 const STREAK_LOOKBACK_DAYS = 120;
 
-// #124 — small credit for a module being open on a given day at all,
-// independent of whether anything else (a note, a quiz) was logged that
-// day. Same scale as NOTE_SAVE_MINUTES/FORUM_POST_MINUTES in
-// modules.service.ts. Its main job isn't really the minutes — it's
-// leaving a per-day marker so logModuleCompletion below knows which days
-// to split a module's completion minutes across.
-const MODULE_VIEW_MINUTES = 3;
+// #124/#246 — small credit for a module being open on a given day at
+// all, independent of whether anything else (a note, a quiz) was
+// logged that day. Same scale as NOTE_SAVE_POINTS/FORUM_POST_POINTS in
+// modules.service.ts. Its main job isn't really the points — it's
+// leaving a per-day marker so logModuleCompletion below knows which
+// days to split a module's completion points across.
+const MODULE_VIEW_POINTS = 3 * POINTS_PER_MINUTE;
 
 @Injectable()
 export class ActivityService {
@@ -38,11 +53,11 @@ export class ActivityService {
 
   // Called by other services right after a real learning action happens
   // (module completed, quiz submitted, note saved, forum post made).
-  // `minutes` is an estimate assigned by the caller, not a measured
-  // duration — see #37. Deliberately swallows a missing-profile case
-  // rather than throwing: the caller has already validated the profile
-  // exists as part of doing the real work, and a logging hiccup shouldn't
-  // be allowed to fail the action itself.
+  // `points` is an estimate assigned by the caller, not a measured
+  // duration — see #37/#246. Deliberately swallows a missing-profile
+  // case rather than throwing: the caller has already validated the
+  // profile exists as part of doing the real work, and a logging
+  // hiccup shouldn't be allowed to fail the action itself.
   //
   // #124 — `opts.occurredAt`, if given, overrides the default "right now"
   // timestamp. Only logModuleCompletion actually uses this, to backdate a
@@ -51,7 +66,7 @@ export class ActivityService {
   // @CreateDateColumn behaves exactly as before.
   //
   // #178 — that "shouldn't be allowed to fail the action itself" intent
-  // was only actually enforced for the missing-minutes case above; the DB
+  // was only actually enforced for the missing-points case above; the DB
   // write itself wasn't guarded, so any failure here (e.g. the
   // activity_events schema drifting out from under the entity) propagated
   // straight up and took the caller's whole request down with it — this
@@ -63,16 +78,16 @@ export class ActivityService {
   async logEvent(
     userId: string,
     source: string,
-    minutes: number,
+    points: number,
     opts?: { moduleId?: string; occurredAt?: Date },
   ): Promise<void> {
-    if (!minutes || minutes <= 0) return;
+    if (!points || points <= 0) return;
 
     try {
       const event = this.activityRepo.create({
         user: { id: userId } as Profile,
         source,
-        minutes,
+        points,
         module: opts?.moduleId ? { id: opts.moduleId } : null,
       });
       if (opts?.occurredAt) {
@@ -89,7 +104,7 @@ export class ActivityService {
   // #124 — one credit per (user, module, day), regardless of how many
   // times the module is opened that day. Called from ModulesService.logView
   // on every module focus; the dedup check here is what keeps repeated
-  // calls within the same day a no-op rather than stacking up minutes.
+  // calls within the same day a no-op rather than stacking up points.
   async logModuleView(userId: string, moduleId: string): Promise<void> {
     const now = new Date();
     const dayStart = new Date(
@@ -119,44 +134,50 @@ export class ActivityService {
       return;
     }
 
-    await this.logEvent(userId, 'module_view', MODULE_VIEW_MINUTES, {
+    await this.logEvent(userId, 'module_view', MODULE_VIEW_POINTS, {
       moduleId,
     });
   }
 
   // #124 — the actual fix for the issue: instead of logging a module's
-  // whole estimated `totalMinutes` on the single day it's marked complete,
+  // whole estimated `totalPoints` on the single day it's marked complete,
   // split it across every distinct day the module was viewed (per
   // logModuleView above), each dated to the day it happened. Completion
   // day is always included even if no view was separately logged for it
   // today — clicking "Mark complete" is itself evidence of work done that
   // day, matching the old single-day behavior for a module worked in one
   // sitting.
+  //
+  // #246 — `totalPoints` now arrives already grade-adjusted from the
+  // caller (EnrollmentsService.updateProgress multiplies the module's
+  // base points by its quiz score, if any, before calling this) — this
+  // method's own job is unchanged: purely distributing whatever amount
+  // it's given across the right days, not deciding what that amount is.
   async logModuleCompletion(
     userId: string,
     moduleId: string,
-    totalMinutes: number,
+    totalPoints: number,
   ): Promise<void> {
-    if (!totalMinutes || totalMinutes <= 0) return;
+    if (!totalPoints || totalPoints <= 0) return;
 
     const viewedDayKeys = await this.getViewedDayKeys(userId, moduleId);
     const todayKey = toDateKey(new Date());
     const dayKeys = Array.from(new Set([...viewedDayKeys, todayKey])).sort();
 
-    const base = Math.floor(totalMinutes / dayKeys.length);
-    let remainder = totalMinutes - base * dayKeys.length;
+    const base = Math.floor(totalPoints / dayKeys.length);
+    let remainder = totalPoints - base * dayKeys.length;
 
     // Remainder goes to the most recent day(s) first — the day the
     // learner actually finished feels like the natural place for the
-    // rounding-up minute(s) to land.
+    // rounding-up point(s) to land.
     for (let i = dayKeys.length - 1; i >= 0; i--) {
-      let minutes = base;
+      let points = base;
       if (remainder > 0) {
-        minutes += 1;
+        points += 1;
         remainder -= 1;
       }
-      if (minutes <= 0) continue;
-      await this.logEvent(userId, 'module_complete', minutes, {
+      if (points <= 0) continue;
+      await this.logEvent(userId, 'module_complete', points, {
         moduleId,
         occurredAt: dateKeyToNoonUTC(dayKeys[i]),
       });
@@ -184,7 +205,7 @@ export class ActivityService {
 
   // #183 — weekOffset pages the calendar card's day grid to an adjacent
   // week (-1 = last week, 1 = next week, 0/default = the real current
-  // week) without disturbing streak/minutesThisWeek/goalHitDays, which
+  // week) without disturbing streak/pointsThisWeek/goalHitDays, which
   // stay pinned to the real current week regardless — those back the
   // separate "This week" card and the streak badge, neither of which the
   // calendar's arrows are meant to page.
@@ -196,7 +217,8 @@ export class ActivityService {
     if (!profile) {
       throw new NotFoundException('Profile not found for this user');
     }
-    const dailyGoalMin = profile.dailyGoalMin ?? DEFAULT_DAILY_GOAL_MIN;
+    const dailyGoalPoints =
+      profile.dailyGoalPoints ?? DEFAULT_DAILY_GOAL_POINTS;
 
     const now = new Date();
     const currentWeekStart = startOfWeekUTC(now);
@@ -237,16 +259,16 @@ export class ActivityService {
       );
     }
 
-    const minutesByDate = new Map<string, number>();
+    const pointsByDate = new Map<string, number>();
     for (const e of events) {
       const key = toDateKey(e.occurredAt);
-      minutesByDate.set(key, (minutesByDate.get(key) ?? 0) + e.minutes);
+      pointsByDate.set(key, (pointsByDate.get(key) ?? 0) + e.points);
     }
 
     const todayKey = toDateKey(now);
-    const streak = computeStreak(minutesByDate, now);
+    const streak = computeStreak(pointsByDate, now);
 
-    const week = buildWeek(viewedWeekStart, minutesByDate, dailyGoalMin);
+    const week = buildWeek(viewedWeekStart, pointsByDate, dailyGoalPoints);
 
     // Always the real current week, independent of weekOffset — see the
     // note above. Only count days up to and including today within that
@@ -255,31 +277,31 @@ export class ActivityService {
     // reflect what's actually happened.
     const currentWeekDays = buildWeek(
       currentWeekStart,
-      minutesByDate,
-      dailyGoalMin,
+      pointsByDate,
+      dailyGoalPoints,
     );
     const daysSoFar = currentWeekDays.filter((d) => d.date <= todayKey);
-    const minutesThisWeek = daysSoFar.reduce((sum, d) => sum + d.minutes, 0);
+    const pointsThisWeek = daysSoFar.reduce((sum, d) => sum + d.points, 0);
     const goalHitDays = daysSoFar.filter((d) => d.goalHit).length;
 
     return {
       streak,
-      minutesThisWeek,
-      dailyGoalMin,
+      pointsThisWeek,
+      dailyGoalPoints,
       goalHitDays,
       week,
     };
   }
 
-  // #231 — batch version of getSummary's minutesThisWeek, for
+  // #231/#246 — batch version of getSummary's pointsThisWeek, for
   // LeaderboardService ranking many opted-in learners at once rather than
   // running getSummary's full per-user query (streak/week breakdown/etc.)
   // once per row. Same fetch-then-reduce-in-JS convention as getSummary
   // (no SQL aggregates), just reduced by user instead of by date. Every
   // requested userId is present in the returned map, defaulting to 0, so
-  // a learner with zero logged minutes this week still ranks (last),
+  // a learner with zero logged points this week still ranks (last),
   // rather than being silently dropped.
-  async getWeeklyMinutesForUsers(
+  async getWeeklyPointsForUsers(
     userIds: string[],
   ): Promise<Map<string, number>> {
     const result = new Map<string, number>(userIds.map((id) => [id, 0]));
@@ -308,7 +330,7 @@ export class ActivityService {
     }
 
     for (const e of events) {
-      result.set(e.user.id, (result.get(e.user.id) ?? 0) + e.minutes);
+      result.set(e.user.id, (result.get(e.user.id) ?? 0) + e.points);
     }
     return result;
   }
@@ -316,14 +338,14 @@ export class ActivityService {
 
 function buildWeek(
   weekStart: Date,
-  minutesByDate: Map<string, number>,
-  dailyGoalMin: number,
+  pointsByDate: Map<string, number>,
+  dailyGoalPoints: number,
 ) {
   return Array.from({ length: 7 }, (_, i) => {
     const date = addDaysUTC(weekStart, i);
     const key = toDateKey(date);
-    const minutes = minutesByDate.get(key) ?? 0;
-    return { date: key, minutes, goalHit: minutes >= dailyGoalMin };
+    const points = pointsByDate.get(key) ?? 0;
+    return { date: key, points, goalHit: points >= dailyGoalPoints };
   });
 }
 
@@ -361,8 +383,8 @@ function startOfWeekUTC(date: Date): Date {
 // — today isn't over yet — so counting falls back to yesterday instead.
 // The streak only actually resets once a full day passes with zero
 // activity.
-function computeStreak(minutesByDate: Map<string, number>, now: Date): number {
-  const isActive = (d: Date) => (minutesByDate.get(toDateKey(d)) ?? 0) > 0;
+function computeStreak(pointsByDate: Map<string, number>, now: Date): number {
+  const isActive = (d: Date) => (pointsByDate.get(toDateKey(d)) ?? 0) > 0;
 
   let cursor = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),

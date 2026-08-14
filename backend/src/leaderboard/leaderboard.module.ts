@@ -8,7 +8,7 @@ import { ActivityModule } from '../activity/activity.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Profile]),
-    // #231 — reuses ActivityService.getWeeklyMinutesForUsers for the
+    // #231/#246 — reuses ActivityService.getWeeklyPointsForUsers for the
     // ranking metric, same cross-module export pattern as every other
     // module that consumes ActivityService/BadgesService/etc.
     ActivityModule,

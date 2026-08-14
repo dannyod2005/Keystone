@@ -5,6 +5,6 @@ export class LeaderboardEntryDto {
   rank: number;
   id: string;
   name: string;
-  weeklyMinutes: number;
+  weeklyPoints: number;
   isSelf: boolean;
 }

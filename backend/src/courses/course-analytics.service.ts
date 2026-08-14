@@ -7,6 +7,7 @@ import { QuizQuestion } from '../quiz/entities/quiz-question.entity';
 import { QuizSubmission } from '../quiz/entities/quiz-submission.entity';
 import { CourseAnalyticsDto } from './dto/course-analytics.dto';
 import { LearnerAnalyticsRowDto } from './dto/learner-analytics-row.dto';
+import { POINTS_PER_MINUTE } from '../activity/activity.service';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -117,7 +118,7 @@ export class CourseAnalyticsService {
         !isComplete &&
         this.isBehindPace(
           course.hours,
-          e.user.dailyGoalMin,
+          e.user.dailyGoalPoints,
           e.createdAt,
           progress,
           now,
@@ -166,26 +167,28 @@ export class CourseAnalyticsService {
     };
   }
 
-  // #227 — "expected pace" derived from the same daily-goal concept the
-  // Dashboard already surfaces (profiles.daily_goal_min): if a learner
-  // studied their own daily goal every day since enrolling, they'd need
-  // roughly (course.hours * 60 / dailyGoalMin) days to finish. Comparing
-  // elapsed days against that expected duration gives an "expected
-  // progress by now" fraction to compare their real progress against.
-  // Guards against course.hours === 0 (a course with no estimated
-  // duration has no meaningful pace to be behind on) rather than dividing
-  // by zero.
+  // #227/#246 — "expected pace" derived from the same daily-goal concept
+  // the Dashboard already surfaces (profiles.daily_goal_points): if a
+  // learner studied their own daily goal every day since enrolling,
+  // they'd need roughly (course.hours * 60 * POINTS_PER_MINUTE /
+  // dailyGoalPoints) days to finish — course.hours is converted through
+  // the same points scale as everything else so it's comparable to
+  // dailyGoalPoints, which no longer means "minutes". Comparing elapsed
+  // days against that expected duration gives an "expected progress by
+  // now" fraction to compare their real progress against. Guards against
+  // course.hours === 0 (a course with no estimated duration has no
+  // meaningful pace to be behind on) rather than dividing by zero.
   private isBehindPace(
     courseHours: number,
-    dailyGoalMin: number,
+    dailyGoalPoints: number,
     enrolledAt: Date,
     progress: number,
     now: number,
   ): boolean {
-    if (courseHours <= 0 || dailyGoalMin <= 0) return false;
+    if (courseHours <= 0 || dailyGoalPoints <= 0) return false;
 
-    const totalMinutesNeeded = courseHours * 60;
-    const expectedDaysToFinish = totalMinutesNeeded / dailyGoalMin;
+    const totalPointsNeeded = courseHours * 60 * POINTS_PER_MINUTE;
+    const expectedDaysToFinish = totalPointsNeeded / dailyGoalPoints;
     const daysSinceEnrolled =
       (now - new Date(enrolledAt).getTime()) / MS_PER_DAY;
     const expectedProgress = Math.min(

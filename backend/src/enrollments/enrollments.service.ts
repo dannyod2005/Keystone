@@ -22,9 +22,13 @@ import {
 import { UpdateProgressDto } from './dto/update-progress.dto';
 import { SubmitRatingDto } from './dto/submit-rating.dto';
 import { CourseReviewDto } from './dto/course-review.dto';
-import { ActivityService } from '../activity/activity.service';
+import {
+  ActivityService,
+  POINTS_PER_MINUTE,
+} from '../activity/activity.service';
 import { ModulesService } from '../modules/modules.service';
 import { BadgesService } from '../badges/badges.service';
+import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 
 // #241 — a course grade at/above this earns the "Passed" certificate
 // tier instead of the standard "Completed" one. Same 70% bar as #240's
@@ -130,15 +134,20 @@ export class EnrollmentsService {
     const oldCompletedModules =
       totalModules > 0 ? Math.round(enrollment.progress * totalModules) : 0;
 
-    // #205 — server-side mirror of LearningScreen's Mark Complete gate: a
-    // module with a quiz can't be counted as complete until that quiz has
-    // actually been submitted, so a client can't bypass the frontend gate
-    // by just calling this endpoint directly with a bumped
+    // #205/#246 — server-side mirror of LearningScreen's Mark Complete
+    // gate: a module with a quiz can't be counted as complete until that
+    // quiz has actually been submitted, so a client can't bypass the
+    // frontend gate by just calling this endpoint directly with a bumped
     // completedModules. Only checked when progress is actually advancing
     // (a same-or-lower value has nothing newly "completed" to validate).
     // getQuizResultsForCourse is the same lookup CoursesModule's
     // GET /courses/:id/quiz-results already uses, so "taken" here means
-    // exactly what the frontend's quizResultsOverview shows.
+    // exactly what the frontend's quizResultsOverview shows. Hoisted out
+    // of this block (rather than being local to it) so the points-logging
+    // block further down can reuse the exact same quiz snapshot for its
+    // grade multiplier — one query, not two, and both reads see the same
+    // moment-in-time quiz state.
+    let quizStatusByModuleId: Map<string, ModuleQuizResultDto> | null = null;
     if (completedModules > oldCompletedModules) {
       const newlyCompletedModules = enrollment.course.modules.slice(
         oldCompletedModules,
@@ -148,11 +157,9 @@ export class EnrollmentsService {
         userId,
         enrollment.course.id,
       );
-      const quizStatusByModuleId = new Map(
-        quizResults.map((r) => [r.moduleId, r]),
-      );
+      quizStatusByModuleId = new Map(quizResults.map((r) => [r.moduleId, r]));
       const blockedModule = newlyCompletedModules.find((m) => {
-        const status = quizStatusByModuleId.get(m.id);
+        const status = quizStatusByModuleId!.get(m.id);
         return status?.hasQuiz && !status.taken;
       });
       if (blockedModule) {
@@ -196,14 +203,16 @@ export class EnrollmentsService {
     const newlyCompleted = Math.max(completedModules - oldCompletedModules, 0);
     if (newlyCompleted > 0 && totalModules > 0) {
       // Estimate: this course's total hours spread evenly across its
-      // modules. Not a measured duration — see #37.
-      const minutesPerModule = Math.round(
-        (enrollment.course.hours * 60) / totalModules,
+      // modules, converted to points via the same POINTS_PER_MINUTE scale
+      // as every other flat estimate in this app. Not a measured duration
+      // — see #37.
+      const basePointsPerModule = Math.round(
+        (enrollment.course.hours * 60 * POINTS_PER_MINUTE) / totalModules,
       );
 
       // #124 — log per specific module rather than one lump sum for
       // "however many modules got completed this call", so each module's
-      // estimated minutes can be split across the distinct days *that*
+      // estimated points can be split across the distinct days *that*
       // module was actually viewed (see ActivityService.logModuleCompletion)
       // instead of all landing on whichever day this request happened to
       // fire. enrollment.course.modules is already ordered by position
@@ -214,10 +223,30 @@ export class EnrollmentsService {
         completedModules,
       );
       for (const module of newlyCompletedModules) {
+        // #246 — a module's completion points are its base estimate times
+        // its quiz grade (score/total) as a decimal, so a module actually
+        // mastered earns full credit and one scraped through on a weak
+        // score earns proportionally less. quizStatusByModuleId is the
+        // same snapshot the #205 gate check above already fetched — reused
+        // here rather than queried again. A module with no quiz, or one
+        // whose quiz hasn't been taken (shouldn't happen given the gate
+        // above, but this is what "untaken" maps to if it somehow does),
+        // gets the full 1.0 multiplier: no quiz means nothing to be
+        // graded down by. This is a one-time, moment-of-completion
+        // calculation — a later quiz retake changes future course-grade
+        // reads (#240/#241) but deliberately does not reach back and
+        // recompute points already logged here.
+        const quizStatus = quizStatusByModuleId?.get(module.id);
+        const gradeMultiplier =
+          quizStatus?.hasQuiz && quizStatus.taken && quizStatus.total > 0
+            ? (quizStatus.score ?? 0) / quizStatus.total
+            : 1;
+        const modulePoints = Math.round(basePointsPerModule * gradeMultiplier);
+
         await this.activityService.logModuleCompletion(
           userId,
           module.id,
-          minutesPerModule,
+          modulePoints,
         );
       }
     }

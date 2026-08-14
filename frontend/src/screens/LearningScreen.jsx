@@ -126,7 +126,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const currentModule = modules[activeModule];
 
   // #124 — one ping per module focus, so the backend has a per-day "this
-  // module was open" marker to later split its completion minutes across
+  // module was open" marker to later split its completion points across
   // (see ActivityService.logModuleView/logModuleCompletion). Fire-and-forget:
   // no loading/error state here, this is a background signal, not something
   // the learner is waiting on. Same currentModule.id-only dependency
