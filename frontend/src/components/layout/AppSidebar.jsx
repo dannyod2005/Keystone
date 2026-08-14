@@ -1,4 +1,4 @@
-import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut, X } from "lucide-react";
+import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut, X, Trophy } from "lucide-react";
 import { getDisplayName, getInitials } from "../../lib/userDisplay";
 import { KeystoneMark } from "../common/Primitives";
 
@@ -25,6 +25,11 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
     { key: "dashboard", label: "My learning", icon: LayoutGrid },
     { key: "catalogue", label: "Catalogue", icon: BookOpen },
     { key: "home", label: "Discover", icon: HomeIcon },
+    // #231 — always visible, regardless of this learner's own opt-in
+    // state: the leaderboard itself only ever lists learners who've
+    // opted in, but browsing it (to see if anyone has) shouldn't require
+    // having opted in yourself.
+    { key: "leaderboard", label: "Leaderboard", icon: Trophy },
   ];
   if (role === "trainer") {
     items.push({ key: "trainer", label: "Trainer studio", icon: Pencil });

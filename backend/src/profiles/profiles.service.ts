@@ -53,4 +53,18 @@ export class ProfilesService {
     profile.dailyGoalMin = dailyGoalMin;
     return this.profilesRepo.save(profile);
   }
+
+  // #231 — a profile settings toggle for the leaderboard. Same
+  // general-purpose "update your own profile" shape as updateGoal/
+  // updateRole/updateDailyGoal above; LeaderboardService is the only
+  // reader of this column, filtering opted-in profiles directly rather
+  // than trusting the frontend to hide opted-out learners.
+  async updateLeaderboardOptIn(
+    userId: string,
+    optIn: boolean,
+  ): Promise<Profile> {
+    const profile = await this.getMine(userId);
+    profile.leaderboardOptIn = optIn;
+    return this.profilesRepo.save(profile);
+  }
 }

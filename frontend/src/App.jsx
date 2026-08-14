@@ -19,6 +19,7 @@ import { ResetPasswordModal } from "./components/modals/ResetPasswordModal";
 import { HomeScreen } from "./screens/HomeScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
+import { LeaderboardScreen } from "./screens/LeaderboardScreen";
 import { LearningScreen } from "./screens/LearningScreen";
 import { TrainerScreen } from "./screens/trainer/TrainerScreen";
 
@@ -30,6 +31,7 @@ function screenKeyFromPath(pathname) {
   if (pathname.startsWith("/catalogue")) return "catalogue";
   if (pathname.startsWith("/dashboard")) return "dashboard";
   if (pathname.startsWith("/learning")) return "learning";
+  if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/trainer")) return "trainer";
   return "home";
 }
@@ -243,6 +245,10 @@ function KeystonePrototype() {
   // now," which is what the trigger effect below needs to know.
   const [profileRole, setProfileRole] = useState(null);
   const [showRoleOnboarding, setShowRoleOnboarding] = useState(false);
+  // #231 — profiles.leaderboardOptIn, fetched alongside goal/role below
+  // (same /profiles/me call). Defaults false so a not-yet-fetched or
+  // logged-out state never optimistically reads as "opted in".
+  const [leaderboardOptIn, setLeaderboardOptIn] = useState(false);
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -520,6 +526,7 @@ function KeystonePrototype() {
       setLearnerGoal(null);
       setGoalLoaded(false);
       setProfileRole(null);
+      setLeaderboardOptIn(false);
       return;
     }
 
@@ -530,6 +537,7 @@ function KeystonePrototype() {
       .then((profile) => {
         setLearnerGoal(profile?.goal ?? null);
         setProfileRole(profile?.role ?? null);
+        setLeaderboardOptIn(profile?.leaderboardOptIn ?? false);
         setGoalLoaded(true);
       })
       .catch((err) => console.error("Failed to load profile:", err.message));
@@ -620,6 +628,43 @@ function KeystonePrototype() {
     }
 
     await refetchActivitySummary();
+  }
+
+  // #231 — Dashboard settings toggle calls this. Unlike updateDailyGoal,
+  // nothing else on this screen derives from leaderboardOptIn, so there's
+  // no equivalent "refetch a whole summary" step needed — just reflect
+  // the new value locally once the write succeeds.
+  async function updateLeaderboardOptIn(optIn) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me/leaderboard-opt-in`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ optIn }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    setLeaderboardOptIn(optIn);
+  }
+
+  // #231 — the Leaderboard screen's own fetch-on-mount, same
+  // on-demand-per-screen shape as fetchCourseAnalytics: nothing else in
+  // the app needs this data, so it isn't fetched globally on login like
+  // badges/notifications/bookmarks are.
+  async function fetchLeaderboard() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/leaderboard`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+    return res.json();
   }
 
   const screen = screenKeyFromPath(location.pathname);
@@ -1374,6 +1419,7 @@ function KeystonePrototype() {
     screen === "dashboard" ? "My learning" :
     screen === "catalogue" ? "Catalogue" :
     screen === "learning" ? (coursesForLearners.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
+    screen === "leaderboard" ? "Leaderboard" :
     screen === "trainer" ? "Trainer studio" : "";
 
   if (authLoading) {
@@ -1447,7 +1493,21 @@ function KeystonePrototype() {
                   pathEnrollments={pathEnrollments}
                   bookmarks={bookmarks}
                   onToggleBookmark={toggleBookmark}
+                  leaderboardOptIn={leaderboardOptIn}
+                  onUpdateLeaderboardOptIn={updateLeaderboardOptIn}
+                  onOpenLeaderboard={() => navigate("/leaderboard")}
                 />
+              </AppShell>
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/leaderboard"
+          element={
+            <RequireAuth loggedIn={loggedIn}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
+                <LeaderboardScreen onFetchLeaderboard={fetchLeaderboard} />
               </AppShell>
             </RequireAuth>
           }
