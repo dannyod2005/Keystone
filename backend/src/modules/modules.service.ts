@@ -26,6 +26,7 @@ import { QuizQuestionEditResponseDto } from '../quiz/dto/quiz-question-edit-resp
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 import { ActivityService } from '../activity/activity.service';
 import { BadgesService } from '../badges/badges.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // Fixed per-event minute estimates for actions that aren't naturally
 // scaled by course length the way module completion is (see #37).
@@ -63,6 +64,7 @@ export class ModulesService {
     private readonly forumPostsRepo: Repository<ForumPost>,
     private readonly activityService: ActivityService,
     private readonly badgesService: BadgesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getQuiz(moduleId: string): Promise<QuizQuestionResponseDto[]> {
@@ -509,9 +511,12 @@ export class ModulesService {
 
     let parentPost: ForumPost | null = null;
     if (dto.parentPostId) {
+      // #229 — user (not just module) loaded here too: it's the original
+      // author, needed below to decide whether this reply earns them a
+      // notification.
       parentPost = await this.forumPostsRepo.findOne({
         where: { id: dto.parentPostId },
-        relations: { module: true },
+        relations: { module: true, user: true },
       });
       if (!parentPost) {
         throw new NotFoundException(
@@ -548,6 +553,18 @@ export class ModulesService {
       where: { user: { id: userId } },
     });
     await this.badgesService.evaluateForumPost(userId, totalPosts === 1);
+
+    // #229 — a reply notifies the original post's author, skipping the
+    // self-reply case (someone replying to their own post shouldn't
+    // notify themselves). Only fires for an actual reply (parentPost set)
+    // — a fresh top-level post has no one to notify.
+    if (parentPost && parentPost.user.id !== userId) {
+      await this.notificationsService.createForReply(
+        parentPost.user,
+        profile,
+        saved,
+      );
+    }
 
     return {
       id: saved.id,
