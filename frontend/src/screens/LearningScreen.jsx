@@ -70,7 +70,13 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const [postsLoading, setPostsLoading] = useState(false);
   const [newPostContent, setNewPostContent] = useState("");
   const [postingError, setPostingError] = useState(null);
-  const [posting, setPosting] = useState(false);
+  // #220 — which post/reply target is currently submitting: null (nothing
+  // in flight), "new" (the top-level composer), or a post id (that post's
+  // reply form). Was a single shared `posting` boolean, which disabled and
+  // relabeled every reply button *and* the top-level Post button at once
+  // for any single submission — scoped per-target instead so only the form
+  // actually submitting shows a loading state.
+  const [postingTarget, setPostingTarget] = useState(null);
   // Threading (#39): only one reply box open at a time, keyed by which
   // post it's replying to. null = the top-level composer is in use instead.
   const [replyingTo, setReplyingTo] = useState(null);
@@ -290,7 +296,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     if (!currentModule || !onCreatePost || !content.trim()) return;
 
     setPostingError(null);
-    setPosting(true);
+    setPostingTarget(parentPostId ?? "new");
     try {
       const post = await onCreatePost(currentModule.id, content.trim(), parentPostId);
       setPosts((prev) => [...prev, post]);
@@ -303,7 +309,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     } catch (err) {
       setPostingError(err.message || "Failed to post.");
     } finally {
-      setPosting(false);
+      setPostingTarget(null);
     }
   }
 
@@ -431,11 +437,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                 {postingError && <div style={{ fontSize: 12, color: "var(--coral)", marginBottom: 8 }}>{postingError}</div>}
                 <button
                   className="ks-btn ks-btn-gold"
-                  disabled={posting || !replyContent.trim()}
-                  style={{ opacity: posting || !replyContent.trim() ? 0.6 : 1, padding: "6px 14px", fontSize: 13 }}
+                  disabled={postingTarget === p.id || !replyContent.trim()}
+                  style={{ opacity: postingTarget === p.id || !replyContent.trim() ? 0.6 : 1, padding: "6px 14px", fontSize: 13 }}
                   onClick={() => handleCreatePost(p.id)}
                 >
-                  {posting ? "Posting…" : "Reply"}
+                  {postingTarget === p.id ? "Posting…" : "Reply"}
                 </button>
               </div>
             )}
@@ -691,11 +697,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                     {postingError && <div style={{ fontSize: 12, color: "var(--coral)", marginBottom: 8 }}>{postingError}</div>}
                     <button
                       className="ks-btn ks-btn-gold"
-                      disabled={posting || !newPostContent.trim()}
-                      style={{ opacity: posting || !newPostContent.trim() ? 0.6 : 1 }}
+                      disabled={postingTarget === "new" || !newPostContent.trim()}
+                      style={{ opacity: postingTarget === "new" || !newPostContent.trim() ? 0.6 : 1 }}
                       onClick={() => handleCreatePost()}
                     >
-                      {posting ? "Posting…" : "Post"}
+                      {postingTarget === "new" ? "Posting…" : "Post"}
                     </button>
                   </div>
                 </>
