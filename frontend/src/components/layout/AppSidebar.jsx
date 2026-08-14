@@ -53,12 +53,20 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
         {items.map((it) => {
           const Icon = it.icon;
           const active = screen === it.key;
+          // #219 — a real <button>, not a click-only <div>: gets keyboard
+          // focus, Enter/Space activation, and "button" screen-reader
+          // semantics for free. fontFamily/textAlign/width/border/background
+          // are all set explicitly because browsers don't inherit typical
+          // typography onto form controls by default (the old div did,
+          // implicitly, via .ks-root) — every property here exists to make
+          // the button visually identical to the div it replaces, not to
+          // change the look.
           return (
-            <div key={it.key} onClick={() => onGo(it.key)}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 500, color: active ? "var(--ink)" : "var(--paper)", background: active ? "var(--gold-tint)" : "transparent" }}>
+            <button key={it.key} type="button" onClick={() => onGo(it.key)} aria-current={active ? "page" : undefined}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "none", width: "100%", textAlign: "left", fontFamily: "inherit", cursor: "pointer", fontSize: 14, fontWeight: 500, color: active ? "var(--ink)" : "var(--paper)", background: active ? "var(--gold-tint)" : "transparent" }}>
               <Icon size={16} color={active ? "var(--gold-dark)" : "var(--paper)"} />
               {it.label}
-            </div>
+            </button>
           );
         })}
         <hr style={{ border: "none", borderTop: "1px solid #FFFFFF22", margin: "16px 4px" }} />
@@ -74,13 +82,14 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
           </div>
         </div>
         {onLogout && (
-          <div
+          <button
+            type="button"
             onClick={onLogout}
-            style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 500, color: "#B9C0CC", marginTop: 8 }}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "none", width: "100%", textAlign: "left", fontFamily: "inherit", background: "transparent", cursor: "pointer", fontSize: 14, fontWeight: 500, color: "#B9C0CC", marginTop: 8 }}
           >
             <LogOut size={16} color="#B9C0CC" />
             Log out
-          </div>
+          </button>
         )}
       </aside>
     </>
