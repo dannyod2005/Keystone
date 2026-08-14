@@ -25,6 +25,7 @@ import { QuizOption } from '../quiz/entities/quiz-option.entity';
 import { QuizQuestionEditResponseDto } from '../quiz/dto/quiz-question-edit-response.dto';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 import { ActivityService } from '../activity/activity.service';
+import { BadgesService } from '../badges/badges.service';
 
 // Fixed per-event minute estimates for actions that aren't naturally
 // scaled by course length the way module completion is (see #37).
@@ -61,6 +62,7 @@ export class ModulesService {
     @InjectRepository(ForumPost)
     private readonly forumPostsRepo: Repository<ForumPost>,
     private readonly activityService: ActivityService,
+    private readonly badgesService: BadgesService,
   ) {}
 
   async getQuiz(moduleId: string): Promise<QuizQuestionResponseDto[]> {
@@ -280,6 +282,17 @@ export class ModulesService {
       userId,
       'quiz_submit',
       QUIZ_SUBMIT_MINUTES,
+    );
+
+    // #225 — perfect-score badge, evaluated only on this fresh-submission
+    // path (never on the "already submitted" early return above) since
+    // that's the one place this module's score is freshly graded rather
+    // than just being read back.
+    const score = graded.filter((g) => g.isCorrect).length;
+    await this.badgesService.evaluateQuizSubmission(
+      userId,
+      score,
+      questions.length,
     );
 
     const results = graded.map((g) =>
@@ -528,6 +541,13 @@ export class ModulesService {
       'forum_post',
       FORUM_POST_MINUTES,
     );
+
+    // #225 — "first ever post" badge. Counted after save() so the post
+    // just created is included — a count of exactly 1 means this was it.
+    const totalPosts = await this.forumPostsRepo.count({
+      where: { user: { id: userId } },
+    });
+    await this.badgesService.evaluateForumPost(userId, totalPosts === 1);
 
     return {
       id: saved.id,

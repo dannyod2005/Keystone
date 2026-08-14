@@ -7,6 +7,7 @@ import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
 import { ActivityModule } from '../activity/activity.module';
 import { ModulesModule } from '../modules/modules.module';
+import { BadgesModule } from '../badges/badges.module';
 
 @Module({
   imports: [
@@ -16,6 +17,9 @@ import { ModulesModule } from '../modules/modules.module';
     // quiz completion server-side, same cross-module pattern CoursesModule
     // already uses this export for (GET /courses/:id/quiz-results, #82).
     ModulesModule,
+    // #225 — reuses BadgesService.evaluateCourseCompletion when an
+    // enrollment's status transitions to 'complete'.
+    BadgesModule,
   ],
   controllers: [EnrollmentsController],
   providers: [EnrollmentsService],

@@ -178,6 +178,7 @@ function KeystonePrototype() {
 
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [enrolled, setEnrolled] = useState([]);
+  const [badges, setBadges] = useState([]);
   const [enrolling, setEnrolling] = useState(false); // #154 — the in-flight POST /enrollments request, so CourseDetailModal's Enrol button can disable/show pending state instead of allowing a double-click.
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
@@ -261,6 +262,32 @@ function KeystonePrototype() {
         setEnrolled([]);
       })
       .finally(() => setEnrolledLoading(false));
+  }, [loggedIn, session]);
+
+  // #225 — this learner's earned badges, for the Dashboard's badges card.
+  // Same re-run-on-login-change/reset-on-logout pattern as enrollments
+  // above. No dedicated loading flag: the card only renders once there's
+  // at least one badge (see DashboardScreen), so briefly showing nothing
+  // while this resolves reads the same as "no badges yet" rather than
+  // needing its own loading state.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setBadges([]);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/badges/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setBadges)
+      .catch((err) => {
+        console.error("Failed to load badges:", err.message);
+        setBadges([]);
+      });
   }, [loggedIn, session]);
 
   // Real streak / minutes-this-week / daily-goal data (#37), replacing the
@@ -1068,6 +1095,7 @@ function KeystonePrototype() {
               <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
                 <DashboardScreen
                   enrolled={enrolled}
+                  badges={badges}
                   onOpenCourse={setSelectedCourse}
                   onStartLearning={handleStartLearning}
                   courses={coursesForLearners}
