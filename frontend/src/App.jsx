@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation
+  BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation, useSearchParams
 } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
@@ -64,7 +64,7 @@ function normalizeCourse(c) {
 }
 
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
-function AppShell({ loggedIn, role, onLogout, title, children, user, goal }) {
+function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notifications, unreadCount, onOpenNotification }) {
   const location = useLocation();
   const screen = screenKeyFromPath(location.pathname);
   const navigate = useNavigate();
@@ -97,7 +97,15 @@ function AppShell({ loggedIn, role, onLogout, title, children, user, goal }) {
         />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {showSidebar && <AppTopbar title={title} onMenuClick={() => setMobileNavOpen(true)} />}
+        {showSidebar && (
+          <AppTopbar
+            title={title}
+            onMenuClick={() => setMobileNavOpen(true)}
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onOpenNotification={onOpenNotification}
+          />
+        )}
         {children}
       </div>
     </div>
@@ -124,6 +132,12 @@ function RequireTrainer({ role, children }) {
 function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
+  // #229 — a notification click-through lands here as
+  // /learning/:courseId?module=<id>&tab=forum; both are optional and
+  // LearningScreen falls back to its normal defaults when absent, so
+  // every other caller of this route (Dashboard's "Resume"/"Start", etc.)
+  // is completely unaffected.
+  const [searchParams] = useSearchParams();
   const course = courses.find((c) => String(c.id) === courseId);
   const enrollment = enrolled.find((e) => e.courseId === courseId);
 
@@ -164,6 +178,8 @@ function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onS
       onEditPost={onEditPost}
       currentUserId={currentUserId}
       onBack={() => navigate("/dashboard")}
+      initialModuleId={searchParams.get("module")}
+      initialTab={searchParams.get("tab")}
     />
   );
 }
@@ -180,6 +196,7 @@ function KeystonePrototype() {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [enrolled, setEnrolled] = useState([]);
   const [badges, setBadges] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [enrolling, setEnrolling] = useState(false); // #154 — the in-flight POST /enrollments request, so CourseDetailModal's Enrol button can disable/show pending state instead of allowing a double-click.
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
@@ -336,6 +353,58 @@ function KeystonePrototype() {
         setBadges([]);
       });
   }, [loggedIn, session]);
+
+  // #229 — forum-reply notifications, for the topbar bell. Same
+  // on-login-change fetch shape as badges above. This app has no polling
+  // precedent anywhere (every fetch here is on-mount/on-navigation or
+  // fired directly by a user action) — a new notification becomes visible
+  // the next time this effect re-runs (login, reload, or a route change
+  // that remounts the relevant screen), not the instant it's created on
+  // the server. A deliberate v1 scope boundary, not an oversight.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setNotifications([]);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/notifications`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setNotifications)
+      .catch((err) => {
+        console.error("Failed to load notifications:", err.message);
+        setNotifications([]);
+      });
+  }, [loggedIn, session]);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // #229 — best-effort: if the PATCH fails, the notification just stays
+  // marked unread locally rather than blocking navigation on it — the
+  // learner still gets taken to the right forum post either way, which is
+  // the part that actually matters.
+  async function markNotificationRead(notificationId) {
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/notifications/${notificationId}/read`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      const updated = await res.json();
+      setNotifications((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+    } catch (err) {
+      console.error("Failed to mark notification read:", err.message);
+    }
+  }
+
+  function handleOpenNotification(notification) {
+    if (!notification.read) markNotificationRead(notification.id);
+    navigate(`/learning/${notification.courseId}?module=${notification.moduleId}&tab=forum`);
+  }
 
   // Real streak / minutes-this-week / daily-goal data (#37), replacing the
   // old LEARNER mock. Re-runs on login state change like enrollments above;
@@ -1253,7 +1322,7 @@ function KeystonePrototype() {
           path="/"
           element={
             loggedIn ? (
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user} goal={learnerGoal}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
                 <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
               </AppShell>
             ) : (
@@ -1265,7 +1334,7 @@ function KeystonePrototype() {
         <Route
           path="/catalogue"
           element={
-            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
               <CatalogueScreen
                 loggedIn={loggedIn}
                 onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
@@ -1288,7 +1357,7 @@ function KeystonePrototype() {
           path="/dashboard"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
                 <DashboardScreen
                   enrolled={enrolled}
                   badges={badges}
@@ -1315,7 +1384,7 @@ function KeystonePrototype() {
           path="/learning/:courseId"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
                 <LearningRoute
                   courses={coursesForLearners}
                   enrolled={enrolled}
@@ -1344,7 +1413,7 @@ function KeystonePrototype() {
           element={
             <RequireAuth loggedIn={loggedIn}>
               <RequireTrainer role={role}>
-                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
+                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
                   <TrainerScreen
                     courses={courses}
                     onSaveCourse={saveCourse}

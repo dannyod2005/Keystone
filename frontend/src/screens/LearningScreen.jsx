@@ -2,16 +2,13 @@ import { useState, useEffect } from "react";
 import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star } from "lucide-react";
 
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
-  const [tab, setTab] = useState("video");
+export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack, initialModuleId = null, initialTab = null }) {
+  // #229 — a notification click-through wants a specific tab (always
+  // "forum" today) rather than the usual video-first default.
+  const [tab, setTab] = useState(initialTab || "video");
 
   const modules = course?.modules ?? [];
 
-  const initialActiveModule = enrollment
-    ? Math.min(Math.round(enrollment.progress * modules.length), modules.length)
-    : 0;
-
-  const [activeModule, setActiveModule] = useState(initialActiveModule);
   // #180 — activeModule doubles as "which module's content is currently
   // shown" (video/notes/quiz/forum tabs, sidebar highlight) and, before
   // this fix, was also what the progress bar and checkmarks read from.
@@ -21,10 +18,33 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   // complete even though nothing had been saved, and reloading (which
   // re-derives activeModule from the real enrollment.progress) reverted
   // it, looking like lost progress. completedCount is the actual
-  // persisted progress: seeded from the same enrollment.progress value,
-  // but only ever advanced by handleMarkComplete below — never by
-  // sidebar preview clicks.
-  const [completedCount, setCompletedCount] = useState(initialActiveModule);
+  // persisted progress: seeded from the real enrollment.progress value
+  // below, but only ever advanced by handleMarkComplete below — never by
+  // sidebar preview clicks, and — #229 — never by a notification
+  // click-through jump either (see initialActiveModule's comment).
+  const progressDerivedModule = enrollment
+    ? Math.min(Math.round(enrollment.progress * modules.length), modules.length)
+    : 0;
+
+  // #229 — a notification click-through targets a specific module (the
+  // one its reply belongs to) rather than the usual "next incomplete
+  // module" default. Falls through to the real-progress derivation above
+  // whenever initialModuleId isn't set, or doesn't match any module in
+  // this course (e.g. a stale/bad id) — same "never trust, always fall
+  // back to a safe default" posture as everywhere else client input is
+  // used to index into real data. Deliberately only affects which module
+  // is *shown* (activeModule) — completedCount below always seeds from
+  // progressDerivedModule regardless, so jumping to a notification's
+  // module can never make earlier, genuinely-incomplete modules look
+  // complete (the exact bug #180 already fixed once for sidebar preview
+  // clicks).
+  const initialModuleIndex = initialModuleId
+    ? modules.findIndex((m) => m.id === initialModuleId)
+    : -1;
+  const initialActiveModule = initialModuleIndex >= 0 ? initialModuleIndex : progressDerivedModule;
+
+  const [activeModule, setActiveModule] = useState(initialActiveModule);
+  const [completedCount, setCompletedCount] = useState(progressDerivedModule);
   const [saving, setSaving] = useState(false);
 
   // #106 — star-rating prompt on the "Course complete" card. hoverRating

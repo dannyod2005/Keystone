@@ -1,11 +1,42 @@
-import { Menu } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Menu, Bell } from "lucide-react";
 
 // #104 — hamburger is mobile-only (md:hidden); on md+ this renders nothing
 // and the topbar is pixel-identical to before this issue.
 // #105 — sticky below md so it (and the hamburger) stays reachable while
 // scrolling long screens like Catalogue/Trainer studio on mobile; md+ is
 // back to normal static flow, unchanged from before.
-export function AppTopbar({ title, onMenuClick }) {
+// #229 — bell icon + unread badge on the right, first anchored-dropdown UI
+// in this app (everything else — AuthModal, CourseDetailModal, etc. — is a
+// full centered modal with its own backdrop). A small, glanceable list
+// anchored under the bell fits a notification tray better than a modal
+// would, so this introduces the new pattern rather than forcing it into
+// the existing one.
+export function AppTopbar({ title, onMenuClick, notifications = [], unreadCount = 0, onOpenNotification }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  // #229 — click-anywhere-else-closes-it: this app has no prior anchored-
+  // dropdown to copy a pattern from (everything else is a centered modal
+  // with its own full-screen backdrop), so this is a standard
+  // document-mousedown-outside-the-container listener, only attached while
+  // the panel is actually open.
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  function handleSelect(n) {
+    setOpen(false);
+    onOpenNotification(n);
+  }
+
   return (
     <div className="sticky top-0 z-20 md:static md:z-auto" style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 32px", borderBottom: "1px solid var(--line)", background: "var(--paper-2)" }}>
       {onMenuClick && (
@@ -16,7 +47,62 @@ export function AppTopbar({ title, onMenuClick }) {
           onClick={onMenuClick}
         />
       )}
-      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 22, margin: 0 }}>{title}</h1>
+      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 22, margin: 0, flex: 1 }}>{title}</h1>
+
+      {onOpenNotification && (
+        <div ref={containerRef} style={{ position: "relative" }}>
+          <div
+            onClick={() => setOpen((v) => !v)}
+            style={{ position: "relative", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 8 }}
+          >
+            <Bell size={19} color="var(--ink)" />
+            {unreadCount > 0 && (
+              <span style={{
+                position: "absolute", top: 3, right: 3, minWidth: 15, height: 15, borderRadius: 100,
+                background: "var(--coral)", color: "#fff", fontSize: 10, fontWeight: 700,
+                display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px",
+              }}>
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </div>
+
+          {open && (
+            <div className="ks-card" style={{ position: "absolute", top: 42, right: 0, width: 320, maxHeight: 420, overflowY: "auto", padding: 0, zIndex: 40 }}>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)", fontSize: 13, fontWeight: 600 }}>
+                Notifications
+              </div>
+              {notifications.length === 0 ? (
+                <div style={{ padding: 20, fontSize: 12.5, color: "var(--slate-light)", textAlign: "center" }}>
+                  Nothing here yet.
+                </div>
+              ) : (
+                notifications.map((n, i) => (
+                  <div
+                    key={n.id}
+                    onClick={() => handleSelect(n)}
+                    style={{
+                      padding: "12px 16px", cursor: "pointer",
+                      borderBottom: i < notifications.length - 1 ? "1px solid var(--line)" : "none",
+                      background: n.read ? "transparent" : "var(--gold-tint)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                      {n.actorName} replied to your post
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--slate)", marginTop: 2, lineHeight: 1.4 }}>
+                      {n.excerpt}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--slate-light)", marginTop: 4 }}>
+                      {n.moduleTitle} · {n.courseTitle}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
