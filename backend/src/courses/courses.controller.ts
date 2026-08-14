@@ -2,10 +2,12 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Req, UseGuar
 import { Request } from 'express';
 import { CoursesService } from './courses.service';
 import { ModulesService } from '../modules/modules.service';
+import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { Course } from './entities/course.entity';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
+import { CourseReviewDto } from '../enrollments/dto/course-review.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { RequireTrainerGuard } from '../auth/require-trainer.guard';
 import { RequireCourseOwnerGuard } from './require-course-owner.guard';
@@ -19,6 +21,7 @@ export class CoursesController {
   constructor(
     private readonly coursesService: CoursesService,
     private readonly modulesService: ModulesService,
+    private readonly enrollmentsService: EnrollmentsService,
   ) {}
 
   @Get()
@@ -38,6 +41,14 @@ export class CoursesController {
     @Param('id') id: string,
   ): Promise<ModuleQuizResultDto[]> {
     return this.modulesService.getQuizResultsForCourse(req.user.id, id);
+  }
+
+  // #228 — public like findOne() above: CourseDetailModal shows reviews to
+  // anyone browsing the catalogue, enrolled or not, same as it already
+  // shows the aggregate star rating.
+  @Get(':id/reviews')
+  getReviews(@Param('id') id: string): Promise<CourseReviewDto[]> {
+    return this.enrollmentsService.getReviewsForCourse(id);
   }
 
   @Post()

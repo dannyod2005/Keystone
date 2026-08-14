@@ -42,6 +42,14 @@ export class Enrollment {
   @Column({ type: 'smallint', nullable: true })
   rating: number | null;
 
+  // #228 — optional written review submitted alongside `rating` (same
+  // submitRating call, see EnrollmentsService). Null means no review text
+  // was given, independent of whether `rating` itself is set — though in
+  // practice the frontend only ever sends reviewText together with a
+  // rating, never on its own.
+  @Column({ name: 'review_text', type: 'text', nullable: true })
+  reviewText: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }
