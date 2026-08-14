@@ -69,6 +69,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const [selectedAnswers, setSelectedAnswers] = useState({}); // { [questionId]: optionId }
   const [quizResult, setQuizResult] = useState(null); // set after submitting
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
+  // #239 — an already-taken quiz shows a read-only "you scored X/Y" summary
+  // by default rather than silently re-presenting a blank, answerable form;
+  // retaking is a deliberate action (clicking "Retake quiz"), not something
+  // that happens by just reopening the tab. See the render block below.
+  const [retaking, setRetaking] = useState(false);
 
   // Grades overview (#82) — every module's quiz result for this course,
   // not just the currently active one. Course-scoped (not per-module), so
@@ -135,6 +140,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     setSelectedAnswers({});
     setQuizResult(null);
     setQuizError(null);
+    setRetaking(false);
     setQuizLoading(true);
 
     onFetchQuiz(currentModule.id)
@@ -265,6 +271,16 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   function selectAnswer(questionId, optionId) {
     if (quizResult) return; // locked once submitted
     setSelectedAnswers((prev) => ({ ...prev, [questionId]: optionId }));
+  }
+
+  // #239 — clears any leftover selections before showing the blank,
+  // answerable form again, same starting state as a genuine first
+  // attempt (defensive — selectedAnswers should already be empty at this
+  // point, but a retake shouldn't ever be able to inherit stale picks).
+  function startRetake() {
+    setSelectedAnswers({});
+    setQuizError(null);
+    setRetaking(true);
   }
 
   async function handleSubmitQuiz() {
@@ -628,11 +644,27 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                 <div style={{ fontSize: 13.5, color: "var(--slate-light)" }}>
                   This module doesn't have a quiz yet.
                 </div>
+              ) : currentQuizStatus?.taken && !quizResult && !retaking ? (
+                // #239 — already taken, and neither just-submitted-this-
+                // session (quizResult) nor mid-retake: show a read-only
+                // summary + an explicit opt-in to try again, instead of
+                // silently re-presenting a blank form on every reopen.
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+                    Quick check — {quizQuestions.length} question{quizQuestions.length === 1 ? "" : "s"}
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>
+                    You've already taken this quiz — scored {currentQuizStatus.score}/{currentQuizStatus.total}.
+                  </div>
+                  <button className="ks-btn ks-btn-ghost" onClick={startRetake}>
+                    Retake quiz
+                  </button>
+                </div>
               ) : (
                 <>
                   <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
                     Quick check — {quizQuestions.length} question{quizQuestions.length === 1 ? "" : "s"}
-                    {quizResult && ` — ${quizResult.score}/${quizResult.total}${quizResult.alreadySubmitted ? " (already submitted)" : ""}`}
+                    {quizResult && ` — ${quizResult.score}/${quizResult.total}${quizResult.alreadySubmitted ? " (retake)" : ""}`}
                   </div>
 
                   {quizQuestions.map((q, i) => {

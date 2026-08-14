@@ -130,11 +130,9 @@ export class ModulesService {
     // never trusted from the client.
     const questionById = new Map(questions.map((q) => [q.id, q]));
 
-    // #40 — builds the response shape for a submission that's already
-    // been graded and stored (isCorrect lives on the submission itself
-    // now, for both question types — see the QuizSubmission entity
-    // comment). Used for both the "already submitted" path (existing
-    // rows) and the fresh-submission path (rows just saved) below.
+    // #40 — builds the response shape for a graded-and-stored submission
+    // (isCorrect lives on the submission itself now, for both question
+    // types — see the QuizSubmission entity comment).
     const buildResultItem = (
       question: QuizQuestion,
       submission: {
@@ -172,42 +170,24 @@ export class ModulesService {
       };
     };
 
-    // Single-attempt check: does this user already have submissions for
-    // any of this module's questions? Direct question_id lookup (#40) —
-    // previously this had to join through quiz_options, which had no
-    // equivalent path for a short-answer submission anyway.
-    const existingSubmissions = await this.quizSubmissionsRepo.find({
+    // #239 — was this a retake (had a prior submission) or a genuine
+    // first attempt? Purely informational for the response below —
+    // every submission is graded fresh from what was just sent, see the
+    // delete-then-insert further down, so this count doesn't gate
+    // anything.
+    const priorSubmissionCount = await this.quizSubmissionsRepo.count({
       where: {
         user: { id: userId },
         question: { id: In([...questionById.keys()]) },
       },
-      relations: { question: true, option: true },
     });
+    const isRetake = priorSubmissionCount > 0;
 
-    if (existingSubmissions.length > 0) {
-      const results = existingSubmissions.map((s) => {
-        const question = questionById.get(s.question.id);
-        if (!question) {
-          // Should be unreachable — s.question.id always comes from this
-          // module's own questions, matched via the In() filter above.
-          throw new NotFoundException(
-            `Submission's question "${s.question.id}" not found in this module's quiz`,
-          );
-        }
-        return buildResultItem(question, s);
-      });
-      return {
-        score: results.filter((r) => r.isCorrect).length,
-        total: questions.length,
-        alreadySubmitted: true,
-        results,
-      };
-    }
-
-    // Fresh submission: validate the answers cover exactly this module's
-    // questions — no missing, no extra — and that each answer has the
-    // right shape for its question's type, before grading or storing
-    // anything.
+    // Validate the answers cover exactly this module's questions — no
+    // missing, no extra — and that each answer has the right shape for
+    // its question's type, before grading or storing anything. Required
+    // on a retake too — resubmitting means answering the whole quiz
+    // again, not patching individual questions.
     const submittedQuestionIds = new Set(dto.answers.map((a) => a.questionId));
     const realQuestionIds = new Set(questions.map((q) => q.id));
 
@@ -269,6 +249,21 @@ export class ModulesService {
       return { answer: a, question, isCorrect: !!selected?.isCorrect };
     });
 
+    // #239 — unlimited retakes: a resubmission replaces the learner's
+    // prior answers for this module entirely rather than accumulating a
+    // second set of rows alongside the first. Deleting before inserting
+    // keeps exactly one QuizSubmission per (user, question) at all
+    // times, which is what every downstream reader assumes — this
+    // module's own getQuizResultsForCourse below, CourseAnalyticsService's
+    // per-learner quiz average, and the perfect-score badge check all
+    // just pool "this user's submissions" without expecting more than
+    // one per question. A no-op delete (nothing to remove) is harmless
+    // on a genuine first attempt.
+    await this.quizSubmissionsRepo.delete({
+      user: { id: userId },
+      question: { id: In([...questionById.keys()]) },
+    });
+
     const submissionsToSave = graded.map((g) =>
       this.quizSubmissionsRepo.create({
         user: profile,
@@ -280,16 +275,20 @@ export class ModulesService {
       }),
     );
     await this.quizSubmissionsRepo.save(submissionsToSave);
+    // #239 — logged on every submission, retakes included: reanswering
+    // every question is real, fresh work (the validation above requires
+    // a complete set of answers again, not a shortcut), so it earns
+    // activity minutes the same as a first attempt does.
     await this.activityService.logEvent(
       userId,
       'quiz_submit',
       QUIZ_SUBMIT_MINUTES,
     );
 
-    // #225 — perfect-score badge, evaluated only on this fresh-submission
-    // path (never on the "already submitted" early return above) since
-    // that's the one place this module's score is freshly graded rather
-    // than just being read back.
+    // #225/#239 — perfect-score badge, evaluated on every fresh grading
+    // pass, including retakes — award() is idempotent, so a learner who
+    // already has this badge just no-ops here, and one who newly hits
+    // 100% on a retake earns it exactly when they should.
     const score = graded.filter((g) => g.isCorrect).length;
     await this.badgesService.evaluateQuizSubmission(
       userId,
@@ -309,7 +308,12 @@ export class ModulesService {
     return {
       score: results.filter((r) => r.isCorrect).length,
       total: questions.length,
-      alreadySubmitted: false,
+      // #239 — repurposed from its old "returning stale, previously-
+      // graded data" meaning (that path no longer exists — every
+      // response here is a fresh grade) to "this attempt replaced a
+      // prior one," so the frontend can label a retake's result
+      // differently from a first attempt.
+      alreadySubmitted: isRetake,
       results,
     };
   }

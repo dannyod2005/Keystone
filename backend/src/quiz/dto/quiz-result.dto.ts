@@ -17,6 +17,11 @@ export class QuizResultItemDto {
 export class QuizResultDto {
   score: number;
   total: number;
+  // #239 — true when this submission replaced a prior one (a retake),
+  // false for a genuine first attempt. Every submitQuiz response is a
+  // freshly-graded result now — this field used to mean "this is stale,
+  // previously-graded data being replayed back," but that code path no
+  // longer exists (see modules.service.ts).
   alreadySubmitted: boolean;
   results: QuizResultItemDto[];
 }
