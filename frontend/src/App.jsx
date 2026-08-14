@@ -1098,6 +1098,21 @@ function KeystonePrototype() {
     }
   }
 
+  // #227 — trainer-only, course-owner-gated on the backend
+  // (RequireCourseOwnerGuard, same stack as PUT/DELETE /courses/:id) —
+  // exposes individual learners' names/progress, so this is never a public
+  // fetch like fetchCourseReviews above.
+  async function fetchCourseAnalytics(courseId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/${courseId}/analytics`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
   async function fetchQuizForEdit(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz/edit`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
@@ -1346,6 +1361,7 @@ function KeystonePrototype() {
                     paths={learningPaths}
                     onSavePath={savePath}
                     onDeletePath={deletePath}
+                    onFetchCourseAnalytics={fetchCourseAnalytics}
                   />
                 </AppShell>
               </RequireTrainer>
