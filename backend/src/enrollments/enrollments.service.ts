@@ -15,13 +15,24 @@ import { Enrollment } from './entities/enrollment.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
-import { EnrolledCourseDto, EnrollmentResponseDto } from './dto/enrollment-response.dto';
+import {
+  EnrolledCourseDto,
+  EnrollmentResponseDto,
+} from './dto/enrollment-response.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
 import { SubmitRatingDto } from './dto/submit-rating.dto';
 import { CourseReviewDto } from './dto/course-review.dto';
 import { ActivityService } from '../activity/activity.service';
 import { ModulesService } from '../modules/modules.service';
 import { BadgesService } from '../badges/badges.service';
+
+// #241 — a course grade at/above this earns the "Passed" certificate
+// tier instead of the standard "Completed" one. Same 70% bar as #240's
+// frontend MODULE_PASS_THRESHOLD_PCT — duplicated rather than shared
+// across the frontend/backend boundary (there's no existing shared
+// constants module between them), but both are named/commented to make
+// that intentional parity obvious if either ever changes.
+const CERTIFICATE_PASS_THRESHOLD_PCT = 70;
 
 @Injectable()
 export class EnrollmentsService {
@@ -61,10 +72,7 @@ export class EnrollmentsService {
     try {
       return await this.enrollmentsRepo.save(enrollment);
     } catch (err) {
-      if (
-        err instanceof QueryFailedError &&
-        (err as any).code === '23505'
-      ) {
+      if (err instanceof QueryFailedError && (err as any).code === '23505') {
         throw new ConflictException('Already enrolled in this course');
       }
       throw err;
@@ -97,7 +105,9 @@ export class EnrollmentsService {
     });
 
     if (!enrollment) {
-      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+      throw new NotFoundException(
+        `Enrollment with id "${enrollmentId}" not found`,
+      );
     }
 
     // Ownership check: a user can only update their own enrollment. Never
@@ -158,10 +168,12 @@ export class EnrollmentsService {
     // client call shouldn't re-evaluate the completion badges).
     const wasComplete = enrollment.status === 'complete';
 
-    enrollment.progress = totalModules > 0 ? completedModules / totalModules : 0;
-    enrollment.status = completedModules >= totalModules && totalModules > 0
-      ? 'complete'
-      : 'in-progress';
+    enrollment.progress =
+      totalModules > 0 ? completedModules / totalModules : 0;
+    enrollment.status =
+      completedModules >= totalModules && totalModules > 0
+        ? 'complete'
+        : 'in-progress';
     enrollment.lastAccessed = new Date();
 
     const saved = await this.enrollmentsRepo.save(enrollment);
@@ -247,7 +259,9 @@ export class EnrollmentsService {
     });
 
     if (!enrollment) {
-      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+      throw new NotFoundException(
+        `Enrollment with id "${enrollmentId}" not found`,
+      );
     }
 
     if (enrollment.user.id !== userId) {
@@ -255,7 +269,9 @@ export class EnrollmentsService {
     }
 
     if (enrollment.status !== 'complete') {
-      throw new BadRequestException('You can only rate a course after completing it');
+      throw new BadRequestException(
+        'You can only rate a course after completing it',
+      );
     }
 
     enrollment.rating = dto.rating;
@@ -306,14 +322,19 @@ export class EnrollmentsService {
     };
   }
 
-  async generateCertificate(userId: string, enrollmentId: string): Promise<Buffer> {
+  async generateCertificate(
+    userId: string,
+    enrollmentId: string,
+  ): Promise<Buffer> {
     const enrollment = await this.enrollmentsRepo.findOne({
       where: { id: enrollmentId },
       relations: { user: true, course: true },
     });
 
     if (!enrollment) {
-      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+      throw new NotFoundException(
+        `Enrollment with id "${enrollmentId}" not found`,
+      );
     }
 
     if (enrollment.user.id !== userId) {
@@ -321,15 +342,47 @@ export class EnrollmentsService {
     }
 
     if (enrollment.status !== 'complete') {
-      throw new BadRequestException('Certificate is only available for completed courses');
+      throw new BadRequestException(
+        'Certificate is only available for completed courses',
+      );
     }
 
     const learnerName = enrollment.user.name || 'Keystone Learner';
     const courseTitle = enrollment.course.title;
-    const completionDate = (enrollment.lastAccessed ?? new Date()).toLocaleDateString(
-      'en-US',
-      { year: 'numeric', month: 'long', day: 'numeric' },
+    const completionDate = (
+      enrollment.lastAccessed ?? new Date()
+    ).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    // #241 — same pooled, question-weighted course grade as #240's
+    // frontend course grade and CourseAnalyticsService's per-learner
+    // quiz average: sum correct answers over sum question counts across
+    // every taken-and-quizzed module. Reuses
+    // ModulesService.getQuizResultsForCourse (already injected here for
+    // #205's quiz-completion check) rather than a third calculation of
+    // the same thing. null (not 0%) when this course has no
+    // taken-and-quizzed modules — including a course with no quiz
+    // content anywhere — so it can never accidentally clear the pass
+    // bar below.
+    const moduleResults = await this.modulesService.getQuizResultsForCourse(
+      userId,
+      enrollment.course.id,
     );
+    const gradedModules = moduleResults.filter((m) => m.hasQuiz && m.taken);
+    const courseGradePct =
+      gradedModules.length > 0
+        ? Math.round(
+            (gradedModules.reduce((sum, m) => sum + (m.score ?? 0), 0) /
+              gradedModules.reduce((sum, m) => sum + m.total, 0)) *
+              100,
+          )
+        : null;
+    const passed =
+      courseGradePct !== null &&
+      courseGradePct >= CERTIFICATE_PASS_THRESHOLD_PCT;
 
     const pdfDoc = await PDFDocument.create();
 
@@ -359,27 +412,52 @@ export class EnrollmentsService {
     const gold = rgb(0.78, 0.6, 0.16);
     const slate = rgb(0.4, 0.44, 0.52);
 
-    // Border
+    // #241 — Border, title, and the "has successfully completed" line are
+    // the only things that change between tiers; a "Passed" certificate
+    // is a thicker gold border and a gold (not ink) title on top of the
+    // exact same layout, rather than a second, separately-designed
+    // template — the issue calls for reusing this PDF generation, not
+    // building a parallel one. When `passed` is false this renders
+    // byte-for-byte the same certificate as before this issue.
     page.drawRectangle({
       x: 24,
       y: 24,
       width: width - 48,
       height: height - 48,
       borderColor: gold,
-      borderWidth: 2,
+      borderWidth: passed ? 4 : 2,
     });
 
-    const centerText = (text: string, y: number, font = fontRegular, size = 14, color = ink) => {
+    const centerText = (
+      text: string,
+      y: number,
+      font = fontRegular,
+      size = 14,
+      color = ink,
+    ) => {
       const textWidth = font.widthOfTextAtSize(text, size);
       page.drawText(text, { x: (width - textWidth) / 2, y, size, font, color });
     };
 
-    centerText('CERTIFICATE OF COMPLETION', height - 120, fontBold, 22, ink);
+    const title = passed
+      ? 'CERTIFICATE OF ACHIEVEMENT'
+      : 'CERTIFICATE OF COMPLETION';
+    const completedLine = passed
+      ? 'has successfully completed, with distinction,'
+      : 'has successfully completed';
+    // #241 — the grade only appears on the Passed tier; the Completed
+    // tier's bottom line is deliberately identical to before this issue,
+    // whether or not this course even has a grade to show.
+    const bottomLine = passed
+      ? `Course grade: ${courseGradePct}%  ·  Completed on ${completionDate}`
+      : `Completed on ${completionDate}`;
+
+    centerText(title, height - 120, fontBold, 22, passed ? gold : ink);
     centerText('This certifies that', height - 180, fontRegular, 14, slate);
     centerText(learnerName, height - 220, fontBold, 30, ink);
-    centerText('has successfully completed', height - 265, fontRegular, 14, slate);
+    centerText(completedLine, height - 265, fontRegular, 14, slate);
     centerText(courseTitle, height - 300, fontBold, 20, gold);
-    centerText(`Completed on ${completionDate}`, height - 350, fontRegular, 12, slate);
+    centerText(bottomLine, height - 350, fontRegular, 12, slate);
     centerText('Keystone Learning', height - 80, fontBold, 14, ink);
 
     const pdfBytes = await pdfDoc.save();
