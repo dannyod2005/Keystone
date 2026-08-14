@@ -23,7 +23,8 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
     ? byCategory.filter(
         (c) =>
           c.title.toLowerCase().includes(query) ||
-          c.provider.toLowerCase().includes(query),
+          c.provider.toLowerCase().includes(query) ||
+          (c.skills ?? []).some((s) => s.toLowerCase().includes(query)),
       )
     : byCategory;
 

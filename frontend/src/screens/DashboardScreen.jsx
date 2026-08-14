@@ -52,6 +52,18 @@ export function DashboardScreen({ enrolled, badges = [], onOpenCourse, onStartLe
   const notStarted = inProgress.filter((e) => e.progress === 0);
   const continuing = inProgress.filter((e) => e.progress > 0);
 
+  // #226 — learner skills profile: unique skill tags aggregated from every
+  // completed course. Same courses.find(...) lookup already used for the
+  // "Completed" list above, so this naturally inherits its behavior for a
+  // completed enrollment whose course was later deleted from the
+  // catalogue (c is undefined, filtered out — see EnrolledCourseDto's
+  // deliberately minimal shape, which carries no skills field).
+  const skillsLearned = Array.from(
+    new Set(
+      complete.flatMap((e) => courses.find((x) => x.id === e.courseId)?.skills ?? []),
+    ),
+  );
+
   const days = ["M", "T", "W", "T", "F", "S", "S"];
   const todayKey = new Date().toISOString().slice(0, 10);
   const monthLabel = activitySummary.week[0]
@@ -287,6 +299,24 @@ export function DashboardScreen({ enrolled, badges = [], onOpenCourse, onStartLe
                       </div>
                     </div>
                   </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* #226 — same "hidden until non-empty" convention as the badges
+              card above it. */}
+          {skillsLearned.length > 0 && (
+            <div className="ks-card" style={{ padding: 18, marginTop: 16 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Skills</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {skillsLearned.map((s) => (
+                  <span
+                    key={s}
+                    style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper-2)", border: "1px solid var(--line)", borderRadius: 999, padding: "4px 10px" }}
+                  >
+                    {s}
+                  </span>
                 ))}
               </div>
             </div>

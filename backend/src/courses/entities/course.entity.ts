@@ -35,6 +35,16 @@ export class Course {
   @Column({ type: 'text', nullable: true })
   blurb: string | null;
 
+  // #226 — free-text skill tags ("Git", "SQL", "Negotiation"), a finer
+  // classification than the 3 broad categories above. `simple-array`
+  // stores this as a single comma-joined text column and TypeORM
+  // transparently joins/splits it into a real string[] on save/read —
+  // see the migration comment for why a plain column rather than a
+  // separate table. Trainer-settable via the course editor's tag input;
+  // never populated any other way.
+  @Column({ type: 'simple-array', default: '' })
+  skills: string[];
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
