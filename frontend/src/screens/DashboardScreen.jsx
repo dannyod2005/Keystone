@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil } from "lucide-react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil, Medal } from "lucide-react";
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
@@ -13,7 +13,7 @@ const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 
 // realistic range without needing input validation UI here too.
 const DAILY_GOAL_PRESETS = [15, 30, 45, 60, 90];
 
-export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal }) {
+export function DashboardScreen({ enrolled, badges = [], onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal }) {
   const firstName = getFirstName(getDisplayName(user));
   // #188 — the DB column already existed; this is the first real UI for
   // it. Inline on the dashboard card rather than a separate settings
@@ -267,6 +267,30 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
             <hr className="ks-hairline" style={{ margin: "16px 0" }} />
             <div style={{ fontSize: 12.5, color: "var(--slate)" }}>Enrolled in {enrolledCourseCount} course{enrolledCourseCount === 1 ? "" : "s"}</div>
           </div>
+
+          {/* #225 — small badges row/section, only shown once there's at
+              least one to show (no "no badges yet" placeholder — a
+              learner with none looks exactly like before this feature). */}
+          {badges.length > 0 && (
+            <div className="ks-card" style={{ padding: 18, marginTop: 16 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Badges</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {badges.map((b) => (
+                  <div key={b.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 8, background: "var(--gold-tint)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Medal size={15} color="var(--gold-dark)" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{b.label}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--slate-light)" }}>
+                        {b.description} · Earned {new Date(b.earnedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

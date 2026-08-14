@@ -21,6 +21,7 @@ import { SubmitRatingDto } from './dto/submit-rating.dto';
 import { CourseReviewDto } from './dto/course-review.dto';
 import { ActivityService } from '../activity/activity.service';
 import { ModulesService } from '../modules/modules.service';
+import { BadgesService } from '../badges/badges.service';
 
 @Injectable()
 export class EnrollmentsService {
@@ -33,6 +34,7 @@ export class EnrollmentsService {
     private readonly coursesRepo: Repository<Course>,
     private readonly activityService: ActivityService,
     private readonly modulesService: ModulesService,
+    private readonly badgesService: BadgesService,
   ) {}
 
   async create(userId: string, dto: CreateEnrollmentDto): Promise<Enrollment> {
@@ -150,6 +152,12 @@ export class EnrollmentsService {
       }
     }
 
+    // #225 — captured before the assignment below so the badge check
+    // after save() can tell "just became complete" apart from "was
+    // already complete" (e.g. a no-op re-save from a stale/duplicate
+    // client call shouldn't re-evaluate the completion badges).
+    const wasComplete = enrollment.status === 'complete';
+
     enrollment.progress = totalModules > 0 ? completedModules / totalModules : 0;
     enrollment.status = completedModules >= totalModules && totalModules > 0
       ? 'complete'
@@ -157,6 +165,21 @@ export class EnrollmentsService {
     enrollment.lastAccessed = new Date();
 
     const saved = await this.enrollmentsRepo.save(enrollment);
+
+    // #225 — course-completion badges, only on a genuine in-progress ->
+    // complete transition. completedCourseCount is this learner's total
+    // completed enrollments *including* the one just saved, since
+    // BadgesService.evaluateCourseCompletion checks against the exact
+    // count at which each badge is first earned (see that method).
+    if (!wasComplete && saved.status === 'complete') {
+      const completedCourseCount = await this.enrollmentsRepo.count({
+        where: { user: { id: userId }, status: 'complete' },
+      });
+      await this.badgesService.evaluateCourseCompletion(
+        userId,
+        completedCourseCount,
+      );
+    }
 
     const newlyCompleted = Math.max(completedModules - oldCompletedModules, 0);
     if (newlyCompleted > 0 && totalModules > 0) {
