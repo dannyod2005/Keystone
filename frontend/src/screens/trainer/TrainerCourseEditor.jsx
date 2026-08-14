@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronLeft, BookMarked, Plus, Trash2, Save, Video, ChevronDown, ChevronUp, HelpCircle } from "lucide-react";
+import { ChevronLeft, BookMarked, Plus, Trash2, Save, Video, ChevronDown, ChevronUp, HelpCircle, X } from "lucide-react";
 
 const TRAINER_CATEGORIES = ["Technical", "Business", "Leadership"];
 const TRAINER_LEVELS = ["Beginner", "Intermediate", "Advanced"];
@@ -10,6 +10,7 @@ function emptyCourseDraft() {
     title: "", provider: "", category: TRAINER_CATEGORIES[0], level: TRAINER_LEVELS[0],
     hours: 4, color: TRAINER_COLORS[0],
     blurb: "",
+    skills: [],
     modules: [{ title: "", videoUrl: "" }],
     credits: [{ line: "" }],
     faqs: [{ question: "", answer: "" }],
@@ -81,6 +82,7 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       hours: course.hours,
       color: course.color,
       blurb: course.blurb ?? "",
+      skills: course.skills ?? [],
       modules: course.modules.map((m) => ({ id: m.id, title: m.title, videoUrl: m.videoUrl ?? "" })),
       credits: course.credits.map((c) => ({ id: c.id, line: c.line })),
       faqs: course.faqs.map((f) => ({ id: f.id, question: f.question, answer: f.answer })),
@@ -148,6 +150,29 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
   }
   function addCredit() { setDraft((d) => ({ ...d, credits: [...d.credits, { line: "" }] })); }
   function removeCredit(i) { setDraft((d) => ({ ...d, credits: d.credits.filter((_, x) => x !== i) })); }
+
+  // #226 — free-text tag input: typing + Enter (or comma) commits the
+  // current text as a new skill and clears the field, distinct from the
+  // "list of objects with add/remove rows" pattern used above for
+  // modules/credits/faqs since a skill is just a bare string, not a
+  // multi-field object.
+  const [skillInput, setSkillInput] = useState("");
+
+  function addSkill(raw) {
+    const value = raw.trim();
+    if (!value) return;
+    setDraft((d) => (d.skills.includes(value) ? d : { ...d, skills: [...d.skills, value] }));
+    setSkillInput("");
+  }
+  function removeSkill(i) {
+    setDraft((d) => ({ ...d, skills: d.skills.filter((_, x) => x !== i) }));
+  }
+  function handleSkillInputKeyDown(e) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addSkill(skillInput);
+    }
+  }
 
   /* ---------- Quiz management ---------- */
 
@@ -358,6 +383,7 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       hours: Number(draft.hours) || 0,
       color: draft.color,
       blurb: draft.blurb || undefined,
+      skills: draft.skills,
       modules: draft.modules
         .filter((m) => m.title.trim().length > 0)
         .map((m) => ({
@@ -448,6 +474,28 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
         <div style={field}>
           <label style={label}>Summary</label>
           <textarea style={{ ...rowInput, minHeight: 70, resize: "vertical" }} value={draft.blurb} onChange={(e) => set("blurb", e.target.value)} placeholder="One or two sentences a learner sees on the catalogue card." />
+        </div>
+        <div>
+          <label style={label}>Skill tags</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+            {draft.skills.map((s, i) => (
+              <span
+                key={`${s}-${i}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper-2)", border: "1px solid var(--line)", borderRadius: 999, padding: "4px 10px" }}
+              >
+                {s}
+                <X size={12} style={{ cursor: "pointer" }} onClick={() => removeSkill(i)} />
+              </span>
+            ))}
+          </div>
+          <input
+            style={rowInput}
+            value={skillInput}
+            onChange={(e) => setSkillInput(e.target.value)}
+            onKeyDown={handleSkillInputKeyDown}
+            onBlur={() => addSkill(skillInput)}
+            placeholder="Type a skill and press Enter (e.g. Git, SQL, Negotiation)"
+          />
         </div>
       </div>
 

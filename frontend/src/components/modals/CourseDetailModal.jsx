@@ -100,6 +100,22 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
 
           <p style={{ fontSize: 14.5, color: "var(--ink-70)", lineHeight: 1.6, marginBottom: 22 }}>{visibleCourse.blurb}</p>
 
+          {/* #226 — same "only render once non-empty" convention as the
+              reviews block above: most courses will eventually have
+              skills, but plenty won't yet, so no empty-state placeholder. */}
+          {visibleCourse.skills && visibleCourse.skills.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 22 }}>
+              {visibleCourse.skills.map((s, i) => (
+                <span
+                  key={i}
+                  style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper-2)", border: "1px solid var(--line)", borderRadius: 999, padding: "4px 10px" }}
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 10 }}>Course agenda</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 0, marginBottom: 22 }}>
             {visibleCourse.modules.map((m, i) => (

@@ -82,6 +82,7 @@ export class CoursesService {
       hours: dto.hours,
       color: dto.color,
       blurb: dto.blurb ?? null,
+      skills: dto.skills ?? [],
       ownerId,
       providerId: owner?.providerId ?? null,
       modules: dto.modules.map((m, i) => ({
@@ -125,6 +126,7 @@ export class CoursesService {
       course.hours = dto.hours;
       course.color = dto.color;
       course.blurb = dto.blurb ?? null;
+      course.skills = dto.skills ?? [];
 
       course.modules = this.mergeChildren(
         course.modules,

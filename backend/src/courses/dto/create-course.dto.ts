@@ -44,6 +44,15 @@ export class CreateCourseDto {
   @IsString()
   blurb?: string;
 
+  // #226 — optional: a course can be created/edited without any skill
+  // tags, same as blurb/credits/faqs above. Defaulted to [] in
+  // CoursesService rather than here, matching how those other optional
+  // array fields are handled.
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  skills?: string[];
+
   @IsArray()
   @ArrayMinSize(1, { message: 'At least one module is required' })
   @ValidateNested({ each: true })
