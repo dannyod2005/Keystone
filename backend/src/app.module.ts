@@ -11,6 +11,7 @@ import { ProfilesModule } from './profiles/profiles.module';
 import { BadgesModule } from './badges/badges.module';
 import { LearningPathsModule } from './learning-paths/learning-paths.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { BookmarksModule } from './bookmarks/bookmarks.module';
 import { SupabaseAuthGuard } from './auth/supabase-auth.guard';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -38,6 +39,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
     BadgesModule,
     LearningPathsModule,
     NotificationsModule,
+    BookmarksModule,
   ],
   controllers: [AppController],
   providers: [AppService, SupabaseAuthGuard],
