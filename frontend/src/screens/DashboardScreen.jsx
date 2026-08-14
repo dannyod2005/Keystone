@@ -13,7 +13,7 @@ const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 
 // realistic range without needing input validation UI here too.
 const DAILY_GOAL_PRESETS = [15, 30, 45, 60, 90];
 
-export function DashboardScreen({ enrolled, badges = [], onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal }) {
+export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal }) {
   const firstName = getFirstName(getDisplayName(user));
   // #188 — the DB column already existed; this is the first real UI for
   // it. Inline on the dashboard card rather than a separate settings
@@ -317,6 +317,38 @@ export function DashboardScreen({ enrolled, badges = [], onOpenCourse, onStartLe
                   >
                     {s}
                   </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* #224 — same "hidden until non-empty" convention as badges/
+              skills above: completedCount/totalCount/status arrive
+              precomputed from the backend (see
+              LearningPathEnrollmentsService), so this is pure display,
+              same as how the course progress bars in the left column
+              never compute anything themselves either. */}
+          {pathEnrollments.length > 0 && (
+            <div className="ks-card" style={{ padding: 18, marginTop: 16 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Learning paths</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {pathEnrollments.map((pe) => (
+                  <div key={pe.id}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{pe.title}</span>
+                      {pe.status === "complete" && <CheckCircle2 size={14} color="var(--success)" />}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginBottom: 6 }}>
+                      {pe.completedCount} of {pe.totalCount} course{pe.totalCount === 1 ? "" : "s"} complete
+                    </div>
+                    <div style={{ height: 5, background: "var(--line)", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%",
+                        width: `${pe.totalCount > 0 ? (pe.completedCount / pe.totalCount) * 100 : 0}%`,
+                        background: pe.status === "complete" ? "var(--success)" : "var(--gold)",
+                      }} />
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

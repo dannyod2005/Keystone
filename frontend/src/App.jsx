@@ -10,6 +10,7 @@ import { AppSidebar } from "./components/layout/AppSidebar";
 import { AppTopbar } from "./components/layout/AppTopbar";
 
 import { CourseDetailModal } from "./components/modals/CourseDetailModal";
+import { LearningPathDetailModal } from "./components/modals/LearningPathDetailModal";
 import { AuthModal } from "./components/modals/AuthModal";
 import { GoalOnboardingModal } from "./components/modals/GoalOnboardingModal";
 import { RoleOnboardingModal } from "./components/modals/RoleOnboardingModal";
@@ -186,6 +187,16 @@ function KeystonePrototype() {
   const [courses, setCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [enrolledLoading, setEnrolledLoading] = useState(true);
+  // #224 — learning paths follow the exact same public-list/private-
+  // enrollment split as courses/enrolled above: `learningPaths` is the
+  // public GET /learning-paths list (no auth), `pathEnrollments` is this
+  // learner's own GET /learning-path-enrollments (auth, reset on logout).
+  const [selectedPath, setSelectedPath] = useState(null);
+  const [learningPaths, setLearningPaths] = useState([]);
+  const [learningPathsLoading, setLearningPathsLoading] = useState(true);
+  const [pathEnrollments, setPathEnrollments] = useState([]);
+  const [enrollingPath, setEnrollingPath] = useState(false);
+  const [pendingPath, setPendingPath] = useState(null);
   // #183 — which 7-day week the Dashboard's mini-calendar is showing,
   // in weeks relative to the current one (0 = this week, -1 = last
   // week, ...). Lives here rather than in DashboardScreen so it resets
@@ -262,6 +273,42 @@ function KeystonePrototype() {
         setEnrolled([]);
       })
       .finally(() => setEnrolledLoading(false));
+  }, [loggedIn, session]);
+
+  // #224 — public list of learning paths, same fetch-on-mount shape as
+  // courses above.
+  useEffect(() => {
+    fetch(`${process.env.REACT_APP_API_URL}/learning-paths`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setLearningPaths)
+      .catch((err) => console.error("Failed to load learning paths:", err.message))
+      .finally(() => setLearningPathsLoading(false));
+  }, []);
+
+  // #224 — this learner's path enrollments (with live completedCount/
+  // totalCount/status from the backend). Same re-run-on-login-change/
+  // reset-on-logout pattern as enrolled above.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setPathEnrollments([]);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/learning-path-enrollments`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setPathEnrollments)
+      .catch((err) => {
+        console.error("Failed to load learning path enrollments:", err.message);
+        setPathEnrollments([]);
+      });
   }, [loggedIn, session]);
 
   // #225 — this learner's earned badges, for the Dashboard's badges card.
@@ -525,6 +572,64 @@ function KeystonePrototype() {
     setTimeout(() => setToast(null), 2600);
   }
 
+  // #224 — same POST-if-new/PUT-if-existing + upsert-by-id shape as
+  // saveCourse above. No normalizeCourse-style pass needed: the learning
+  // path response DTO carries no decimal columns of its own (the nested
+  // `courses` array is already normalized Course data from the same
+  // /courses response shape, but re-fetching GET /learning-paths on the
+  // next load is what keeps that in sync — this optimistic upsert is only
+  // ever as fresh as what the create/update response itself returned).
+  async function savePath(draft) {
+    const isNew = !draft.id;
+    const url = isNew
+      ? `${process.env.REACT_APP_API_URL}/learning-paths`
+      : `${process.env.REACT_APP_API_URL}/learning-paths/${draft.id}`;
+
+    const res = await fetch(url, {
+      method: isNew ? "POST" : "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(draft.payload),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const message = Array.isArray(body?.message)
+        ? body.message.join(", ")
+        : body?.message || `Request failed: ${res.status}`;
+      throw new Error(message);
+    }
+
+    const saved = await res.json();
+
+    setLearningPaths((prev) => {
+      const exists = prev.some((p) => p.id === saved.id);
+      return exists ? prev.map((p) => (p.id === saved.id ? saved : p)) : [...prev, saved];
+    });
+    setToast(`Saved "${saved.title}"`);
+    setTimeout(() => setToast(null), 2600);
+    return saved;
+  }
+
+  // Soft delete, same shape as deleteCourse above.
+  async function deletePath(pathId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/learning-paths/${pathId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    setLearningPaths((prev) => prev.filter((p) => p.id !== pathId));
+    setToast("Learning path deleted");
+    setTimeout(() => setToast(null), 2600);
+  }
+
   async function saveProgress(enrollmentId, completedModules) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}`, {
       method: "PATCH",
@@ -642,6 +747,58 @@ function KeystonePrototype() {
         lastAccessed: formatLastAccessed(e.lastAccessed),
       })),
     );
+  }
+
+  async function refetchPathEnrollments() {
+    if (!session) return;
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/learning-path-enrollments`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) return;
+    setPathEnrollments(await res.json());
+  }
+
+  // #224 — same shape as completeEnrol below, but enrolling in a path also
+  // cascade-enrolls the learner in each of its constituent courses
+  // server-side (see LearningPathEnrollmentsService), so both
+  // pathEnrollments and enrolled need refetching afterward to pick up the
+  // new state in one pass.
+  async function completeEnrolPath(path) {
+    const alreadyEnrolled = pathEnrollments.some((pe) => pe.pathId === path.id);
+    if (alreadyEnrolled) {
+      setSelectedPath(null);
+      navigate("/dashboard");
+      return;
+    }
+
+    setEnrollingPath(true);
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/learning-path-enrollments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ pathId: path.id }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || `Request failed: ${res.status}`);
+      }
+
+      await Promise.all([refetchPathEnrollments(), refetchEnrollments()]);
+      setToast(`Enrolled in "${path.title}"`);
+      setTimeout(() => setToast(null), 2600);
+    } catch (err) {
+      setToast(`Couldn't enrol: ${err.message}`);
+      setTimeout(() => setToast(null), 3200);
+    } finally {
+      setEnrollingPath(false);
+    }
+
+    setSelectedPath(null);
+    navigate("/dashboard");
   }
 
   async function completeEnrol(course) {
@@ -980,6 +1137,16 @@ function KeystonePrototype() {
       // is no longer needed — clear it so a later, unrelated signup on
       // this browser can't pick up a stale value.
       sessionStorage.removeItem(PENDING_ENROL_STORAGE_KEY);
+    } else if (pendingPath) {
+      // #224 — mirrors the pendingCourse branch above, but deliberately
+      // without #207's sessionStorage mirror: a logged-out learner picking
+      // Google sign-in (a full-page redirect that clears this in-memory
+      // state) will lose a pending path enrol and just land on Catalogue
+      // needing to click Enrol again. Documented, known gap rather than
+      // silently attempted — scoped out to keep this feature's surface
+      // area contained; the synchronous email-signup path here works fine.
+      completeEnrolPath(pendingPath);
+      setPendingPath(null);
     } else {
       navigate("/dashboard");
     }
@@ -1016,6 +1183,16 @@ function KeystonePrototype() {
       return;
     }
     completeEnrol(course);
+  }
+
+  function handleEnrolPath(path) {
+    if (!loggedIn) {
+      setPendingPath(path);
+      setSelectedPath(null);
+      setAuthMode("signup");
+      return;
+    }
+    completeEnrolPath(path);
   }
 
   function handleStartLearning(course) {
@@ -1083,6 +1260,10 @@ function KeystonePrototype() {
                 courses={courses}
                 loading={coursesLoading}
                 goal={learnerGoal}
+                learningPaths={learningPaths}
+                onOpenPath={setSelectedPath}
+                enrolledPathIds={pathEnrollments.map((pe) => pe.pathId)}
+                pathsLoading={learningPathsLoading}
               />
             </AppShell>
           }
@@ -1108,6 +1289,7 @@ function KeystonePrototype() {
                   onPrevWeek={() => setCalendarWeekOffset((n) => n - 1)}
                   onNextWeek={() => setCalendarWeekOffset((n) => n + 1)}
                   onUpdateDailyGoal={updateDailyGoal}
+                  pathEnrollments={pathEnrollments}
                 />
               </AppShell>
             </RequireAuth>
@@ -1161,6 +1343,9 @@ function KeystonePrototype() {
                     onRegenerateInviteCode={regenerateInviteCode}
                     onLeaveProvider={leaveProvider}
                     currentUserId={user?.id}
+                    paths={learningPaths}
+                    onSavePath={savePath}
+                    onDeletePath={deletePath}
                   />
                 </AppShell>
               </RequireTrainer>
@@ -1182,11 +1367,22 @@ function KeystonePrototype() {
         onFetchReviews={fetchCourseReviews}
       />
 
+      <LearningPathDetailModal
+        path={selectedPath}
+        onClose={() => setSelectedPath(null)}
+        onEnrol={handleEnrolPath}
+        onGoToDashboard={() => { setSelectedPath(null); navigate("/dashboard"); }}
+        isEnrolled={selectedPath ? pathEnrollments.some((pe) => pe.pathId === selectedPath.id) : false}
+        enrolling={enrollingPath}
+        onOpenCourse={(course) => { setSelectedPath(null); setSelectedCourse(course); }}
+      />
+
       <AuthModal
         mode={authMode}
         onClose={() => {
           setAuthMode(null);
           setPendingCourse(null);
+          setPendingPath(null);
           // #207 — closing without completing signup abandons the intent
           // to enrol; clear the sessionStorage mirror too so it can't
           // surface as a surprise auto-enrol on some later, unrelated
