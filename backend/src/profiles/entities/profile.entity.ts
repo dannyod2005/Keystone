@@ -31,4 +31,12 @@ export class Profile {
   // deliberately deferred until that's actually needed.
   @Column({ name: 'provider_id', type: 'uuid', nullable: true })
   providerId: string | null;
+
+  // #231 — opt-in to appearing on the global leaderboard, ranked by
+  // weekly learning minutes. Defaults false/off: competitive rankings
+  // aren't for everyone, and an opted-out learner must never appear —
+  // see LeaderboardService, which filters on this column directly rather
+  // than relying on the frontend to hide anyone.
+  @Column({ name: 'leaderboard_opt_in', type: 'boolean', default: false })
+  leaderboardOptIn: boolean;
 }

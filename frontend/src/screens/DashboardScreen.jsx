@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil, Medal, Bookmark } from "lucide-react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil, Medal, Bookmark, Trophy } from "lucide-react";
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
@@ -13,7 +13,7 @@ const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 
 // realistic range without needing input validation UI here too.
 const DAILY_GOAL_PRESETS = [15, 30, 45, 60, 90];
 
-export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal }) {
+export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal, leaderboardOptIn = false, onUpdateLeaderboardOptIn, onOpenLeaderboard }) {
   const firstName = getFirstName(getDisplayName(user));
   // #188 — the DB column already existed; this is the first real UI for
   // it. Inline on the dashboard card rather than a separate settings
@@ -23,6 +23,10 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
   // deliberately kept to a single click today).
   const [editingGoal, setEditingGoal] = useState(false);
   const [savingGoal, setSavingGoal] = useState(false);
+  // #231 — leaderboard opt-in toggle, own saving flag so a slow request
+  // can't be double-fired by a second click, same guard shape as
+  // savingGoal above.
+  const [savingLeaderboardOptIn, setSavingLeaderboardOptIn] = useState(false);
 
   async function handlePickDailyGoal(minutes) {
     if (savingGoal || minutes === activitySummary.dailyGoalMin) {
@@ -39,6 +43,18 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
       setSavingGoal(false);
     }
   }
+  async function handleToggleLeaderboardOptIn() {
+    if (savingLeaderboardOptIn) return;
+    setSavingLeaderboardOptIn(true);
+    try {
+      await onUpdateLeaderboardOptIn(!leaderboardOptIn);
+    } catch (err) {
+      console.error("Failed to update leaderboard opt-in:", err.message);
+    } finally {
+      setSavingLeaderboardOptIn(false);
+    }
+  }
+
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
   // #86 — "in-progress" (not yet complete) splits into two display groups:
@@ -289,6 +305,43 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
             <div style={{ fontSize: 12, color: "var(--slate-light)" }}>learning time logged</div>
             <hr className="ks-hairline" style={{ margin: "16px 0" }} />
             <div style={{ fontSize: 12.5, color: "var(--slate)" }}>Enrolled in {enrolledCourseCount} course{enrolledCourseCount === 1 ? "" : "s"}</div>
+
+            {/* #231 — opt-in toggle for the global leaderboard, default off
+                (see the profiles.leaderboard_opt_in column comment). Only
+                rendered when the caller wired it up (onUpdateLeaderboardOptIn
+                passed in), same "optional prop gates the UI" convention as
+                the bookmark toggle. "View leaderboard" only shown once
+                opted in — opting out is what makes a learner disappear from
+                it, so there's nothing useful to view before that. */}
+            {onUpdateLeaderboardOptIn && (
+              <>
+                <hr className="ks-hairline" style={{ margin: "16px 0" }} />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div
+                    onClick={handleToggleLeaderboardOptIn}
+                    style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--slate)", cursor: savingLeaderboardOptIn ? "default" : "pointer", opacity: savingLeaderboardOptIn ? 0.6 : 1 }}
+                  >
+                    <Trophy size={13} color="var(--gold-dark)" />
+                    Show me on the leaderboard
+                  </div>
+                  <div
+                    onClick={handleToggleLeaderboardOptIn}
+                    style={{
+                      width: 32, height: 18, borderRadius: 100, padding: 2, cursor: savingLeaderboardOptIn ? "default" : "pointer",
+                      background: leaderboardOptIn ? "var(--gold)" : "var(--line)", opacity: savingLeaderboardOptIn ? 0.6 : 1,
+                      display: "flex", justifyContent: leaderboardOptIn ? "flex-end" : "flex-start",
+                    }}
+                  >
+                    <div style={{ width: 14, height: 14, borderRadius: 99, background: "#fff" }} />
+                  </div>
+                </div>
+                {leaderboardOptIn && onOpenLeaderboard && (
+                  <div onClick={onOpenLeaderboard} style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, marginTop: 10, cursor: "pointer" }}>
+                    View leaderboard →
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* #225 — small badges row/section, only shown once there's at

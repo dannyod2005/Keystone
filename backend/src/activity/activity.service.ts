@@ -1,9 +1,8 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import { ActivityEvent } from './entities/activity-event.entity';
 import { Profile } from '../profiles/entities/profile.entity';
-import { CourseModule } from '../courses/entities/course-module.entity';
 import { ActivitySummaryResponseDto } from './dto/activity-summary-response.dto';
 
 // #188 — used only as a last-resort fallback (a profile row that
@@ -74,7 +73,7 @@ export class ActivityService {
         user: { id: userId } as Profile,
         source,
         minutes,
-        module: opts?.moduleId ? ({ id: opts.moduleId } as CourseModule) : null,
+        module: opts?.moduleId ? { id: opts.moduleId } : null,
       });
       if (opts?.occurredAt) {
         event.occurredAt = opts.occurredAt;
@@ -93,7 +92,9 @@ export class ActivityService {
   // calls within the same day a no-op rather than stacking up minutes.
   async logModuleView(userId: string, moduleId: string): Promise<void> {
     const now = new Date();
-    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const dayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
     const dayEnd = addDaysUTC(dayStart, 1);
 
     // #178 — same fault-tolerance as logEvent below: this dedup check is
@@ -118,7 +119,9 @@ export class ActivityService {
       return;
     }
 
-    await this.logEvent(userId, 'module_view', MODULE_VIEW_MINUTES, { moduleId });
+    await this.logEvent(userId, 'module_view', MODULE_VIEW_MINUTES, {
+      moduleId,
+    });
   }
 
   // #124 — the actual fix for the issue: instead of logging a module's
@@ -164,9 +167,16 @@ export class ActivityService {
   // module, ascending. Not date-bounded like getSummary's streak lookback
   // — the result set is naturally small (however many days one learner
   // spent on one module), so there's no cheap-query reason to cap it.
-  private async getViewedDayKeys(userId: string, moduleId: string): Promise<string[]> {
+  private async getViewedDayKeys(
+    userId: string,
+    moduleId: string,
+  ): Promise<string[]> {
     const events = await this.activityRepo.find({
-      where: { user: { id: userId }, module: { id: moduleId }, source: 'module_view' },
+      where: {
+        user: { id: userId },
+        module: { id: moduleId },
+        source: 'module_view',
+      },
     });
     const keys = new Set(events.map((e) => toDateKey(e.occurredAt)));
     return Array.from(keys).sort();
@@ -260,6 +270,48 @@ export class ActivityService {
       week,
     };
   }
+
+  // #231 — batch version of getSummary's minutesThisWeek, for
+  // LeaderboardService ranking many opted-in learners at once rather than
+  // running getSummary's full per-user query (streak/week breakdown/etc.)
+  // once per row. Same fetch-then-reduce-in-JS convention as getSummary
+  // (no SQL aggregates), just reduced by user instead of by date. Every
+  // requested userId is present in the returned map, defaulting to 0, so
+  // a learner with zero logged minutes this week still ranks (last),
+  // rather than being silently dropped.
+  async getWeeklyMinutesForUsers(
+    userIds: string[],
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>(userIds.map((id) => [id, 0]));
+    if (userIds.length === 0) return result;
+
+    const now = new Date();
+    const weekStart = startOfWeekUTC(now);
+    const weekEnd = addDaysUTC(weekStart, 7);
+
+    let events: ActivityEvent[] = [];
+    try {
+      events = await this.activityRepo.find({
+        where: {
+          user: { id: In(userIds) },
+          occurredAt: Between(weekStart, weekEnd),
+        },
+        relations: { user: true },
+      });
+    } catch (err) {
+      // #179 — same reasoning as getSummary: fall back to the zeroed map
+      // already built above rather than failing the whole leaderboard.
+      this.logger.error(
+        `Failed to load activity events for leaderboard (userIds=${userIds.length}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return result;
+    }
+
+    for (const e of events) {
+      result.set(e.user.id, (result.get(e.user.id) ?? 0) + e.minutes);
+    }
+    return result;
+  }
 }
 
 function buildWeek(
@@ -296,7 +348,9 @@ function dateKeyToNoonUTC(dateKey: string): Date {
 }
 
 function startOfWeekUTC(date: Date): Date {
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const d = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
   const day = d.getUTCDay(); // 0 = Sunday
   const mondayOffset = day === 0 ? -6 : 1 - day;
   return addDaysUTC(d, mondayOffset);
@@ -310,7 +364,9 @@ function startOfWeekUTC(date: Date): Date {
 function computeStreak(minutesByDate: Map<string, number>, now: Date): number {
   const isActive = (d: Date) => (minutesByDate.get(toDateKey(d)) ?? 0) > 0;
 
-  let cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  let cursor = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
   if (!isActive(cursor)) {
     cursor = addDaysUTC(cursor, -1);
     if (!isActive(cursor)) return 0;
