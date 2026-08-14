@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Milestone } from "lucide-react";
+import { Search, Milestone, Bookmark } from "lucide-react";
 
 import { Stars, CategoryDot, PageHeader } from "../components/common/Primitives";
 import { MarketingHeader } from "../components/layout/MarketingHeader";
@@ -25,6 +25,8 @@ export function CatalogueScreen({
   onOpenPath,
   enrolledPathIds = [],
   pathsLoading = false,
+  bookmarkedIds = [],
+  onToggleBookmark,
 }) {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -78,6 +80,11 @@ export function CatalogueScreen({
   // not a filter removing it from below).
   function renderCourseCard(c) {
     const isEnrolled = enrolledIds.includes(c.id);
+    // #230 — a learner "saving" a course without enrolling. Only rendered
+    // when the caller actually wired up bookmarking (loggedIn learner with
+    // onToggleBookmark passed in) — logged-out/marketing view of this same
+    // card renders exactly as it did before this feature.
+    const isBookmarked = bookmarkedIds.includes(c.id);
     return (
       <div key={c.id} className="ks-card" onClick={() => onOpenCourse(c)} style={{ padding: 18, cursor: "pointer", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -85,7 +92,23 @@ export function CatalogueScreen({
             <CategoryDot color={c.color} />
             <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{c.category}</span>
           </div>
-          {isEnrolled && <span className="ks-badge" style={{ background: "var(--success-tint)", color: "var(--success)" }}>Enrolled</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {isEnrolled && <span className="ks-badge" style={{ background: "var(--success-tint)", color: "var(--success)" }}>Enrolled</span>}
+            {onToggleBookmark && (
+              <Bookmark
+                size={16}
+                color={isBookmarked ? "var(--gold-dark)" : "var(--slate-light)"}
+                fill={isBookmarked ? "var(--gold-dark)" : "none"}
+                style={{ cursor: "pointer" }}
+                onClick={(e) => {
+                  // Doesn't bubble to the card's own onClick — toggling a
+                  // bookmark should never also open the course detail modal.
+                  e.stopPropagation();
+                  onToggleBookmark(c, isBookmarked);
+                }}
+              />
+            )}
+          </div>
         </div>
         <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{c.title}</div>
         <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 10 }}>{c.provider}</div>

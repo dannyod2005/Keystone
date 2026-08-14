@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil, Medal } from "lucide-react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil, Medal, Bookmark } from "lucide-react";
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
@@ -13,7 +13,7 @@ const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 
 // realistic range without needing input validation UI here too.
 const DAILY_GOAL_PRESETS = [15, 30, 45, 60, 90];
 
-export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal }) {
+export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal }) {
   const firstName = getFirstName(getDisplayName(user));
   // #188 — the DB column already existed; this is the first real UI for
   // it. Inline on the dashboard card rather than a separate settings
@@ -63,6 +63,17 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], o
       complete.flatMap((e) => courses.find((x) => x.id === e.courseId)?.skills ?? []),
     ),
   );
+
+  // #230 — bookmarked-but-not-enrolled courses (or bookmarked while also
+  // enrolled — bookmarking has no effect on enrollment state either way,
+  // per the issue's acceptance criteria, so no filtering against
+  // `enrolled` here). Same courses.find(...) + drop-if-missing pattern as
+  // every other section on this screen (a bookmark whose course has since
+  // been soft-deleted from the catalogue just silently disappears here,
+  // same as a completed enrollment would for skillsLearned above).
+  const savedCourses = bookmarks
+    .map((b) => courses.find((x) => x.id === b.courseId))
+    .filter(Boolean);
 
   const days = ["M", "T", "W", "T", "F", "S", "S"];
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -348,6 +359,39 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], o
                         background: pe.status === "complete" ? "var(--success)" : "var(--gold)",
                       }} />
                     </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* #230 — same "hidden until non-empty" convention as badges/
+              skills/paths above. Unbookmarking from here reuses the exact
+              same onToggleBookmark the Catalogue card's icon calls — this
+              card is just another place that toggle is exposed, not a
+              separate code path. */}
+          {savedCourses.length > 0 && (
+            <div className="ks-card" style={{ padding: 18, marginTop: 16 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Saved</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {savedCourses.map((c) => (
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{ flex: 1, cursor: "pointer" }}
+                      onClick={() => onOpenCourse(c)}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{c.title}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--slate-light)" }}>{c.provider}</div>
+                    </div>
+                    {onToggleBookmark && (
+                      <Bookmark
+                        size={15}
+                        color="var(--gold-dark)"
+                        fill="var(--gold-dark)"
+                        style={{ cursor: "pointer", flexShrink: 0 }}
+                        onClick={() => onToggleBookmark(c, true)}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

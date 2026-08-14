@@ -197,6 +197,7 @@ function KeystonePrototype() {
   const [enrolled, setEnrolled] = useState([]);
   const [badges, setBadges] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [bookmarks, setBookmarks] = useState([]);
   const [enrolling, setEnrolling] = useState(false); // #154 — the in-flight POST /enrollments request, so CourseDetailModal's Enrol button can disable/show pending state instead of allowing a double-click.
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
@@ -382,6 +383,74 @@ function KeystonePrototype() {
   }, [loggedIn, session]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // #230 — this learner's saved-without-enrolling courses, for the
+  // Catalogue card toggle and the Dashboard's Saved section. Same
+  // on-login-change fetch/reset shape as badges/notifications above.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setBookmarks([]);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/bookmarks`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setBookmarks)
+      .catch((err) => {
+        console.error("Failed to load bookmarks:", err.message);
+        setBookmarks([]);
+      });
+  }, [loggedIn, session]);
+
+  const bookmarkedIds = bookmarks.map((b) => b.courseId);
+
+  // #230 — single toggle for both the Catalogue card's icon and the
+  // Dashboard Saved section's icon: `isBookmarked` tells it which
+  // direction to go, optimistically updated in local state first so the
+  // icon flips immediately rather than waiting on the round trip (a
+  // failed request just re-fetches to correct it, same "don't block the
+  // UI on a best-effort follow-up" reasoning as markNotificationRead).
+  async function toggleBookmark(course, isBookmarked) {
+    if (!session) return;
+    try {
+      if (isBookmarked) {
+        setBookmarks((prev) => prev.filter((b) => b.courseId !== course.id));
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/bookmarks/${course.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      } else {
+        setBookmarks((prev) => [...prev, { id: `pending-${course.id}`, courseId: course.id, createdAt: new Date().toISOString() }]);
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/bookmarks`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ courseId: course.id }),
+        });
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        const saved = await res.json();
+        setBookmarks((prev) => prev.map((b) => (b.courseId === course.id ? saved : b)));
+      }
+    } catch (err) {
+      console.error("Failed to toggle bookmark:", err.message);
+      // Re-sync from the server rather than guessing what the optimistic
+      // update above should roll back to.
+      fetch(`${process.env.REACT_APP_API_URL}/bookmarks`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+        .then((res) => (res.ok ? res.json() : []))
+        .then(setBookmarks)
+        .catch(() => {});
+    }
+  }
 
   // #229 — best-effort: if the PATCH fails, the notification just stays
   // marked unread locally rather than blocking navigation on it — the
@@ -1348,6 +1417,8 @@ function KeystonePrototype() {
                 onOpenPath={setSelectedPath}
                 enrolledPathIds={pathEnrollments.map((pe) => pe.pathId)}
                 pathsLoading={learningPathsLoading}
+                bookmarkedIds={bookmarkedIds}
+                onToggleBookmark={loggedIn ? toggleBookmark : undefined}
               />
             </AppShell>
           }
@@ -1374,6 +1445,8 @@ function KeystonePrototype() {
                   onNextWeek={() => setCalendarWeekOffset((n) => n + 1)}
                   onUpdateDailyGoal={updateDailyGoal}
                   pathEnrollments={pathEnrollments}
+                  bookmarks={bookmarks}
+                  onToggleBookmark={toggleBookmark}
                 />
               </AppShell>
             </RequireAuth>
