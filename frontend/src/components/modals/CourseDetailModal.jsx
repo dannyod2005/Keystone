@@ -15,9 +15,16 @@ import { Stars, CategoryDot } from "../../components/common/Primitives";
 // that null transition and keeps rendering the last known course for one
 // more animation frame (via `visibleCourse`) while a `closing` class
 // plays the fade/scale-out, then actually drops the content.
-export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, isEnrolled, enrolling }) {
+export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, isEnrolled, enrolling, onFetchReviews }) {
   const [visibleCourse, setVisibleCourse] = useState(course);
   const [closing, setClosing] = useState(false);
+
+  // #228 — written reviews for whichever course is open. Kept as its own
+  // effect scoped to `course?.id` (not `visibleCourse`, same reasoning as
+  // the effect below) rather than folded into the open/close effect,
+  // since this is fetching new data on open, not just animating.
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   useEffect(() => {
     if (course) {
@@ -34,6 +41,19 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
     // component for why `visibleCourse` must stay out of this array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course]);
+
+  useEffect(() => {
+    if (!course || !onFetchReviews) {
+      setReviews([]);
+      return;
+    }
+    setReviewsLoading(true);
+    onFetchReviews(course.id)
+      .then(setReviews)
+      .catch((err) => console.error("Failed to load reviews:", err.message))
+      .finally(() => setReviewsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [course?.id]);
 
   if (!visibleCourse) return null;
   return (
@@ -56,6 +76,28 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
             <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Clock size={14} /> {visibleCourse.hours} hours</span>
             <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Stars rating={visibleCourse.rating} /> {visibleCourse.rating} ({visibleCourse.learners.toLocaleString()})</span>
           </div>
+
+          {/* #228 — only rendered once there's something to show: no
+              "loading"/"no reviews yet" placeholder, so a course with no
+              written reviews (still the common case — reviewText is
+              optional) looks exactly like it did before #228. */}
+          {!reviewsLoading && reviews.length > 0 && (
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 10 }}>Reviews</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {reviews.map((r, i) => (
+                  <div key={i}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{r.authorName}</span>
+                      <Stars rating={r.rating} />
+                    </div>
+                    <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5 }}>{r.reviewText}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p style={{ fontSize: 14.5, color: "var(--ink-70)", lineHeight: 1.6, marginBottom: 22 }}>{visibleCourse.blurb}</p>
 
           <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 10 }}>Course agenda</div>

@@ -19,5 +19,9 @@ import { ModulesModule } from '../modules/modules.module';
   ],
   controllers: [EnrollmentsController],
   providers: [EnrollmentsService],
+  // #228 — CoursesModule reuses getReviewsForCourse for the public
+  // GET /courses/:id/reviews endpoint, same cross-module pattern
+  // ModulesModule already uses (see #205/#82).
+  exports: [EnrollmentsService],
 })
 export class EnrollmentsModule {}

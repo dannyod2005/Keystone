@@ -527,14 +527,18 @@ function KeystonePrototype() {
   // #106 — same pattern as saveProgress: PATCH the enrollment, merge the
   // returned row into `enrolled` by id so LearningScreen's `enrollment`
   // prop picks up the new rating on its next render without a refetch.
-  async function submitRating(enrollmentId, rating) {
+  // #228 — reviewText is optional (defaults to "" from LearningScreen's
+  // reviewDraft state); the backend normalizes an empty string to null,
+  // so this stays a no-op body-wise for the pure-star-rating case that
+  // worked before #228.
+  async function submitRating(enrollmentId, rating, reviewText = "") {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}/rating`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ rating }),
+      body: JSON.stringify({ rating, reviewText }),
     });
 
     if (!res.ok) {
@@ -699,6 +703,15 @@ function KeystonePrototype() {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/${courseId}/quiz-results`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
+  // #228 — public like fetchPosts below: CourseDetailModal shows reviews to
+  // anyone browsing the catalogue, logged in or not, so this needs no auth
+  // header.
+  async function fetchCourseReviews(courseId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/${courseId}/reviews`);
     if (!res.ok) throw new Error(`Request failed: ${res.status}`);
     return res.json();
   }
@@ -1138,6 +1151,7 @@ function KeystonePrototype() {
         onGoToDashboard={() => { setSelectedCourse(null); navigate("/dashboard"); }}
         isEnrolled={selectedCourse ? enrolledIds.includes(selectedCourse.id) : false}
         enrolling={enrolling}
+        onFetchReviews={fetchCourseReviews}
       />
 
       <AuthModal

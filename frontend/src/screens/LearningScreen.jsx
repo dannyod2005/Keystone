@@ -35,6 +35,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   // handleMarkComplete/onSaveProgress above).
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [ratingHover, setRatingHover] = useState(0);
+  // #228 — optional comment that goes along with whichever star gets
+  // clicked; see handleSubmitRating. Not its own separate submit step,
+  // to keep the original "click a star, done" flow unchanged for anyone
+  // who doesn't want to leave a comment.
+  const [reviewDraft, setReviewDraft] = useState("");
 
   // Quiz state — reset whenever the active module changes, since each
   // module has its own separate quiz.
@@ -224,7 +229,12 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
 
     setRatingSubmitting(true);
     try {
-      await onSubmitRating(enrollment.id, stars);
+      // #228 — whatever's currently in the optional comment box goes along
+      // with the star click, so a pure star submission (box left empty)
+      // behaves exactly like before #228: reviewDraft defaults to "", and
+      // an empty string is normalized to null server-side (see
+      // EnrollmentsService.submitRating).
+      await onSubmitRating(enrollment.id, stars, reviewDraft.trim());
     } catch (err) {
       console.error("Failed to submit rating:", err.message);
     } finally {
@@ -481,6 +491,14 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
               {enrollment.rating ? (
                 <div style={{ fontSize: 13.5, color: "var(--slate)" }}>
                   Thanks for rating this course {enrollment.rating} star{enrollment.rating === 1 ? "" : "s"}.
+                  {/* #228 — only shown if a comment was actually left; a
+                      pure star rating (the only option before #228) has
+                      no reviewText and this stays hidden. */}
+                  {enrollment.reviewText && (
+                    <div style={{ marginTop: 10, padding: "10px 12px", background: "var(--paper)", borderRadius: 8, fontSize: 13, color: "var(--ink-70)", textAlign: "left" }}>
+                      “{enrollment.reviewText}”
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
@@ -498,6 +516,16 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                       />
                     ))}
                   </div>
+                  {/* #228 — optional, submitted together with whichever star
+                      gets clicked above (see handleSubmitRating); leaving
+                      this empty is the same pure-star flow as before #228. */}
+                  <textarea
+                    value={reviewDraft}
+                    onChange={(e) => setReviewDraft(e.target.value)}
+                    disabled={ratingSubmitting}
+                    placeholder="Leave a comment (optional)"
+                    style={{ width: "100%", minHeight: 60, marginTop: 12, border: "1px solid var(--line)", borderRadius: 8, padding: 10, fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical" }}
+                  />
                   {ratingSubmitting && (
                     <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>Saving…</div>
                   )}

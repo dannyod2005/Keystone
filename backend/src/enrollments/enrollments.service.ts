@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, QueryFailedError, Repository } from 'typeorm';
+import { IsNull, Not, QueryFailedError, Repository } from 'typeorm';
 import { PDFDocument, rgb } from 'pdf-lib';
 import * as fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'fs/promises';
@@ -18,6 +18,7 @@ import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { EnrolledCourseDto, EnrollmentResponseDto } from './dto/enrollment-response.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
 import { SubmitRatingDto } from './dto/submit-rating.dto';
+import { CourseReviewDto } from './dto/course-review.dto';
 import { ActivityService } from '../activity/activity.service';
 import { ModulesService } from '../modules/modules.service';
 
@@ -202,6 +203,7 @@ export class EnrollmentsService {
       createdAt: enrollment.createdAt,
       course: this.toEnrolledCourseDto(enrollment.course),
       rating: enrollment.rating,
+      reviewText: enrollment.reviewText,
     };
   }
 
@@ -234,9 +236,38 @@ export class EnrollmentsService {
     }
 
     enrollment.rating = dto.rating;
+    // #228 — normalize "" / whitespace-only to null rather than storing it
+    // as-is, so an empty textarea submission reads the same as never
+    // having left a review (and doesn't show up as a blank entry in
+    // getReviewsForCourse below, which filters on reviewText IS NOT NULL).
+    const trimmedReview = dto.reviewText?.trim();
+    enrollment.reviewText = trimmedReview ? trimmedReview : null;
     const saved = await this.enrollmentsRepo.save(enrollment);
 
     return this.toResponseDto(saved);
+  }
+
+  // #228 — public, course-scoped reviews list for CourseDetailModal: every
+  // enrollment against this course that has actual review text, most
+  // recent first. Ordered by the enrollment's createdAt (when the learner
+  // enrolled) rather than a dedicated "rated at" timestamp, since #106
+  // never added one — an enrollment only ever has one rating/review at a
+  // time (re-rating overwrites, see submitRating above), so this is the
+  // closest existing timestamp and good enough for "most recent reviews
+  // first" without adding a new column just for ordering.
+  async getReviewsForCourse(courseId: string): Promise<CourseReviewDto[]> {
+    const enrollments = await this.enrollmentsRepo.find({
+      where: { course: { id: courseId }, reviewText: Not(IsNull()) },
+      relations: { user: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    return enrollments.map((e) => ({
+      authorName: e.user.name || 'Keystone Learner',
+      rating: e.rating as number,
+      reviewText: e.reviewText as string,
+      createdAt: e.createdAt,
+    }));
   }
 
   private toEnrolledCourseDto(course: Course): EnrolledCourseDto {

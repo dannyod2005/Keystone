@@ -31,4 +31,7 @@ export class EnrollmentResponseDto {
   // #106 — this learner's own submitted rating for this course, or null
   // if they haven't rated it (yet, or their status isn't 'complete' yet).
   rating: number | null;
+  // #228 — this learner's own submitted review text, or null if they
+  // rated without leaving a comment (or haven't rated at all).
+  reviewText: string | null;
 }
