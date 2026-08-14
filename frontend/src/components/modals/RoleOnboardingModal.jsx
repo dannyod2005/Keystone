@@ -1,24 +1,23 @@
 import { useEffect, useState } from "react";
-import { Code2, Briefcase, Compass, X } from "lucide-react";
+import { GraduationCap, Presentation } from "lucide-react";
 
 const OPTIONS = [
-  { value: "Technical", label: "Technical", blurb: "Programming, data, and engineering skills.", icon: Code2 },
-  { value: "Business", label: "Business", blurb: "Strategy, analytics, and operations.", icon: Briefcase },
-  { value: "Leadership", label: "Leadership", blurb: "Managing people and leading teams.", icon: Compass },
+  { value: "learner", label: "Learner", blurb: "Take courses and track your own progress.", icon: GraduationCap },
+  { value: "trainer", label: "Trainer", blurb: "Create courses and manage a team's access.", icon: Presentation },
 ];
 
-// #107/#189 — shown to any account (learner or trainer — see App.jsx's
-// trigger effect) the first time we've confirmed their profile has no
-// goal set yet, regardless of how they logged in. Never blocks: skipping
-// just leaves profiles.goal null, same state as an existing account that
-// predates this feature — Dashboard and the sidebar already treat a
-// missing goal as "don't show it" rather than requiring one. For a
-// trainer, this only ever feeds their own learner-facing views
-// (Catalogue/Dashboard) — it has no bearing on Trainer Studio.
-// Same "always mounted, closing animates before actually disappearing"
-// shape as AuthModal/CourseDetailModal (#105), keyed on `open` here since
-// there's no external content (like a course) to preserve through the close.
-export function GoalOnboardingModal({ open, onSelect, onSkip }) {
+// #186 — shown once for an account whose profiles.role is still NULL,
+// which today only happens for a Google sign-up (no role-toggle step
+// before the OAuth redirect, unlike AuthModal's email signup form — see
+// the MakeProfileRoleNullable migration). No "skip" here on purpose,
+// unlike GoalOnboardingModal: goal is optional flavor the rest of the app
+// already treats a missing value as a fine permanent state, but role is
+// the value RequireTrainerGuard authorizes against and AppShell uses to
+// decide what nav/routes even render — leaving it unset isn't a safe
+// no-op the way skipping a goal is, so this always resolves to a real
+// choice. Same "always mounted, closing animates before disappearing"
+// shape as GoalOnboardingModal/AuthModal (#105).
+export function RoleOnboardingModal({ open, onSelect }) {
   const [visible, setVisible] = useState(open);
   const [closing, setClosing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -50,7 +49,7 @@ export function GoalOnboardingModal({ open, onSelect, onSkip }) {
       // On success the parent flips `open` to false, which the effect
       // above picks up to play the close animation. Nothing else to do here.
     } catch (err) {
-      console.error("Failed to save goal:", err.message);
+      console.error("Failed to save role:", err.message);
       setSubmitting(false); // let them retry rather than getting stuck
     }
   }
@@ -58,12 +57,11 @@ export function GoalOnboardingModal({ open, onSelect, onSkip }) {
   return (
     <div className={`ks-modal-backdrop ${closing ? "ks-modal-closing" : ""}`} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}>
       <div className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`} style={{ width: "100%", maxWidth: 440, padding: "28px 28px 24px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>What brings you here?</div>
-          <X size={18} color="var(--slate)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={onSkip} />
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20, marginBottom: 6 }}>
+          How will you use Keystone?
         </div>
         <div style={{ fontSize: 13.5, color: "var(--slate)", marginBottom: 20 }}>
-          Pick a focus area — it shows up on your dashboard and helps point you at relevant courses.
+          One quick choice — this decides what you see next.
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -89,13 +87,6 @@ export function GoalOnboardingModal({ open, onSelect, onSkip }) {
               </div>
             );
           })}
-        </div>
-
-        <div
-          onClick={submitting ? undefined : onSkip}
-          style={{ textAlign: "center", fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", marginTop: 18, cursor: submitting ? "default" : "pointer" }}
-        >
-          Skip for now
         </div>
       </div>
     </div>

@@ -6,9 +6,17 @@ import { Enrollment } from './entities/enrollment.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
 import { ActivityModule } from '../activity/activity.module';
+import { ModulesModule } from '../modules/modules.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Enrollment, Profile, Course]), ActivityModule],
+  imports: [
+    TypeOrmModule.forFeature([Enrollment, Profile, Course]),
+    ActivityModule,
+    // #205 — reuses ModulesService.getQuizResultsForCourse to validate
+    // quiz completion server-side, same cross-module pattern CoursesModule
+    // already uses this export for (GET /courses/:id/quiz-results, #82).
+    ModulesModule,
+  ],
   controllers: [EnrollmentsController],
   providers: [EnrollmentsService],
 })

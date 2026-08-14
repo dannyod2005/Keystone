@@ -12,6 +12,19 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     : 0;
 
   const [activeModule, setActiveModule] = useState(initialActiveModule);
+  // #180 — activeModule doubles as "which module's content is currently
+  // shown" (video/notes/quiz/forum tabs, sidebar highlight) and, before
+  // this fix, was also what the progress bar and checkmarks read from.
+  // The sidebar list's onClick is a preview/jump — it was never meant to
+  // represent real progress — but since it just called setActiveModule
+  // like everything else, previewing module 4 made modules 1-3 look
+  // complete even though nothing had been saved, and reloading (which
+  // re-derives activeModule from the real enrollment.progress) reverted
+  // it, looking like lost progress. completedCount is the actual
+  // persisted progress: seeded from the same enrollment.progress value,
+  // but only ever advanced by handleMarkComplete below — never by
+  // sidebar preview clicks.
+  const [completedCount, setCompletedCount] = useState(initialActiveModule);
   const [saving, setSaving] = useState(false);
 
   // #106 — star-rating prompt on the "Course complete" card. hoverRating
@@ -38,7 +51,13 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   // effect below, and refetched after a fresh submission so it stays in
   // sync without a page reload.
   const [quizResultsOverview, setQuizResultsOverview] = useState([]);
-  const [quizResultsLoading, setQuizResultsLoading] = useState(false);
+  // #205 — starts true (not false): the effect below kicks off a fetch on
+  // mount, and initializing this as "not loading" would let the
+  // quiz-completion gate below read an empty quizResultsOverview as "no
+  // quiz on any module" for the one render before that effect's
+  // setQuizResultsLoading(true) actually lands, flashing the Mark
+  // Complete button unlocked for an instant on every course load.
+  const [quizResultsLoading, setQuizResultsLoading] = useState(true);
 
   // Notes state
   const [noteContent, setNoteContent] = useState("");
@@ -158,9 +177,29 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const isComplete = activeModule >= modules.length;
   const isLastModule = activeModule >= modules.length - 1;
 
+  // #205 — quizResultsOverview (fetched once per course, keyed by
+  // moduleId) is the authoritative "does this module have a quiz, and
+  // has it already been taken" signal, rather than the per-module
+  // quizQuestions/quizResult state above: quizResult resets to null on
+  // every module switch (see the quiz effect), so a module whose quiz
+  // was actually completed in an earlier session would otherwise look
+  // falsely "not taken" the moment you navigate back to it. quizResult
+  // still matters on top of that for the *current* session's
+  // just-submitted case, since quizResultsOverview's own refetch after a
+  // submit (see handleSubmitQuiz below) is async and may not have
+  // resolved yet by the time this renders.
+  const currentQuizStatus = quizResultsOverview.find((r) => r.moduleId === currentModule?.id);
+  const quizAlreadySatisfied = !!quizResult || !!currentQuizStatus?.taken;
+  const quizBlocksCompletion = quizResultsLoading
+    ? true // don't know yet whether this module has a quiz — block rather than flash unlocked
+    : !!currentQuizStatus?.hasQuiz && !quizAlreadySatisfied;
+
   async function handleMarkComplete() {
+    if (quizBlocksCompletion) return; // defense in depth — the button is already disabled for this
+
     const nextActiveModule = isLastModule ? modules.length : activeModule + 1;
     setActiveModule(nextActiveModule);
+    setCompletedCount(nextActiveModule);
 
     if (!enrollment || !onSaveProgress) return;
 
@@ -407,8 +446,13 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     );
   }
 
+  // #212 — same fix as Dashboard (#204): maxWidth alone doesn't center a
+  // block-level element, it just caps its width, so on a wide viewport
+  // this hugged the left edge instead of centering like Catalogue/
+  // Discover (which both pair maxWidth with margin: "0 auto"). maxWidth
+  // stays 1080, unchanged.
   return (
-    <div className="ks-page-enter" style={{ padding: "22px 32px 40px", maxWidth: 1080 }}>
+    <div className="ks-page-enter" style={{ padding: "22px 32px 40px", maxWidth: 1080, margin: "0 auto" }}>
       <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", cursor: "pointer", marginBottom: 14 }}>
         <ChevronLeft size={15} /> Back to My learning
       </div>
@@ -662,12 +706,17 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
 
           <button
             className="ks-btn ks-btn-gold"
-            style={{ marginTop: 20, opacity: saving ? 0.7 : 1 }}
-            disabled={saving}
+            style={{ marginTop: 20, opacity: (saving || quizBlocksCompletion) ? 0.7 : 1 }}
+            disabled={saving || quizBlocksCompletion}
+            title={quizBlocksCompletion ? "Submit this module's quiz to continue" : undefined}
             onClick={handleMarkComplete}
           >
             <CheckCircle2 size={16} />
-            {saving ? "Saving…" : isLastModule ? "Mark complete & finish" : "Mark complete & continue"}
+            {saving
+              ? "Saving…"
+              : quizBlocksCompletion
+                ? "Complete the quiz to continue"
+                : isLastModule ? "Mark complete & finish" : "Mark complete & continue"}
           </button>
         </div>
 
@@ -675,12 +724,12 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
           <div className="ks-card" style={{ padding: 16, marginBottom: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Course progress</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)" }}>{Math.round((Math.min(activeModule, modules.length) / modules.length) * 100)}%</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)" }}>{Math.round((Math.min(completedCount, modules.length) / modules.length) * 100)}%</span>
             </div>
             <div style={{ height: 8, background: "var(--line)", borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(Math.min(activeModule, modules.length) / modules.length) * 100}%`, background: "var(--gold)", borderRadius: 4, transition: "width .2s ease" }} />
+              <div style={{ height: "100%", width: `${(Math.min(completedCount, modules.length) / modules.length) * 100}%`, background: "var(--gold)", borderRadius: 4, transition: "width .2s ease" }} />
             </div>
-            <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 8, marginBottom: 14 }}>{Math.min(activeModule, modules.length)} of {modules.length} modules complete</div>
+            <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 8, marginBottom: 14 }}>{Math.min(completedCount, modules.length)} of {modules.length} modules complete</div>
             <hr className="ks-hairline" style={{ margin: "0 0 10px" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {modules.map((m, i) => (
@@ -688,7 +737,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                   display: "flex", alignItems: "center", gap: 10, padding: "8px 8px", borderRadius: 8, cursor: "pointer",
                   background: i === activeModule ? "var(--gold-tint)" : "transparent",
                 }}>
-                  {i < activeModule ? <CheckCircle2 size={15} color="var(--success)" /> : i === activeModule ? <PlayCircle size={15} color="var(--gold-dark)" /> : <span style={{ width: 15, height: 15, borderRadius: 99, border: "1.5px solid var(--line)", flexShrink: 0 }} />}
+                  {i < completedCount ? <CheckCircle2 size={15} color="var(--success)" /> : i === activeModule ? <PlayCircle size={15} color="var(--gold-dark)" /> : <span style={{ width: 15, height: 15, borderRadius: 99, border: "1.5px solid var(--line)", flexShrink: 0 }} />}
                   <span style={{ fontSize: 13, fontWeight: i === activeModule ? 600 : 400 }}>{m.title}</span>
                 </div>
               ))}

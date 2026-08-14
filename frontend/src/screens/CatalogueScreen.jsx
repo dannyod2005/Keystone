@@ -1,10 +1,18 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 
-import { Stars, CategoryDot } from "../components/common/Primitives";
+import { Stars, CategoryDot, PageHeader } from "../components/common/Primitives";
 import { MarketingHeader } from "../components/layout/MarketingHeader";
 
-export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolledIds, courses, loading = false }) {
+// #190 — a curated row, not a dumping ground for every course in the
+// learner's goal category: some categories have far more than this many
+// courses, and showing all of them here would just duplicate a big chunk
+// of the grid immediately below it. Sorted by rating (nulls last) before
+// slicing, so what makes the cut is at least a reasonable proxy for
+// "good," not just catalogue order.
+const RECOMMENDED_LIMIT = 6;
+
+export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolledIds, courses, loading = false, goal = null }) {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
   const cats = ["All", "Technical", "Business", "Leadership"];
@@ -19,14 +27,82 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
       )
     : byCategory;
 
+  // #184 — the subheading used to always show the unfiltered
+  // courses.length, even once a search or category chip narrowed the
+  // grid down. Reflect whatever's actually showing instead, only
+  // falling back to the generic "N courses across..." blurb when
+  // nothing's filtered.
+  const hasActiveFilter = filter !== "All" || query.length > 0;
+  const filteredSubheading = (() => {
+    const n = filtered.length;
+    const trackLabel = filter === "All" ? "course" : `${filter} course`;
+    const base = `${n} ${trackLabel}${n === 1 ? "" : "s"}`;
+    return query ? `${base} matching "${search.trim()}".` : `${base}.`;
+  })();
+
+  // #190 — goal-category match, the "simplest, no new data needed" signal
+  // from the issue. Deliberately doesn't touch `filtered`/the main grid at
+  // all: this is an additive "Recommended for you" strip above the
+  // unchanged full list, not a reorder — the issue calls that out as the
+  // safer option, and it's what keeps search/filter's existing behavior
+  // (and the acceptance criteria's "current behavior, unchanged" fallback
+  // for no-goal learners) completely untouched below it. Only shown when
+  // nothing's actively filtered: search/filter fully overriding
+  // personalization, rather than blending with it, is what the acceptance
+  // criteria's "when no search/filter is active" means in practice.
+  const recommended = (!goal || hasActiveFilter)
+    ? []
+    : courses
+        .filter((c) => c.category === goal)
+        .slice()
+        .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))
+        .slice(0, RECOMMENDED_LIMIT);
+
+  // #190 — shared by the Recommended strip and the main grid so the two
+  // don't drift out of sync visually; a course can legitimately appear in
+  // both (this is a "for you" callout layered on top of the full list,
+  // not a filter removing it from below).
+  function renderCourseCard(c) {
+    const isEnrolled = enrolledIds.includes(c.id);
+    return (
+      <div key={c.id} className="ks-card" onClick={() => onOpenCourse(c)} style={{ padding: 18, cursor: "pointer", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <CategoryDot color={c.color} />
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{c.category}</span>
+          </div>
+          {isEnrolled && <span className="ks-badge" style={{ background: "var(--success-tint)", color: "var(--success)" }}>Enrolled</span>}
+        </div>
+        <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{c.title}</div>
+        <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 10 }}>{c.provider}</div>
+        <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, marginBottom: 16, flex: 1 }}>{c.blurb}</div>
+        <hr className="ks-hairline" style={{ margin: "0 0 12px" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Stars rating={c.rating} />
+          <span style={{ fontSize: 12, color: "var(--slate-light)", fontFamily: "var(--font-mono)" }}>{c.hours}h · {c.level}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="ks-page-enter">
       {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
       <div style={{ maxWidth: 1160, margin: "0 auto", padding: "36px 28px 60px" }}>
-        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 30, margin: "0 0 6px" }}>Course catalogue</h1>
-        <p style={{ color: "var(--slate)", fontSize: 14, margin: "0 0 22px" }}>
-          {loading ? "Loading courses…" : `${courses.length} courses across technical, business, and leadership tracks.`}
-        </p>
+        {/* #213 — was an inline h1/p; now the shared PageHeader primitive
+            (same 30px/font-display/600 title, same subtitle styling) so
+            Dashboard/Discover can match this scale exactly instead of
+            each hand-rolling their own heading size. */}
+        <PageHeader
+          title="Course catalogue"
+          subtitle={
+            loading
+              ? "Loading courses…"
+              : hasActiveFilter
+                ? filteredSubheading
+                : `${courses.length} courses across technical, business, and leadership tracks.`
+          }
+        />
 
         {loading ? (
           <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
@@ -34,6 +110,22 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
           </div>
         ) : (
           <>
+            {/* #190 — "Recommended for you": additive, above the untouched
+                full grid below. Hidden entirely once search/filter narrows
+                the view, or for any learner/trainer with no goal set. */}
+            {recommended.length > 0 && (
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Recommended for you</div>
+                <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>
+                  Based on your {goal} goal.
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
+                  {recommended.map(renderCourseCard)}
+                </div>
+                <hr className="ks-hairline" style={{ margin: "28px 0 0" }} />
+              </div>
+            )}
+
             {/* #104 — stacked on mobile, side-by-side from md up; flex-direction
                 is the only breakpoint-dependent property here, so it's the
                 only thing on Tailwind classes. */}
@@ -68,28 +160,7 @@ export function CatalogueScreen({ loggedIn, onGo, onOpenCourse, onAuth, enrolled
               // (1 up to sm, 2 from sm, 3 from md), so it's the only thing on
               // Tailwind classes; gap stays inline like everywhere else.
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
-                {filtered.map((c) => {
-                  const isEnrolled = enrolledIds.includes(c.id);
-                  return (
-                    <div key={c.id} className="ks-card" onClick={() => onOpenCourse(c)} style={{ padding: 18, cursor: "pointer", display: "flex", flexDirection: "column" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <CategoryDot color={c.color} />
-                          <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{c.category}</span>
-                        </div>
-                        {isEnrolled && <span className="ks-badge" style={{ background: "var(--success-tint)", color: "var(--success)" }}>Enrolled</span>}
-                      </div>
-                      <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{c.title}</div>
-                      <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 10 }}>{c.provider}</div>
-                      <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, marginBottom: 16, flex: 1 }}>{c.blurb}</div>
-                      <hr className="ks-hairline" style={{ margin: "0 0 12px" }} />
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <Stars rating={c.rating} />
-                        <span style={{ fontSize: 12, color: "var(--slate-light)", fontFamily: "var(--font-mono)" }}>{c.hours}h · {c.level}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                {filtered.map(renderCourseCard)}
               </div>
             )}
           </>

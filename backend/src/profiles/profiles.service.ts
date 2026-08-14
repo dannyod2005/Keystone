@@ -29,4 +29,28 @@ export class ProfilesService {
     profile.goal = goal;
     return this.profilesRepo.save(profile);
   }
+
+  // #186 — the Google sign-in role-picker's write path. `role` starts NULL
+  // for a Google sign-up (no role in its OAuth metadata — see the
+  // MakeProfileRoleNullable migration), so this is what turns "picked
+  // learner/trainer" into the value RequireTrainerGuard actually checks.
+  // Same general-purpose reasoning as updateGoal above.
+  async updateRole(userId: string, role: string): Promise<Profile> {
+    const profile = await this.getMine(userId);
+    profile.role = role;
+    return this.profilesRepo.save(profile);
+  }
+
+  // #188 — the DB already had a per-learner dailyGoalMin column; nothing
+  // ever wrote to it, and ActivityService.getSummary ignored it too (see
+  // that fix). This is the write side — DashboardScreen's inline editor
+  // calls it directly, no onboarding-modal step needed.
+  async updateDailyGoal(
+    userId: string,
+    dailyGoalMin: number,
+  ): Promise<Profile> {
+    const profile = await this.getMine(userId);
+    profile.dailyGoalMin = dailyGoalMin;
+    return this.profilesRepo.save(profile);
+  }
 }

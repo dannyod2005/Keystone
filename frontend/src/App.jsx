@@ -12,6 +12,8 @@ import { AppTopbar } from "./components/layout/AppTopbar";
 import { CourseDetailModal } from "./components/modals/CourseDetailModal";
 import { AuthModal } from "./components/modals/AuthModal";
 import { GoalOnboardingModal } from "./components/modals/GoalOnboardingModal";
+import { RoleOnboardingModal } from "./components/modals/RoleOnboardingModal";
+import { ResetPasswordModal } from "./components/modals/ResetPasswordModal";
 
 import { HomeScreen } from "./screens/HomeScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
@@ -30,6 +32,14 @@ function screenKeyFromPath(pathname) {
   if (pathname.startsWith("/trainer")) return "trainer";
   return "home";
 }
+
+// #207 — sessionStorage key for a course a logged-out learner clicked
+// "Enrol" on. pendingCourse (React state) is enough for the email-signup
+// flow, which resolves synchronously in the same page load, but Google
+// sign-in (#186) is a full-page redirect that clears all in-memory state
+// including pendingCourse — this is the survives-a-redirect mirror of it,
+// consumed by the effect near completeEnrol below.
+const PENDING_ENROL_STORAGE_KEY = "ks_pendingEnrolCourseId";
 
 // Backend returns lastAccessed as an ISO timestamp or null (a fresh
 // enrollment has never been "accessed" yet). Format to something short
@@ -110,13 +120,30 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
+function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const course = courses.find((c) => String(c.id) === courseId);
   const enrollment = enrolled.find((e) => e.courseId === courseId);
 
+  // #181 — `courses` (the public catalogue fetch) and `enrolled` (needed
+  // both for the enrollment lookup below and, via `coursesForLearners`,
+  // for courses a learner is enrolled in that have since left the public
+  // catalogue) are both still empty on a fresh page load — a hard reload
+  // or direct navigation to this URL — until their fetches resolve. A
+  // "not found" redirect here can't be trusted until both have actually
+  // loaded; earlier this fired on that empty-array startup state instead
+  // of waiting, bouncing straight to /dashboard before the real data ever
+  // arrived. Show a loading state instead, and only redirect once loading
+  // is done and the course still genuinely isn't found.
   if (!course) {
+    if (coursesLoading || enrolledLoading) {
+      return (
+        <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
+          Loading course…
+        </div>
+      );
+    }
     return <Navigate to="/dashboard" replace />;
   }
   return (
@@ -145,7 +172,7 @@ function KeystonePrototype() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const { user, session, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading, passwordRecovery, clearPasswordRecovery } = useAuth();
   const loggedIn = !!user;
   const role = user?.user_metadata?.role || "learner";
 
@@ -158,6 +185,11 @@ function KeystonePrototype() {
   const [courses, setCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [enrolledLoading, setEnrolledLoading] = useState(true);
+  // #183 — which 7-day week the Dashboard's mini-calendar is showing,
+  // in weeks relative to the current one (0 = this week, -1 = last
+  // week, ...). Lives here rather than in DashboardScreen so it resets
+  // naturally on logout along with the rest of this section's state.
+  const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
   const [activitySummary, setActivitySummary] = useState({
     streak: 0,
     minutesThisWeek: 0,
@@ -173,6 +205,14 @@ function KeystonePrototype() {
   const [learnerGoal, setLearnerGoal] = useState(null);
   const [goalLoaded, setGoalLoaded] = useState(false);
   const [showGoalOnboarding, setShowGoalOnboarding] = useState(false);
+  // #186 — profiles.role, fetched alongside goal below (same /profiles/me
+  // call). NULL only ever happens for a Google sign-up that hasn't picked
+  // learner/trainer yet — see MakeProfileRoleNullable. Kept separate from
+  // `role` (the user_metadata-derived value used for gating everywhere
+  // else) since this one specifically tracks "what does the DB say right
+  // now," which is what the trigger effect below needs to know.
+  const [profileRole, setProfileRole] = useState(null);
+  const [showRoleOnboarding, setShowRoleOnboarding] = useState(false);
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -235,10 +275,15 @@ function KeystonePrototype() {
         goalHitDays: 0,
         week: [],
       });
+      setCalendarWeekOffset(0);
       return;
     }
 
-    fetch(`${process.env.REACT_APP_API_URL}/activity/summary`, {
+    // #183 — weekOffset pages the calendar's day grid only; the backend
+    // keeps streak/minutesThisWeek/goalHitDays pinned to the real
+    // current week regardless, so those don't flicker as the calendar is
+    // browsed.
+    fetch(`${process.env.REACT_APP_API_URL}/activity/summary?weekOffset=${calendarWeekOffset}`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
       .then((res) => {
@@ -247,7 +292,7 @@ function KeystonePrototype() {
       })
       .then(setActivitySummary)
       .catch((err) => console.error("Failed to load activity summary:", err.message));
-  }, [loggedIn, session]);
+  }, [loggedIn, session, calendarWeekOffset]);
 
   // #107 — learner's goal (profiles.goal), replacing the old LEARNER.goal
   // mock. Same re-run/reset-on-logout pattern as activitySummary above.
@@ -262,6 +307,7 @@ function KeystonePrototype() {
     if (!loggedIn || !session) {
       setLearnerGoal(null);
       setGoalLoaded(false);
+      setProfileRole(null);
       return;
     }
 
@@ -271,6 +317,7 @@ function KeystonePrototype() {
       .then((res) => (res.ok ? res.json() : null))
       .then((profile) => {
         setLearnerGoal(profile?.goal ?? null);
+        setProfileRole(profile?.role ?? null);
         setGoalLoaded(true);
       })
       .catch((err) => console.error("Failed to load profile:", err.message));
@@ -282,18 +329,43 @@ function KeystonePrototype() {
   // email" flow means the first real session for a lot of accounts is a
   // later *login*, not the signup itself), so gating this on a signup-only
   // callback silently never showed it for any account that had to confirm
-  // its email first. Deriving it from "logged in, learner, and we've
-  // confirmed the profile has no goal" instead fires correctly regardless
-  // of how that session came about, and naturally covers pre-existing
-  // accounts (e.g. the seeded demo learners) too. Only runs once per
-  // login — skipping doesn't change any of this effect's dependencies, so
-  // it won't re-trigger itself for the rest of the session; it'll offer
-  // again next login/reload as long as goal is still unset.
+  // its email first. Deriving it from "logged in and we've confirmed the
+  // profile has no goal" instead fires correctly regardless of how that
+  // session came about, and naturally covers pre-existing accounts (e.g.
+  // the seeded demo learners) too. Only runs once per login — skipping
+  // doesn't change any of this effect's dependencies, so it won't
+  // re-trigger itself for the rest of the session; it'll offer again next
+  // login/reload as long as goal is still unset.
+  //
+  // #189 — no longer gated on role === "learner". A trainer account can
+  // enrol in and take courses just like a learner (Trainer Studio is an
+  // additional capability layered on top, not a separate account type),
+  // so they should get asked for a goal too — it only ever affects their
+  // own learner-facing views (Catalogue/Dashboard), never Trainer Studio.
+  // #186 — role must be resolved first: a fresh Google sign-up has both
+  // role and goal null, and showing both onboarding modals at once would
+  // stack two full-screen backdrops. Gating this on `profileRole !== null`
+  // means it simply doesn't fire until the role effect below has run its
+  // course (either role was already set — the normal email-signup case,
+  // so this behaves exactly as before — or the learner/trainer picker just
+  // resolved it), at which point goal onboarding proceeds same as always.
   useEffect(() => {
-    if (loggedIn && role === "learner" && goalLoaded && learnerGoal === null) {
+    if (loggedIn && goalLoaded && learnerGoal === null && profileRole !== null) {
       setShowGoalOnboarding(true);
     }
-  }, [loggedIn, role, goalLoaded, learnerGoal]);
+  }, [loggedIn, goalLoaded, learnerGoal, profileRole]);
+
+  // #186 — mirrors the goal-onboarding trigger above: fires once we've
+  // actually confirmed (via the /profiles/me fetch) that this account has
+  // no role yet, rather than off a signup-specific callback — same
+  // reasoning as #107's comment above, and it covers the Google OAuth
+  // redirect-return case for free since that's just another way `session`
+  // ends up set.
+  useEffect(() => {
+    if (loggedIn && goalLoaded && profileRole === null) {
+      setShowRoleOnboarding(true);
+    }
+  }, [loggedIn, goalLoaded, profileRole]);
 
   // Fire-and-forget refresh after an action that logs activity server-side
   // (module completed, quiz submitted, note saved, forum post made) — so
@@ -303,7 +375,7 @@ function KeystonePrototype() {
   async function refetchActivitySummary() {
     if (!session) return;
     try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/activity/summary`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/activity/summary?weekOffset=${calendarWeekOffset}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (!res.ok) return;
@@ -311,6 +383,31 @@ function KeystonePrototype() {
     } catch (err) {
       console.error("Failed to refresh activity summary:", err.message);
     }
+  }
+
+  // #188 — DashboardScreen's inline editor calls this. Refetches the whole
+  // summary afterward rather than patching activitySummary.dailyGoalMin in
+  // place: goalHit per day (and therefore goalHitDays) is computed
+  // server-side against dailyGoalMin, so a new goal value changes more
+  // than just the number shown — refetching is what keeps the calendar's
+  // highlighted days and "N of 7 days hit" in sync with it, same as any
+  // other action that calls refetchActivitySummary above.
+  async function updateDailyGoal(dailyGoalMin) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me/daily-goal`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ dailyGoalMin }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    await refetchActivitySummary();
   }
 
   const screen = screenKeyFromPath(location.pathname);
@@ -553,6 +650,25 @@ function KeystonePrototype() {
     navigate("/dashboard");
   }
 
+  // #207 — the other half of the sessionStorage mirror set in handleEnrol:
+  // picks up a pending enrollment that survived a Google OAuth redirect
+  // (which clears pendingCourse along with all other in-memory state,
+  // unlike the synchronous email-signup path handleAuthSubmit handles
+  // directly). Runs whenever loggedIn/coursesLoading change, but the key
+  // is removed the moment it's read regardless of what happens next — a
+  // course that's since been deleted just silently drops the pending
+  // enrollment rather than retrying — so this only ever acts once per
+  // stored value and can't loop or leak into a later signup.
+  useEffect(() => {
+    if (!loggedIn || coursesLoading) return;
+    const pendingId = sessionStorage.getItem(PENDING_ENROL_STORAGE_KEY);
+    if (!pendingId) return;
+    sessionStorage.removeItem(PENDING_ENROL_STORAGE_KEY);
+    const course = courses.find((c) => c.id === pendingId);
+    if (course) completeEnrol(course);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedIn, coursesLoading]);
+
   async function fetchQuiz(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz`);
     if (!res.ok) throw new Error(`Request failed: ${res.status}`);
@@ -677,6 +793,38 @@ function KeystonePrototype() {
     setShowGoalOnboarding(false);
   }
 
+  // #186 — called by RoleOnboardingModal when a Google sign-up picks
+  // learner or trainer. Writes both halves of the role split found while
+  // building this: `profiles.role` (what RequireTrainerGuard actually
+  // authorizes trainer-only endpoints against) via the backend, and
+  // Supabase Auth's user_metadata.role (what the `role` variable above —
+  // and therefore all frontend nav/route gating — reads) via updateUser().
+  // The updateUser() call fires a USER_UPDATED auth-state-change event that
+  // AuthContext's existing listener already picks up, so `user` refreshes
+  // on its own with no extra plumbing here.
+  async function updateRole(role) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me/role`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ role }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const { error } = await supabase.auth.updateUser({ data: { role } });
+    if (error) throw error;
+
+    const updated = await res.json();
+    setProfileRole(updated.role);
+    setShowRoleOnboarding(false);
+  }
+
   // #139 — Team tab. GET /providers/me 404s for "not a member of a
   // provider" (see ProvidersService.getMine) — that's a normal, expected
   // state here (the no-provider view), not an error, so it's translated
@@ -787,6 +935,11 @@ function KeystonePrototype() {
     if (pendingCourse) {
       completeEnrol(pendingCourse);
       setPendingCourse(null);
+      // #207 — this (synchronous email-signup) path resolves the pending
+      // enrollment directly, so the sessionStorage mirror handleEnrol set
+      // is no longer needed — clear it so a later, unrelated signup on
+      // this browser can't pick up a stale value.
+      sessionStorage.removeItem(PENDING_ENROL_STORAGE_KEY);
     } else {
       navigate("/dashboard");
     }
@@ -797,11 +950,29 @@ function KeystonePrototype() {
     navigate("/");
   }
 
+  // #187 — called by ResetPasswordModal once the PASSWORD_RECOVERY session
+  // (from clicking the emailed reset link) is used to actually set a new
+  // password. Throws on failure — same "let the modal show the error and
+  // allow retry" contract as updateGoal/updateRole above — rather than
+  // swallowing it here.
+  async function handleSetNewPassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+
+    clearPasswordRecovery();
+    setToast("Password updated");
+    setTimeout(() => setToast(null), 2600);
+  }
+
   function handleEnrol(course) {
     if (!loggedIn) {
       setPendingCourse(course);
       setSelectedCourse(null);
       setAuthMode("signup");
+      // #207 — mirrored to sessionStorage so the enrollment can still be
+      // completed if the learner picks Google from the auth modal (see
+      // PENDING_ENROL_STORAGE_KEY above).
+      sessionStorage.setItem(PENDING_ENROL_STORAGE_KEY, course.id);
       return;
     }
     completeEnrol(course);
@@ -871,6 +1042,7 @@ function KeystonePrototype() {
                 enrolledIds={enrolledIds}
                 courses={courses}
                 loading={coursesLoading}
+                goal={learnerGoal}
               />
             </AppShell>
           }
@@ -891,6 +1063,10 @@ function KeystonePrototype() {
                   goal={learnerGoal}
                   activitySummary={activitySummary}
                   loading={coursesLoading || enrolledLoading}
+                  calendarWeekOffset={calendarWeekOffset}
+                  onPrevWeek={() => setCalendarWeekOffset((n) => n - 1)}
+                  onNextWeek={() => setCalendarWeekOffset((n) => n + 1)}
+                  onUpdateDailyGoal={updateDailyGoal}
                 />
               </AppShell>
             </RequireAuth>
@@ -905,6 +1081,8 @@ function KeystonePrototype() {
                 <LearningRoute
                   courses={coursesForLearners}
                   enrolled={enrolled}
+                  coursesLoading={coursesLoading}
+                  enrolledLoading={enrolledLoading}
                   onSaveProgress={saveProgress}
                   onSubmitRating={submitRating}
                   onLogModuleView={logModuleView}
@@ -964,8 +1142,27 @@ function KeystonePrototype() {
 
       <AuthModal
         mode={authMode}
-        onClose={() => { setAuthMode(null); setPendingCourse(null); }}
+        onClose={() => {
+          setAuthMode(null);
+          setPendingCourse(null);
+          // #207 — closing without completing signup abandons the intent
+          // to enrol; clear the sessionStorage mirror too so it can't
+          // surface as a surprise auto-enrol on some later, unrelated
+          // signup in this browser.
+          sessionStorage.removeItem(PENDING_ENROL_STORAGE_KEY);
+        }}
         onSubmit={handleAuthSubmit}
+      />
+
+      <RoleOnboardingModal
+        open={showRoleOnboarding}
+        onSelect={updateRole}
+      />
+
+      <ResetPasswordModal
+        open={passwordRecovery}
+        onSubmit={handleSetNewPassword}
+        onClose={clearPasswordRecovery}
       />
 
       <GoalOnboardingModal

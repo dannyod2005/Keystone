@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { ActivityEvent } from './entities/activity-event.entity';
@@ -6,10 +6,12 @@ import { Profile } from '../profiles/entities/profile.entity';
 import { CourseModule } from '../courses/entities/course-module.entity';
 import { ActivitySummaryResponseDto } from './dto/activity-summary-response.dto';
 
-// Fixed for now — there's no per-user goal-setting UI yet. Matches the
-// value the old LEARNER mock used, so the dashboard doesn't visually jump
-// when this lands.
-const DAILY_GOAL_MIN = 30;
+// #188 — used only as a last-resort fallback (a profile row that
+// somehow has a null dailyGoalMin — shouldn't happen given the column's
+// DB default, but this keeps goalHit/buildWeek from doing math against
+// undefined if it ever does). The real, per-learner value now comes from
+// profile.dailyGoalMin, set at signup and editable from the dashboard.
+const DEFAULT_DAILY_GOAL_MIN = 30;
 
 // How far back to pull events when walking the streak. Bounded so the
 // query stays cheap; generous enough that no realistic streak in this
@@ -26,6 +28,8 @@ const MODULE_VIEW_MINUTES = 3;
 
 @Injectable()
 export class ActivityService {
+  private readonly logger = new Logger(ActivityService.name);
+
   constructor(
     @InjectRepository(ActivityEvent)
     private readonly activityRepo: Repository<ActivityEvent>,
@@ -46,6 +50,17 @@ export class ActivityService {
   // split completion event to the day it was really earned rather than
   // the day "Mark complete" was clicked. Left undefined, TypeORM's
   // @CreateDateColumn behaves exactly as before.
+  //
+  // #178 — that "shouldn't be allowed to fail the action itself" intent
+  // was only actually enforced for the missing-minutes case above; the DB
+  // write itself wasn't guarded, so any failure here (e.g. the
+  // activity_events schema drifting out from under the entity) propagated
+  // straight up and took the caller's whole request down with it — this
+  // is exactly how forum post creation ended up 500ing even though the
+  // post itself had already been saved successfully. Activity logging is
+  // a best-effort side effect, never load-bearing for the action that
+  // triggered it, so failures here are now caught and logged rather than
+  // thrown.
   async logEvent(
     userId: string,
     source: string,
@@ -54,16 +69,22 @@ export class ActivityService {
   ): Promise<void> {
     if (!minutes || minutes <= 0) return;
 
-    const event = this.activityRepo.create({
-      user: { id: userId } as Profile,
-      source,
-      minutes,
-      module: opts?.moduleId ? ({ id: opts.moduleId } as CourseModule) : null,
-    });
-    if (opts?.occurredAt) {
-      event.occurredAt = opts.occurredAt;
+    try {
+      const event = this.activityRepo.create({
+        user: { id: userId } as Profile,
+        source,
+        minutes,
+        module: opts?.moduleId ? ({ id: opts.moduleId } as CourseModule) : null,
+      });
+      if (opts?.occurredAt) {
+        event.occurredAt = opts.occurredAt;
+      }
+      await this.activityRepo.save(event);
+    } catch (err) {
+      this.logger.error(
+        `Failed to log activity event (userId=${userId}, source=${source}): ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
-    await this.activityRepo.save(event);
   }
 
   // #124 — one credit per (user, module, day), regardless of how many
@@ -75,15 +96,27 @@ export class ActivityService {
     const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const dayEnd = addDaysUTC(dayStart, 1);
 
-    const existing = await this.activityRepo.findOne({
-      where: {
-        user: { id: userId },
-        module: { id: moduleId },
-        source: 'module_view',
-        occurredAt: Between(dayStart, dayEnd),
-      },
-    });
-    if (existing) return;
+    // #178 — same fault-tolerance as logEvent below: this dedup check is
+    // itself a DB read against activity_events, so it can fail for the
+    // same reasons logEvent's write can. Guarded the same way, since
+    // logView (the caller) has already done its own real work (confirming
+    // the module exists) by the time this runs.
+    try {
+      const existing = await this.activityRepo.findOne({
+        where: {
+          user: { id: userId },
+          module: { id: moduleId },
+          source: 'module_view',
+          occurredAt: Between(dayStart, dayEnd),
+        },
+      });
+      if (existing) return;
+    } catch (err) {
+      this.logger.error(
+        `Failed to check existing module_view activity (userId=${userId}, moduleId=${moduleId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
 
     await this.logEvent(userId, 'module_view', MODULE_VIEW_MINUTES, { moduleId });
   }
@@ -139,23 +172,60 @@ export class ActivityService {
     return Array.from(keys).sort();
   }
 
-  async getSummary(userId: string): Promise<ActivitySummaryResponseDto> {
+  // #183 — weekOffset pages the calendar card's day grid to an adjacent
+  // week (-1 = last week, 1 = next week, 0/default = the real current
+  // week) without disturbing streak/minutesThisWeek/goalHitDays, which
+  // stay pinned to the real current week regardless — those back the
+  // separate "This week" card and the streak badge, neither of which the
+  // calendar's arrows are meant to page.
+  async getSummary(
+    userId: string,
+    weekOffset = 0,
+  ): Promise<ActivitySummaryResponseDto> {
     const profile = await this.profilesRepo.findOne({ where: { id: userId } });
     if (!profile) {
       throw new NotFoundException('Profile not found for this user');
     }
+    const dailyGoalMin = profile.dailyGoalMin ?? DEFAULT_DAILY_GOAL_MIN;
 
     const now = new Date();
-    const weekStart = startOfWeekUTC(now);
-    const weekEnd = addDaysUTC(weekStart, 7);
-    const historyStart = addDaysUTC(weekStart, -STREAK_LOOKBACK_DAYS);
+    const currentWeekStart = startOfWeekUTC(now);
+    const currentWeekEnd = addDaysUTC(currentWeekStart, 7);
+    const historyStart = addDaysUTC(currentWeekStart, -STREAK_LOOKBACK_DAYS);
 
-    const events = await this.activityRepo.find({
-      where: {
-        user: { id: userId },
-        occurredAt: Between(historyStart, weekEnd),
-      },
-    });
+    const viewedWeekStart = addDaysUTC(currentWeekStart, weekOffset * 7);
+    const viewedWeekEnd = addDaysUTC(viewedWeekStart, 7);
+
+    // Widen the fetch window to cover whichever is further out: the
+    // streak lookback, or the week actually being viewed — a learner can
+    // page further back than STREAK_LOOKBACK_DAYS, or forward past the
+    // current week (harmless; nothing will be logged there).
+    const fetchStart =
+      viewedWeekStart < historyStart ? viewedWeekStart : historyStart;
+    const fetchEnd =
+      viewedWeekEnd > currentWeekEnd ? viewedWeekEnd : currentWeekEnd;
+
+    // #179 — this is a read endpoint, not a side-effect, so it can't
+    // "swallow and continue" the way #178's write paths do — there's no
+    // real action to protect here, just this data itself. But the safest
+    // failure mode is still a zeroed summary rather than a hard 500: if
+    // the query fails (e.g. the same activity_events schema drift behind
+    // #178/#179), fall back to an empty event list, which flows through
+    // the exact same computation below to a legitimate "nothing logged
+    // yet" response instead of taking the whole dashboard down with it.
+    let events: ActivityEvent[] = [];
+    try {
+      events = await this.activityRepo.find({
+        where: {
+          user: { id: userId },
+          occurredAt: Between(fetchStart, fetchEnd),
+        },
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to load activity events for summary (userId=${userId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     const minutesByDate = new Map<string, number>();
     for (const e of events) {
@@ -166,28 +236,43 @@ export class ActivityService {
     const todayKey = toDateKey(now);
     const streak = computeStreak(minutesByDate, now);
 
-    const week = Array.from({ length: 7 }, (_, i) => {
-      const date = addDaysUTC(weekStart, i);
-      const key = toDateKey(date);
-      const minutes = minutesByDate.get(key) ?? 0;
-      return { date: key, minutes, goalHit: minutes >= DAILY_GOAL_MIN };
-    });
+    const week = buildWeek(viewedWeekStart, minutesByDate, dailyGoalMin);
 
-    // Only count days up to and including today — a day later this week
-    // that hasn't happened yet shouldn't drag the average down or block a
-    // "goal hit" count that's meant to reflect what's actually happened.
-    const daysSoFar = week.filter((d) => d.date <= todayKey);
+    // Always the real current week, independent of weekOffset — see the
+    // note above. Only count days up to and including today within that
+    // week — a day later this week that hasn't happened yet shouldn't
+    // drag the average down or block a "goal hit" count that's meant to
+    // reflect what's actually happened.
+    const currentWeekDays = buildWeek(
+      currentWeekStart,
+      minutesByDate,
+      dailyGoalMin,
+    );
+    const daysSoFar = currentWeekDays.filter((d) => d.date <= todayKey);
     const minutesThisWeek = daysSoFar.reduce((sum, d) => sum + d.minutes, 0);
     const goalHitDays = daysSoFar.filter((d) => d.goalHit).length;
 
     return {
       streak,
       minutesThisWeek,
-      dailyGoalMin: DAILY_GOAL_MIN,
+      dailyGoalMin,
       goalHitDays,
       week,
     };
   }
+}
+
+function buildWeek(
+  weekStart: Date,
+  minutesByDate: Map<string, number>,
+  dailyGoalMin: number,
+) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = addDaysUTC(weekStart, i);
+    const key = toDateKey(date);
+    const minutes = minutesByDate.get(key) ?? 0;
+    return { date: key, minutes, goalHit: minutes >= dailyGoalMin };
+  });
 }
 
 function toDateKey(date: Date): string {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 
 import { CategoryDot } from "../../components/common/Primitives";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
@@ -28,6 +28,15 @@ export function TrainerScreen({
   // anything on the course form itself — provider scoping stays an opt-in
   // upgrade managed from here, never a gate on creating a course.
   const [tab, setTab] = useState("courses");
+
+  // #185 — search-by-title + ownership filter for the course list,
+  // matching Catalogue's search/chip pattern. Ownership rather than
+  // category: "mine" vs. "view only" is the split that already exists
+  // per-row (via canEditCourse below) and is the one that actually
+  // matters when a trainer is hunting for a course to edit, so it's the
+  // more useful chip set for this screen specifically.
+  const [courseSearch, setCourseSearch] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("All"); // "All" | "Mine" | "View only"
 
   // #155 — need the trainer's own providerId to mirror
   // RequireCourseOwnerGuard's "shared provider member" branch client-side.
@@ -64,6 +73,24 @@ export function TrainerScreen({
     }
     return false;
   }
+
+  const byOwnership =
+    ownerFilter === "All"
+      ? courses
+      : courses.filter((c) => (ownerFilter === "Mine" ? canEditCourse(c) : !canEditCourse(c)));
+  const query = courseSearch.trim().toLowerCase();
+  // #206 — match provider too, same as Catalogue's search
+  // (title.includes || provider.includes) — a trainer hunting for a
+  // course by the team/provider it belongs to, not its exact title,
+  // was coming up empty here even though Catalogue's identical-looking
+  // search box already supported that.
+  const filteredCourses = query
+    ? byOwnership.filter(
+        (c) =>
+          (c.title || "").toLowerCase().includes(query) ||
+          (c.provider || "").toLowerCase().includes(query),
+      )
+    : byOwnership;
 
   const editingCourse =
     editingId === "__new" ? null :
@@ -122,13 +149,40 @@ export function TrainerScreen({
       <div key={tab} className="ks-tab-panel">
       {tab === "courses" && (
         <>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+          {/* #185 — search by title + ownership filter, same visual
+              pattern as Catalogue's search/chip row. */}
+          <div className="flex flex-col items-stretch md:flex-row md:items-center" style={{ gap: 14, marginBottom: 14 }}>
+            <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
+              <Search size={15} color="var(--slate-light)" style={{ position: "absolute", left: 13, top: 11 }} />
+              <input
+                className="ks-input"
+                placeholder="Search by title"
+                value={courseSearch}
+                onChange={(e) => setCourseSearch(e.target.value)}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {["All", "Mine", "View only"].map((o) => (
+                <span
+                  key={o}
+                  onClick={() => setOwnerFilter(o)}
+                  style={{
+                    fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
+                    background: ownerFilter === o ? "var(--ink)" : "var(--paper-2)", color: ownerFilter === o ? "var(--paper)" : "var(--slate)",
+                    border: "1px solid var(--line)",
+                  }}
+                >
+                  {o}
+                </span>
+              ))}
+            </div>
+            <div style={{ flex: 1 }} />
             <button className="ks-btn ks-btn-gold" onClick={() => setEditingId("__new")}><Plus size={15} /> New course</button>
           </div>
 
           <div className="ks-card" style={{ padding: 0, overflow: "hidden" }}>
-            {courses.map((c, i) => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderBottom: i < courses.length - 1 ? "1px solid var(--line)" : "none" }}>
+            {filteredCourses.map((c, i) => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderBottom: i < filteredCourses.length - 1 ? "1px solid var(--line)" : "none" }}>
                 <CategoryDot color={c.color} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{c.title || "(untitled course)"}</div>
@@ -154,8 +208,14 @@ export function TrainerScreen({
                 )}
               </div>
             ))}
-            {courses.length === 0 && (
-              <div style={{ padding: 24, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>No courses yet — add your first one.</div>
+            {filteredCourses.length === 0 && (
+              <div style={{ padding: 24, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
+                {courses.length === 0
+                  ? "No courses yet — add your first one."
+                  : query
+                    ? `No courses match "${courseSearch.trim()}".`
+                    : "No courses match this filter."}
+              </div>
             )}
           </div>
         </>

@@ -56,3 +56,22 @@ export function CategoryDot({ color }) {
   const map = { ink: "var(--ink)", gold: "var(--gold)", success: "var(--success)", coral: "var(--coral)" };
   return <span style={{ width: 7, height: 7, borderRadius: 99, background: map[color], display: "inline-block" }} />;
 }
+
+// #213 — shared page-level title, pulled out so Dashboard/Catalogue/
+// Discover can't drift back into three different heading sizes the way
+// they had (46px hero on Discover, 30px h1 on Catalogue, no title at all
+// on Dashboard). 30px/font-display/600 matches Catalogue's original
+// values exactly — the "middle" of the three, and the least disruptive
+// to standardize on. `subtitle` is optional: Dashboard's greeting card
+// already carries its own personalized context right below, so it only
+// needs a bare title here.
+export function PageHeader({ title, subtitle }) {
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 30, margin: subtitle ? "0 0 6px" : 0 }}>
+        {title}
+      </h1>
+      {subtitle && <p style={{ color: "var(--slate)", fontSize: 14, margin: 0 }}>{subtitle}</p>}
+    </div>
+  );
+}
