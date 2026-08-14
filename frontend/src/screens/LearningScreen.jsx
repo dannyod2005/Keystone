@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
-import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star } from "lucide-react";
+import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star, AlertTriangle } from "lucide-react";
 
+// #240 — a module's quiz score has to clear this to count as "passed."
+// Purely a comparison bar for display/nudging, never a gate on progress
+// — see quizBlocksCompletion below, which stays keyed on `taken`, not on
+// this threshold. Matches the same 70% bar used elsewhere (Coursera's
+// common pass grade, Udemy's own accredited-content requirement).
+const MODULE_PASS_THRESHOLD_PCT = 70;
 
 export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack, initialModuleId = null, initialTab = null }) {
   // #229 — a notification click-through wants a specific tab (always
@@ -230,6 +236,25 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const quizBlocksCompletion = quizResultsLoading
     ? true // don't know yet whether this module has a quiz — block rather than flash unlocked
     : !!currentQuizStatus?.hasQuiz && !quizAlreadySatisfied;
+
+  // #240 — continuous course grade: summed correct answers over summed
+  // question counts, across every taken-and-quizzed module. This is
+  // mathematically identical to CourseAnalyticsService's per-learner
+  // quizAverageScorePct (which pools every raw QuizSubmission's
+  // isCorrect across the course) rather than a divergent calculation —
+  // a "taken" module always has a graded answer for every one of its
+  // questions (submitQuiz requires a complete set, no partial
+  // submissions), so summing score/total per module and summing every
+  // submission directly land on the same number. Null (not a 0%) when
+  // no quizzed module has been taken yet, so the UI can show "—" instead
+  // of a misleadingly bad grade before any quiz exists to grade.
+  const gradedModules = quizResultsOverview.filter((r) => r.hasQuiz && r.taken);
+  const courseGradePct = gradedModules.length > 0
+    ? Math.round(
+        (gradedModules.reduce((sum, r) => sum + r.score, 0) /
+          gradedModules.reduce((sum, r) => sum + r.total, 0)) * 100,
+      )
+    : null;
 
   async function handleMarkComplete() {
     if (quizBlocksCompletion) return; // defense in depth — the button is already disabled for this
@@ -653,9 +678,20 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                   <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
                     Quick check — {quizQuestions.length} question{quizQuestions.length === 1 ? "" : "s"}
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 10 }}>
                     You've already taken this quiz — scored {currentQuizStatus.score}/{currentQuizStatus.total}.
                   </div>
+                  {/* #240 — below the pass bar: a nudge, not a block. Mark
+                      Complete/progress are never gated on this — see
+                      quizBlocksCompletion above, unchanged by this
+                      threshold. */}
+                  {currentQuizStatus.total > 0 &&
+                    Math.round((currentQuizStatus.score / currentQuizStatus.total) * 100) < MODULE_PASS_THRESHOLD_PCT && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>
+                      <AlertTriangle size={13} />
+                      Below the {MODULE_PASS_THRESHOLD_PCT}% pass bar — consider retaking to improve your course grade.
+                    </div>
+                  )}
                   <button className="ks-btn ks-btn-ghost" onClick={startRetake}>
                     Retake quiz
                   </button>
@@ -830,24 +866,51 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
             </div>
           </div>
           <div className="ks-card" style={{ padding: 16 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 10 }}>Grades</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Grades</span>
+              {/* #240 — hidden until there's at least one graded module,
+                  same "hidden until non-empty" convention as the rest of
+                  this app's optional cards — a fresh course with no
+                  quizzes taken yet shouldn't show a misleading 0%. */}
+              {courseGradePct !== null && (
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600,
+                    color: courseGradePct < MODULE_PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--gold-dark)",
+                  }}
+                  title="Course grade — average quiz score across every quizzed module you've taken"
+                >
+                  {courseGradePct}%
+                </span>
+              )}
+            </div>
             {quizResultsLoading ? (
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "6px 0" }}>Loading…</div>
             ) : quizResultsOverview.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "6px 0" }}>No modules yet.</div>
             ) : (
-              quizResultsOverview.map((r, i) => (
-                <div
-                  key={r.moduleId}
-                  onClick={() => { setActiveModule(i); setTab("quiz"); }}
-                  style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 0", cursor: "pointer" }}
-                >
-                  <span style={{ color: r.taken ? "var(--slate)" : "var(--slate-light)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.moduleTitle}</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: r.taken ? "var(--ink)" : "var(--slate-light)", flexShrink: 0 }}>
-                    {!r.hasQuiz ? "No quiz" : r.taken ? `${r.score}/${r.total}` : "Not yet taken"}
-                  </span>
-                </div>
-              ))
+              quizResultsOverview.map((r, i) => {
+                // #240 — visibly flag (never block) a taken module below
+                // the pass bar, same threshold the course grade above is
+                // compared against.
+                const belowPassBar = r.taken && r.total > 0 &&
+                  Math.round((r.score / r.total) * 100) < MODULE_PASS_THRESHOLD_PCT;
+                return (
+                  <div
+                    key={r.moduleId}
+                    onClick={() => { setActiveModule(i); setTab("quiz"); }}
+                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, fontSize: 13, padding: "6px 0", cursor: "pointer" }}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, color: r.taken ? "var(--slate)" : "var(--slate-light)", overflow: "hidden" }}>
+                      {belowPassBar && <AlertTriangle size={12} color="var(--coral)" style={{ flexShrink: 0 }} />}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.moduleTitle}</span>
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: belowPassBar ? "var(--coral)" : r.taken ? "var(--ink)" : "var(--slate-light)", flexShrink: 0 }}>
+                      {!r.hasQuiz ? "No quiz" : r.taken ? `${r.score}/${r.total}` : "Not yet taken"}
+                    </span>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
