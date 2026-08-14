@@ -11,8 +11,12 @@ import { CourseModule } from '../../courses/entities/course-module.entity';
 
 // One row per real learning action (module completed, quiz submitted,
 // note saved, forum post made) — see #37. There is no session
-// heartbeat/timer; `minutes` is a weighted estimate assigned by whichever
-// service logs the event, not a measured duration.
+// heartbeat/timer; `points` is a weighted estimate assigned by whichever
+// service logs the event, not a measured duration. #246 — used to be a
+// straight minutes count; a module-completion event's points are now
+// additionally scaled by that module's quiz grade (see
+// EnrollmentsService.updateProgress and ActivityService.POINTS_PER_MINUTE),
+// so this column is no longer 1:1 with any real-world time unit.
 @Entity('activity_events')
 export class ActivityEvent {
   @PrimaryGeneratedColumn('uuid')
@@ -29,12 +33,12 @@ export class ActivityEvent {
   source: string;
 
   @Column({ type: 'int' })
-  minutes: number;
+  points: number;
 
   // #124 — which module this event is about, when relevant. Only actually
   // populated for 'module_view' and 'module_complete' (used to work out
   // which distinct days a module was engaged with, to split completion
-  // minutes across them — see ActivityService.logModuleCompletion).
+  // points across them — see ActivityService.logModuleCompletion).
   // Nullable: 'quiz_submit'/'note_save'/'forum_post' don't set it, and an
   // older event predating this column won't have it either.
   @ManyToOne(() => CourseModule, { onDelete: 'SET NULL', nullable: true })

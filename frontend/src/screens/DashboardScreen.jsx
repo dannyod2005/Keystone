@@ -5,13 +5,14 @@ import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
 /* ---------- Screen: Dashboard ---------- */
 
-const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 30, goalHitDays: 0, week: [] };
+const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, pointsThisWeek: 0, dailyGoalPoints: 300, goalHitDays: 0, week: [] };
 
-// #188 — presets rather than a free-text/number input: the dashboard card
-// is a tight space, and a handful of realistic options (matching
-// UpdateDailyGoalDto's 5–240 min bounds on the backend) covers the
+// #188/#246 — presets rather than a free-text/number input: the dashboard
+// card is a tight space, and a handful of realistic options (matching
+// UpdateDailyGoalDto's 50–2400 pt bounds on the backend, the same 15/30/
+// 45/60/90-minute presets scaled through POINTS_PER_MINUTE) covers the
 // realistic range without needing input validation UI here too.
-const DAILY_GOAL_PRESETS = [15, 30, 45, 60, 90];
+const DAILY_GOAL_PRESETS = [150, 300, 450, 600, 900];
 
 export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal, leaderboardOptIn = false, onUpdateLeaderboardOptIn, onOpenLeaderboard }) {
   const firstName = getFirstName(getDisplayName(user));
@@ -28,14 +29,14 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
   // savingGoal above.
   const [savingLeaderboardOptIn, setSavingLeaderboardOptIn] = useState(false);
 
-  async function handlePickDailyGoal(minutes) {
-    if (savingGoal || minutes === activitySummary.dailyGoalMin) {
+  async function handlePickDailyGoal(points) {
+    if (savingGoal || points === activitySummary.dailyGoalPoints) {
       setEditingGoal(false);
       return;
     }
     setSavingGoal(true);
     try {
-      await onUpdateDailyGoal(minutes);
+      await onUpdateDailyGoal(points);
       setEditingGoal(false);
     } catch (err) {
       console.error("Failed to update daily goal:", err.message);
@@ -278,8 +279,8 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                     style={{
                       fontSize: 12, fontWeight: 600, padding: "5px 10px", borderRadius: 100,
                       cursor: savingGoal ? "default" : "pointer", opacity: savingGoal ? 0.6 : 1,
-                      background: m === activitySummary.dailyGoalMin ? "var(--ink)" : "var(--paper-2)",
-                      color: m === activitySummary.dailyGoalMin ? "var(--paper)" : "var(--slate)",
+                      background: m === activitySummary.dailyGoalPoints ? "var(--ink)" : "var(--paper-2)",
+                      color: m === activitySummary.dailyGoalPoints ? "var(--paper)" : "var(--slate)",
                       border: "1px solid var(--line)",
                     }}
                   >
@@ -292,7 +293,7 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                 onClick={() => setEditingGoal(true)}
                 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--slate)", cursor: "pointer" }}
               >
-                Daily goal · {activitySummary.dailyGoalMin} min
+                Daily goal · {activitySummary.dailyGoalPoints} pts
                 <Pencil size={11} color="var(--slate-light)" />
               </div>
             )}
@@ -301,8 +302,8 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
 
           <div className="ks-card" style={{ padding: 18 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>This week</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 26, fontWeight: 500 }}>{activitySummary.minutesThisWeek}<span style={{ fontSize: 13, color: "var(--slate-light)" }}> min</span></div>
-            <div style={{ fontSize: 12, color: "var(--slate-light)" }}>learning time logged</div>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: 26, fontWeight: 500 }}>{activitySummary.pointsThisWeek}<span style={{ fontSize: 13, color: "var(--slate-light)" }}> pts</span></div>
+            <div style={{ fontSize: 12, color: "var(--slate-light)" }}>learning points logged</div>
             <hr className="ks-hairline" style={{ margin: "16px 0" }} />
             <div style={{ fontSize: 12.5, color: "var(--slate)" }}>Enrolled in {enrolledCourseCount} course{enrolledCourseCount === 1 ? "" : "s"}</div>
 

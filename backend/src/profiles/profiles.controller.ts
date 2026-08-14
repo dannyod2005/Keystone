@@ -57,7 +57,7 @@ export class ProfilesController {
     return this.profilesService.updateRole(req.user.id, dto.role);
   }
 
-  // #188 — DashboardScreen's inline "Daily goal · N min" editor calls
+  // #188 — DashboardScreen's inline "Daily goal · N pts" editor calls
   // this when a learner picks a new preset. Same guard/ownership shape as
   // the routes above: any authenticated user acting on their own row.
   @Patch('me/daily-goal')
@@ -66,7 +66,10 @@ export class ProfilesController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: UpdateDailyGoalDto,
   ): Promise<Profile> {
-    return this.profilesService.updateDailyGoal(req.user.id, dto.dailyGoalMin);
+    return this.profilesService.updateDailyGoal(
+      req.user.id,
+      dto.dailyGoalPoints,
+    );
   }
 
   // #231 — the leaderboard opt-in toggle in Dashboard settings calls this.

@@ -61,7 +61,7 @@ export function RoleOnboardingModal({ open, onSelect }) {
           How will you use Keystone?
         </div>
         <div style={{ fontSize: 13.5, color: "var(--slate)", marginBottom: 20 }}>
-          One quick choice — this decides what you see next.
+          One quick choice - this decides what you see next.
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

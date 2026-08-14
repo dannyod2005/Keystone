@@ -24,15 +24,20 @@ import { UpsertQuizDto } from '../quiz/dto/upsert-quiz.dto';
 import { QuizOption } from '../quiz/entities/quiz-option.entity';
 import { QuizQuestionEditResponseDto } from '../quiz/dto/quiz-question-edit-response.dto';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
-import { ActivityService } from '../activity/activity.service';
+import {
+  ActivityService,
+  POINTS_PER_MINUTE,
+} from '../activity/activity.service';
 import { BadgesService } from '../badges/badges.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
-// Fixed per-event minute estimates for actions that aren't naturally
-// scaled by course length the way module completion is (see #37).
-const QUIZ_SUBMIT_MINUTES = 5;
-const NOTE_SAVE_MINUTES = 3;
-const FORUM_POST_MINUTES = 3;
+// Fixed per-event point estimates for actions that aren't naturally
+// scaled by course length the way module completion is (see #37). #246 —
+// the same "minutes" figures as before (5/3/3), just multiplied through
+// POINTS_PER_MINUTE like every other flat estimate in this migration.
+const QUIZ_SUBMIT_POINTS = 5 * POINTS_PER_MINUTE;
+const NOTE_SAVE_POINTS = 3 * POINTS_PER_MINUTE;
+const FORUM_POST_POINTS = 3 * POINTS_PER_MINUTE;
 
 function isEdited(post: ForumPost): boolean {
   return post.updatedAt.getTime() !== post.createdAt.getTime();
@@ -278,11 +283,11 @@ export class ModulesService {
     // #239 — logged on every submission, retakes included: reanswering
     // every question is real, fresh work (the validation above requires
     // a complete set of answers again, not a shortcut), so it earns
-    // activity minutes the same as a first attempt does.
+    // activity points the same as a first attempt does.
     await this.activityService.logEvent(
       userId,
       'quiz_submit',
-      QUIZ_SUBMIT_MINUTES,
+      QUIZ_SUBMIT_POINTS,
     );
 
     // #225/#239 — perfect-score badge, evaluated on every fresh grading
@@ -465,7 +470,7 @@ export class ModulesService {
     }
 
     const saved = await this.notesRepo.save(note);
-    await this.activityService.logEvent(userId, 'note_save', NOTE_SAVE_MINUTES);
+    await this.activityService.logEvent(userId, 'note_save', NOTE_SAVE_POINTS);
 
     return {
       content: saved.content,
@@ -548,7 +553,7 @@ export class ModulesService {
     await this.activityService.logEvent(
       userId,
       'forum_post',
-      FORUM_POST_MINUTES,
+      FORUM_POST_POINTS,
     );
 
     // #225 — "first ever post" badge. Counted after save() so the post

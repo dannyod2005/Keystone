@@ -22,8 +22,11 @@ export class Profile {
   @Column({ type: 'int', default: 0 })
   streak: number;
 
-  @Column({ name: 'daily_goal_min', type: 'int', default: 30 })
-  dailyGoalMin: number;
+  // #246 — was a raw minutes count; now points (see ActivityService's
+  // POINTS_PER_MINUTE), rescaled by the same factor in the
+  // RenameProfilesDailyGoalMinToPoints migration.
+  @Column({ name: 'daily_goal_points', type: 'int', default: 300 })
+  dailyGoalPoints: number;
 
   // #137 — single, optional provider membership. Plain nullable scalar FK
   // rather than a join table: v1 only needs "at most one provider per
@@ -33,7 +36,7 @@ export class Profile {
   providerId: string | null;
 
   // #231 — opt-in to appearing on the global leaderboard, ranked by
-  // weekly learning minutes. Defaults false/off: competitive rankings
+  // weekly learning points. Defaults false/off: competitive rankings
   // aren't for everyone, and an opted-out learner must never appear —
   // see LeaderboardService, which filters on this column directly rather
   // than relying on the frontend to hide anyone.

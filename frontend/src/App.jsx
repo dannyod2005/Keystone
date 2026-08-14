@@ -224,8 +224,8 @@ function KeystonePrototype() {
   const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
   const [activitySummary, setActivitySummary] = useState({
     streak: 0,
-    minutesThisWeek: 0,
-    dailyGoalMin: 30,
+    pointsThisWeek: 0,
+    dailyGoalPoints: 300,
     goalHitDays: 0,
     week: [],
   });
@@ -481,15 +481,15 @@ function KeystonePrototype() {
     navigate(`/learning/${notification.courseId}?module=${notification.moduleId}&tab=forum`);
   }
 
-  // Real streak / minutes-this-week / daily-goal data (#37), replacing the
-  // old LEARNER mock. Re-runs on login state change like enrollments above;
-  // resets to a neutral empty shape on logout.
+  // Real streak / points-this-week / daily-goal data (#37, #246), replacing
+  // the old LEARNER mock. Re-runs on login state change like enrollments
+  // above; resets to a neutral empty shape on logout.
   useEffect(() => {
     if (!loggedIn || !session) {
       setActivitySummary({
         streak: 0,
-        minutesThisWeek: 0,
-        dailyGoalMin: 30,
+        pointsThisWeek: 0,
+        dailyGoalPoints: 300,
         goalHitDays: 0,
         week: [],
       });
@@ -498,7 +498,7 @@ function KeystonePrototype() {
     }
 
     // #183 — weekOffset pages the calendar's day grid only; the backend
-    // keeps streak/minutesThisWeek/goalHitDays pinned to the real
+    // keeps streak/pointsThisWeek/goalHitDays pinned to the real
     // current week regardless, so those don't flicker as the calendar is
     // browsed.
     fetch(`${process.env.REACT_APP_API_URL}/activity/summary?weekOffset=${calendarWeekOffset}`, {
@@ -605,21 +605,22 @@ function KeystonePrototype() {
     }
   }
 
-  // #188 — DashboardScreen's inline editor calls this. Refetches the whole
-  // summary afterward rather than patching activitySummary.dailyGoalMin in
-  // place: goalHit per day (and therefore goalHitDays) is computed
-  // server-side against dailyGoalMin, so a new goal value changes more
-  // than just the number shown — refetching is what keeps the calendar's
-  // highlighted days and "N of 7 days hit" in sync with it, same as any
-  // other action that calls refetchActivitySummary above.
-  async function updateDailyGoal(dailyGoalMin) {
+  // #188/#246 — DashboardScreen's inline editor calls this. Refetches the
+  // whole summary afterward rather than patching
+  // activitySummary.dailyGoalPoints in place: goalHit per day (and
+  // therefore goalHitDays) is computed server-side against
+  // dailyGoalPoints, so a new goal value changes more than just the
+  // number shown — refetching is what keeps the calendar's highlighted
+  // days and "N of 7 days hit" in sync with it, same as any other action
+  // that calls refetchActivitySummary above.
+  async function updateDailyGoal(dailyGoalPoints) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me/daily-goal`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ dailyGoalMin }),
+      body: JSON.stringify({ dailyGoalPoints }),
     });
 
     if (!res.ok) {
@@ -872,7 +873,7 @@ function KeystonePrototype() {
   }
 
   // #124 — fire-and-forget ping so the backend has a per-day "this module
-  // was open" marker to split a module's completion minutes across later
+  // was open" marker to split a module's completion points across later
   // (see ActivityService.logModuleView/logModuleCompletion). No response
   // body, no local state to update — LearningScreen calls this once per
   // module focus and doesn't need to await anything beyond error logging.
@@ -1128,7 +1129,7 @@ function KeystonePrototype() {
     }
 
     // No activity refetch here — editing isn't new activity, deliberately
-    // (an unlimited edit loop shouldn't be a way to farm streak minutes).
+    // (an unlimited edit loop shouldn't be a way to farm streak points).
     return res.json();
   }
 

@@ -23,29 +23,29 @@ export class LeaderboardService {
     });
     if (optedIn.length === 0) return [];
 
-    const minutesByUser = await this.activityService.getWeeklyMinutesForUsers(
+    const pointsByUser = await this.activityService.getWeeklyPointsForUsers(
       optedIn.map((p) => p.id),
     );
 
-    // #231 — weekly minutes descending; ties broken by name so the order
-    // is at least stable/deterministic rather than depending on however
-    // the DB happened to return rows.
+    // #231/#246 — weekly points descending; ties broken by name so the
+    // order is at least stable/deterministic rather than depending on
+    // however the DB happened to return rows.
     const ranked = optedIn
       .map((p) => ({
         id: p.id,
         name: p.name || 'Keystone Learner',
-        weeklyMinutes: minutesByUser.get(p.id) ?? 0,
+        weeklyPoints: pointsByUser.get(p.id) ?? 0,
       }))
       .sort(
         (a, b) =>
-          b.weeklyMinutes - a.weeklyMinutes || a.name.localeCompare(b.name),
+          b.weeklyPoints - a.weeklyPoints || a.name.localeCompare(b.name),
       );
 
     return ranked.map((entry, index) => ({
       rank: index + 1,
       id: entry.id,
       name: entry.name,
-      weeklyMinutes: entry.weeklyMinutes,
+      weeklyPoints: entry.weeklyPoints,
       isSelf: entry.id === requestingUserId,
     }));
   }

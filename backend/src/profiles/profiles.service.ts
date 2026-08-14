@@ -44,13 +44,15 @@ export class ProfilesService {
   // #188 — the DB already had a per-learner dailyGoalMin column; nothing
   // ever wrote to it, and ActivityService.getSummary ignored it too (see
   // that fix). This is the write side — DashboardScreen's inline editor
-  // calls it directly, no onboarding-modal step needed.
+  // calls it directly, no onboarding-modal step needed. #246 — column
+  // (and this param) renamed from dailyGoalMin to dailyGoalPoints; see
+  // RenameProfilesDailyGoalMinToPoints migration.
   async updateDailyGoal(
     userId: string,
-    dailyGoalMin: number,
+    dailyGoalPoints: number,
   ): Promise<Profile> {
     const profile = await this.getMine(userId);
-    profile.dailyGoalMin = dailyGoalMin;
+    profile.dailyGoalPoints = dailyGoalPoints;
     return this.profilesRepo.save(profile);
   }
 
