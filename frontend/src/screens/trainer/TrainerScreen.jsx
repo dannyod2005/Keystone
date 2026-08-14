@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, X, BarChart3 } from "lucide-react";
 
 import { CategoryDot } from "../../components/common/Primitives";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
 import { TeamTab } from "./TeamTab";
 import { LearningPathEditor } from "./LearningPathEditor";
+import { CourseAnalyticsView } from "./CourseAnalyticsView";
 
 export function TrainerScreen({
   courses,
@@ -22,11 +23,16 @@ export function TrainerScreen({
   paths = [],
   onSavePath,
   onDeletePath,
+  onFetchCourseAnalytics,
 }) {
   const [editingId, setEditingId] = useState(null); // null = list view, "__new" = creating, else course id
   const [deletingCourse, setDeletingCourse] = useState(null); // course pending delete confirmation, or null
   const [deleteError, setDeleteError] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  // #227 — same whole-screen-swap convention as editingId/editingPathId
+  // above, but view-only (no onSave/onCancel-into-list-refresh dance
+  // needed) — just which course's analytics is currently open, or null.
+  const [viewingAnalyticsId, setViewingAnalyticsId] = useState(null);
   // #224 — path editor mirrors the course editor's editingId state machine
   // exactly: null = list view, "__new" = creating, else the path id being
   // edited. Kept as its own state (not reused editingId) since a path and
@@ -187,6 +193,24 @@ export function TrainerScreen({
     );
   }
 
+  // Course no longer exists (e.g. deleted from another tab/session) — falls
+  // through to the normal list view below rather than rendering a view for
+  // nothing; no render-time state mutation needed since viewingAnalyticsId
+  // just naturally resets the next time the trainer opens/closes this view.
+  const viewingAnalyticsCourse = viewingAnalyticsId
+    ? courses.find((c) => c.id === viewingAnalyticsId)
+    : null;
+
+  if (viewingAnalyticsCourse) {
+    return (
+      <CourseAnalyticsView
+        course={viewingAnalyticsCourse}
+        onBack={() => setViewingAnalyticsId(null)}
+        onFetchAnalytics={onFetchCourseAnalytics}
+      />
+    );
+  }
+
   return (
     <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080 }}>
       <div style={{ marginBottom: 20 }}>
@@ -252,6 +276,7 @@ export function TrainerScreen({
                 </div>
                 {canEditCourse(c) ? (
                   <>
+                    <button className="ks-btn ks-btn-ghost" onClick={() => setViewingAnalyticsId(c.id)}><BarChart3 size={14} /> Analytics</button>
                     <button className="ks-btn ks-btn-ghost" onClick={() => setEditingId(c.id)}><Pencil size={14} /> Edit</button>
                     <button
                       className="ks-btn ks-btn-ghost"
