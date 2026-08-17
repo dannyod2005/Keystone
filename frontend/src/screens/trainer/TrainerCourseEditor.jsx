@@ -484,7 +484,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                 style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper-2)", border: "1px solid var(--line)", borderRadius: 999, padding: "4px 10px" }}
               >
                 {s}
-                <X size={12} style={{ cursor: "pointer" }} onClick={() => removeSkill(i)} />
+                {/* #258 — real button (was a bare clickable icon). */}
+                <button
+                  type="button"
+                  aria-label={`Remove skill ${s}`}
+                  onClick={() => removeSkill(i)}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+                >
+                  <X size={12} />
+                </button>
               </span>
             ))}
           </div>
@@ -515,7 +523,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                   <input style={rowInput} value={m.videoUrl || ""} onChange={(e) => setModule(i, "videoUrl", e.target.value)}
                     placeholder="Video embed URL (e.g. https://www.youtube.com/embed/...)" />
                 </div>
-                <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 10 }} onClick={() => removeModule(i)} />
+                {/* #258 — real button (was a bare clickable icon). */}
+                <button
+                  type="button"
+                  aria-label={`Remove module ${m.title || i + 1}`}
+                  onClick={() => removeModule(i)}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", marginTop: 10, display: "inline-flex", lineHeight: 0 }}
+                >
+                  <Trash2 size={16} color="var(--slate-light)" />
+                </button>
               </div>
 
               {m.id ? (
@@ -553,7 +569,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                                   <option value="mcq">Multiple choice</option>
                                   <option value="short_answer">Short answer</option>
                                 </select>
-                                <Trash2 size={15} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 9, flexShrink: 0 }} onClick={() => removeQuestion(m.id, qIndex)} />
+                                {/* #258 — real button (was a bare clickable icon). */}
+                                <button
+                                  type="button"
+                                  aria-label={`Remove question ${qIndex + 1}`}
+                                  onClick={() => removeQuestion(m.id, qIndex)}
+                                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", marginTop: 9, flexShrink: 0, display: "inline-flex", lineHeight: 0 }}
+                                >
+                                  <Trash2 size={15} color="var(--slate-light)" />
+                                </button>
                               </div>
                               {q.type === "short_answer" ? (
                                 <>
@@ -565,7 +589,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                                         onChange={(e) => setAcceptableAnswer(m.id, qIndex, aIndex, e.target.value)}
                                         placeholder={`Acceptable answer ${aIndex + 1}`}
                                       />
-                                      <Trash2 size={14} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeAcceptableAnswer(m.id, qIndex, aIndex)} />
+                                      {/* #258 — real button (was a bare clickable icon). */}
+                                      <button
+                                        type="button"
+                                        aria-label={`Remove acceptable answer ${aIndex + 1}`}
+                                        onClick={() => removeAcceptableAnswer(m.id, qIndex, aIndex)}
+                                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, display: "inline-flex", lineHeight: 0 }}
+                                      >
+                                        <Trash2 size={14} color="var(--slate-light)" />
+                                      </button>
                                     </div>
                                   ))}
                                   <span
@@ -592,7 +624,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                                         onChange={(e) => setOptionText(m.id, qIndex, oIndex, e.target.value)}
                                         placeholder={`Option ${oIndex + 1}`}
                                       />
-                                      <Trash2 size={14} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeOption(m.id, qIndex, oIndex)} />
+                                      {/* #258 — real button (was a bare clickable icon). */}
+                                      <button
+                                        type="button"
+                                        aria-label={`Remove option ${oIndex + 1}`}
+                                        onClick={() => removeOption(m.id, qIndex, oIndex)}
+                                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, display: "inline-flex", lineHeight: 0 }}
+                                      >
+                                        <Trash2 size={14} color="var(--slate-light)" />
+                                      </button>
                                     </div>
                                   ))}
                                   <span
@@ -643,7 +683,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
               <input style={{ ...rowInput, marginBottom: 6 }} value={f.question} onChange={(e) => setFaq(i, "question", e.target.value)} placeholder="Question" />
               <input style={rowInput} value={f.answer} onChange={(e) => setFaq(i, "answer", e.target.value)} placeholder="Answer" />
             </div>
-            <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 10 }} onClick={() => removeFaq(i)} />
+            {/* #258 — real button (was a bare clickable icon). */}
+            <button
+              type="button"
+              aria-label={`Remove FAQ item ${i + 1}`}
+              onClick={() => removeFaq(i)}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", marginTop: 10, display: "inline-flex", lineHeight: 0 }}
+            >
+              <Trash2 size={16} color="var(--slate-light)" />
+            </button>
           </div>
         ))}
         <button className="ks-btn ks-btn-ghost" style={{ fontSize: 13, padding: "7px 12px" }} onClick={addFaq}><Plus size={13} /> Add FAQ item</button>
@@ -657,7 +705,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
         {draft.credits.map((c, i) => (
           <div key={c.id ?? `new-${i}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
             <input style={rowInput} value={c.line} onChange={(e) => setCredit(i, e.target.value)} placeholder="e.g. Curriculum & instruction: ..." />
-            <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeCredit(i)} />
+            {/* #258 — real button (was a bare clickable icon). */}
+            <button
+              type="button"
+              aria-label={`Remove credit line ${i + 1}`}
+              onClick={() => removeCredit(i)}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, display: "inline-flex", lineHeight: 0 }}
+            >
+              <Trash2 size={16} color="var(--slate-light)" />
+            </button>
           </div>
         ))}
         <button className="ks-btn ks-btn-ghost" style={{ fontSize: 13, padding: "7px 12px" }} onClick={addCredit}><Plus size={13} /> Add credit line</button>

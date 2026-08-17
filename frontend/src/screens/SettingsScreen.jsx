@@ -233,25 +233,39 @@ export function SettingsScreen({
 
         <hr className="ks-hairline" style={{ margin: "18px 0" }} />
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <div
-            onClick={handleToggleLeaderboardOptIn}
-            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ink)", cursor: savingLeaderboardOptIn ? "default" : "pointer", opacity: savingLeaderboardOptIn ? 0.6 : 1 }}
-          >
+        {/* #258 — was two separate divs (label + switch) each with their own
+            onClick calling the same handler; neither had a role, checked
+            state, or accessible name. Merged into a single real button with
+            role="switch"/aria-checked so it's keyboard-operable and
+            announces its on/off state, instead of adding aria-label to an
+            unreachable div. */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={leaderboardOptIn}
+          aria-label="Show me on the leaderboard"
+          disabled={savingLeaderboardOptIn}
+          onClick={handleToggleLeaderboardOptIn}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, width: "100%",
+            background: "none", border: "none", padding: 0, cursor: savingLeaderboardOptIn ? "default" : "pointer",
+            opacity: savingLeaderboardOptIn ? 0.6 : 1, font: "inherit",
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ink)" }}>
             <Trophy size={14} color="var(--gold-dark)" />
             Show me on the leaderboard
-          </div>
-          <div
-            onClick={handleToggleLeaderboardOptIn}
+          </span>
+          <span
             style={{
-              width: 32, height: 18, borderRadius: 100, padding: 2, cursor: savingLeaderboardOptIn ? "default" : "pointer",
-              background: leaderboardOptIn ? "var(--gold)" : "var(--line)", opacity: savingLeaderboardOptIn ? 0.6 : 1,
-              display: "flex", justifyContent: leaderboardOptIn ? "flex-end" : "flex-start",
+              width: 32, height: 18, borderRadius: 100, padding: 2,
+              background: leaderboardOptIn ? "var(--gold)" : "var(--line)",
+              display: "flex", justifyContent: leaderboardOptIn ? "flex-end" : "flex-start", flexShrink: 0,
             }}
           >
-            <div style={{ width: 14, height: 14, borderRadius: 99, background: "#fff" }} />
-          </div>
-        </div>
+            <span style={{ width: 14, height: 14, borderRadius: 99, background: "#fff", display: "block" }} />
+          </span>
+        </button>
         {leaderboardOptIn && onOpenLeaderboard && (
           <div onClick={onOpenLeaderboard} style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, marginTop: 10, cursor: "pointer" }}>
             View leaderboard →

@@ -94,19 +94,28 @@ export function CatalogueScreen({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {isEnrolled && <span className="ks-badge" style={{ background: "var(--success-tint)", color: "var(--success)" }}>Enrolled</span>}
+            {/* #258 — real button (was a bare clickable icon); aria-label
+                reflects current saved state, same reasoning as the
+                password-visibility toggles. */}
             {onToggleBookmark && (
-              <Bookmark
-                size={16}
-                color={isBookmarked ? "var(--gold-dark)" : "var(--slate-light)"}
-                fill={isBookmarked ? "var(--gold-dark)" : "none"}
-                style={{ cursor: "pointer" }}
+              <button
+                type="button"
+                aria-label={isBookmarked ? "Remove bookmark" : "Save course"}
+                aria-pressed={isBookmarked}
                 onClick={(e) => {
                   // Doesn't bubble to the card's own onClick — toggling a
                   // bookmark should never also open the course detail modal.
                   e.stopPropagation();
                   onToggleBookmark(c, isBookmarked);
                 }}
-              />
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <Bookmark
+                  size={16}
+                  color={isBookmarked ? "var(--gold-dark)" : "var(--slate-light)"}
+                  fill={isBookmarked ? "var(--gold-dark)" : "none"}
+                />
+              </button>
             )}
           </div>
         </div>

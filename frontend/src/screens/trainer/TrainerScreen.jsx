@@ -367,7 +367,16 @@ export function TrainerScreen({
           <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete course?</div>
-              <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !deleting && setDeletingCourse(null)} />
+              {/* #258 — real button (was a bare clickable icon). */}
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={deleting}
+                onClick={() => setDeletingCourse(null)}
+                style={{ background: "none", border: "none", padding: 0, cursor: deleting ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <X size={18} color="var(--slate)" />
+              </button>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
               This removes <strong>{deletingCourse.title || "(untitled course)"}</strong> from the catalogue. Learners already enrolled keep their progress and access — this can't be undone from the catalogue side, so double-check before continuing.
@@ -399,7 +408,16 @@ export function TrainerScreen({
           <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete learning path?</div>
-              <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !deletingPathBusy && setDeletingPath(null)} />
+              {/* #258 — real button (was a bare clickable icon). */}
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={deletingPathBusy}
+                onClick={() => setDeletingPath(null)}
+                style={{ background: "none", border: "none", padding: 0, cursor: deletingPathBusy ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <X size={18} color="var(--slate)" />
+              </button>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
               This removes <strong>{deletingPath.title || "(untitled path)"}</strong> from the catalogue. Learners already enrolled keep their course progress and access — this can't be undone from the catalogue side, so double-check before continuing.

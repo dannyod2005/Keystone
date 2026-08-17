@@ -574,17 +574,24 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
               ) : (
                 <>
                   <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>How was this course?</div>
+                  {/* #258 — real buttons (were bare clickable icons):
+                      onMouseEnter still drives the hover preview for mouse
+                      users, but a keyboard user can now Tab to a specific
+                      star and press Enter/Space to rate directly, with no
+                      hover step required. */}
                   <div style={{ display: "flex", justifyContent: "center", gap: 4 }} onMouseLeave={() => setRatingHover(0)}>
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <Star
+                      <button
                         key={n}
-                        size={26}
-                        fill={n <= ratingHover ? "var(--gold)" : "none"}
-                        color="var(--gold)"
-                        style={{ cursor: ratingSubmitting ? "default" : "pointer" }}
+                        type="button"
+                        aria-label={`Rate ${n} star${n === 1 ? "" : "s"}`}
+                        disabled={ratingSubmitting}
                         onMouseEnter={() => setRatingHover(n)}
                         onClick={() => handleSubmitRating(n)}
-                      />
+                        style={{ background: "none", border: "none", padding: 0, cursor: ratingSubmitting ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
+                      >
+                        <Star size={26} fill={n <= ratingHover ? "var(--gold)" : "none"} color="var(--gold)" />
+                      </button>
                     ))}
                   </div>
                   {/* #228 — optional, submitted together with whichever star
