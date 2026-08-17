@@ -19,6 +19,7 @@ import { Course } from './entities/course.entity';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { CourseAnalyticsDto } from './dto/course-analytics.dto';
+import { TrainerOverviewDto } from './dto/trainer-overview.dto';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 import { CourseReviewDto } from '../enrollments/dto/course-review.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
@@ -41,6 +42,19 @@ export class CoursesController {
   @Get()
   findAll(): Promise<Course[]> {
     return this.coursesService.findAll();
+  }
+
+  // #259 — a static segment, must be registered before the `:id` route
+  // below or Nest would match "trainer-overview" as a course id instead.
+  // Trainer + owner-of-something only: this exposes a headcount that's
+  // arguably fine either way, but there's no learner-facing reason to hit
+  // it, so it's gated the same as the per-course analytics route.
+  @Get('trainer-overview')
+  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
+  getTrainerOverview(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<TrainerOverviewDto> {
+    return this.courseAnalyticsService.getOverviewForOwner(req.user.id);
   }
 
   @Get(':id')
