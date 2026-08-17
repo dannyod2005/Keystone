@@ -4,12 +4,14 @@ import { QueryFailedError, Repository } from 'typeorm';
 import { UserBadge } from './entities/user-badge.entity';
 import { UserBadgeResponseDto } from './dto/user-badge-response.dto';
 import { BADGE_DEFINITIONS_BY_KEY } from './badge-definitions';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BadgesService {
   constructor(
     @InjectRepository(UserBadge)
     private readonly userBadgesRepo: Repository<UserBadge>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // #225 — the only place that actually inserts a user_badges row. Every
@@ -32,10 +34,15 @@ export class BadgesService {
         err instanceof QueryFailedError &&
         (err as { code?: string }).code === '23505'
       ) {
-        return; // already earned — idempotent no-op
+        return; // already earned — idempotent no-op, no notification either
       }
       throw err;
     }
+
+    // #257 — only reached on a genuine new insert (the 23505 branch above
+    // already returned otherwise), so this notifies exactly once per
+    // learner per badge.
+    await this.notificationsService.createForBadge(userId, badgeKey);
   }
 
   // #225 — called from EnrollmentsService.updateProgress right after an

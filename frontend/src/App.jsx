@@ -478,8 +478,22 @@ function KeystonePrototype() {
     }
   }
 
+  // #257 — click-through target now depends on type: forum_reply still
+  // deep-links straight to the forum tab of the module it's about;
+  // badge_earned has no course/module of its own, so it goes to
+  // Dashboard's badges card instead; course_completed goes to the course
+  // itself rather than the forum tab specifically, since there's no
+  // module in play.
   function handleOpenNotification(notification) {
     if (!notification.read) markNotificationRead(notification.id);
+    if (notification.type === "badge_earned") {
+      navigate("/dashboard");
+      return;
+    }
+    if (notification.type === "course_completed") {
+      navigate(`/learning/${notification.courseId}`);
+      return;
+    }
     navigate(`/learning/${notification.courseId}?module=${notification.moduleId}&tab=forum`);
   }
 
