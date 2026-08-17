@@ -1,4 +1,5 @@
-import { ArrowRight, ChevronRight, BookOpen } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, ChevronRight, BookOpen, Sparkles, TrendingUp, Milestone, Trophy } from "lucide-react";
 
 import { TESTIMONIALS } from "../data/courses";
 import { Stars, KeystoneArch, CategoryDot, PageHeader } from "../components/common/Primitives";
@@ -6,12 +7,135 @@ import { MarketingHeader } from "../components/layout/MarketingHeader";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
 
 /* ---------- Screen: Home (marketing for logged-out visitors, a
-   welcome-back landing for logged-in users) ---------- */
+   "Discover" surface for logged-in users) ---------- */
 
-export function HomeScreen({ onGo, onAuth, courses, loggedIn, user, enrolled = [] }) {
+// #247 — a curated row, not a dumping ground: same reasoning as
+// Catalogue's #190 RECOMMENDED_LIMIT, just a shorter one — this page
+// makes room for several sections, so each one stays tight rather than
+// trying to be a second Catalogue grid.
+const RECOMMENDED_LIMIT = 3;
+const TRENDING_LIMIT = 3;
+const PATHS_LIMIT = 2;
+
+export function HomeScreen({
+  onGo,
+  onAuth,
+  courses,
+  loggedIn,
+  user,
+  enrolled = [],
+  onOpenCourse,
+  enrolledIds = [],
+  goal = null,
+  learningPaths = [],
+  onOpenPath,
+  enrolledPathIds = [],
+  leaderboardOptIn = false,
+  onFetchLeaderboard,
+}) {
   const firstName = loggedIn ? getFirstName(getDisplayName(user)) : null;
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
+
+  // #247 — "Recommended for you": the same goal-category signal as
+  // Catalogue's #190 strip, but additionally excludes courses the
+  // learner is already enrolled in. Catalogue's version deliberately
+  // keeps enrolled courses in (badged "Enrolled") since it's a
+  // "for you" callout layered on the full list; here, where the whole
+  // point of this page is surfacing things the learner hasn't started,
+  // an already-enrolled course belongs on Dashboard's "Continue
+  // learning" list instead, not repeated here.
+  const recommended = !loggedIn || !goal
+    ? []
+    : courses
+        .filter((c) => c.category === goal && !enrolledIds.includes(c.id))
+        .slice()
+        .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))
+        .slice(0, RECOMMENDED_LIMIT);
+  const recommendedIds = new Set(recommended.map((c) => c.id));
+
+  // #247 — "New on Keystone": not limited to the learner's goal category
+  // (or shown at all for a learner/trainer with no goal set) — a
+  // logged-out-style "what's out there" strip, minus anything already
+  // surfaced above or already enrolled in.
+  const trending = !loggedIn
+    ? []
+    : courses
+        .filter((c) => !enrolledIds.includes(c.id) && !recommendedIds.has(c.id))
+        .slice()
+        .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))
+        .slice(0, TRENDING_LIMIT);
+
+  // #247 — same skills-from-completed-courses derivation as Dashboard's
+  // #226 skills card, used here only to rank (not filter) which
+  // not-yet-enrolled learning paths to surface first — a path that
+  // builds on skills the learner already has is a more natural "what's
+  // next" than a path picked at random.
+  const skillsLearned = loggedIn
+    ? Array.from(
+        new Set(
+          complete.flatMap((e) => courses.find((x) => x.id === e.courseId)?.skills ?? []),
+        ),
+      )
+    : [];
+
+  const pathsToExplore = !loggedIn
+    ? []
+    : learningPaths
+        .filter((p) => !enrolledPathIds.includes(p.id))
+        .map((p) => ({
+          path: p,
+          matchCount: (p.courses ?? []).reduce(
+            (sum, c) => sum + (c.skills ?? []).filter((s) => skillsLearned.includes(s)).length,
+            0,
+          ),
+        }))
+        .sort((a, b) => b.matchCount - a.matchCount)
+        .slice(0, PATHS_LIMIT)
+        .map((x) => x.path);
+
+  // #247 — leaderboard teaser, same fetch-on-mount-with-cancelled-guard
+  // shape as LeaderboardScreen's own effect. Only fetched for an
+  // opted-in learner — an opted-out learner never appears in the
+  // rankings anyway (see LeaderboardService), so there'd be nothing of
+  // theirs to show here.
+  const [leaderboardEntries, setLeaderboardEntries] = useState(null);
+  useEffect(() => {
+    if (!loggedIn || !leaderboardOptIn || !onFetchLeaderboard) {
+      setLeaderboardEntries(null);
+      return;
+    }
+    let cancelled = false;
+    onFetchLeaderboard()
+      .then((data) => {
+        if (!cancelled) setLeaderboardEntries(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load leaderboard teaser:", err.message);
+        if (!cancelled) setLeaderboardEntries(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedIn, leaderboardOptIn, onFetchLeaderboard]);
+  const myRank = leaderboardEntries?.find((e) => e.isSelf) ?? null;
+
+  function renderCourseCard(c) {
+    return (
+      <div key={c.id} className="ks-card" onClick={() => (onOpenCourse ? onOpenCourse(c) : onGo("catalogue"))} style={{ padding: 18, cursor: "pointer" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+          <CategoryDot color={c.color} />
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{c.category}</span>
+        </div>
+        <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 6, lineHeight: 1.3 }}>{c.title}</div>
+        <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, marginBottom: 14 }}>{c.blurb}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Stars rating={c.rating} />
+          <span style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.hours}h</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="ks-page-enter">
@@ -114,6 +238,83 @@ export function HomeScreen({ onGo, onAuth, courses, loggedIn, user, enrolled = [
         </div>
       </section>
 
+      {/* #247 — this is the page's actual job for a logged-in user: not a
+          second "your own progress" view (Dashboard already owns that),
+          but discovery — things the learner hasn't started yet. Each
+          section below follows the same "hidden until non-empty"
+          convention used across Dashboard's badges/skills/paths/saved
+          cards; a learner with nothing to recommend (no goal, no
+          un-enrolled paths, not opted into the leaderboard) just sees
+          fewer sections, never an empty placeholder. */}
+      {loggedIn && (
+        <section style={{ maxWidth: 1160, margin: "0 auto", padding: "20px 28px 56px" }}>
+          {recommended.length > 0 && (
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                <Sparkles size={16} color="var(--gold-dark)" />
+                <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>Recommended for you</span>
+              </div>
+              <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>Based on your {goal} goal.</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
+                {recommended.map(renderCourseCard)}
+              </div>
+            </div>
+          )}
+
+          {trending.length > 0 && (
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <TrendingUp size={16} color="var(--gold-dark)" />
+                  <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>New on Keystone</span>
+                </div>
+                <span onClick={() => onGo("catalogue")} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" }}>View catalogue →</span>
+              </div>
+              <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>Courses you haven't started yet.</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
+                {trending.map(renderCourseCard)}
+              </div>
+            </div>
+          )}
+
+          {pathsToExplore.length > 0 && (
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <Milestone size={16} color="var(--gold-dark)" />
+                <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>Learning paths to explore</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 18 }}>
+                {pathsToExplore.map((p) => (
+                  <div key={p.id} className="ks-card" onClick={() => onOpenPath && onOpenPath(p)} style={{ padding: 18, cursor: onOpenPath ? "pointer" : "default" }}>
+                    <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 6 }}>{p.title}</div>
+                    {p.description && (
+                      <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, marginBottom: 14 }}>{p.description}</div>
+                    )}
+                    <div style={{ fontSize: 12, color: "var(--slate-light)" }}>
+                      {(p.courses ?? []).length} course{(p.courses ?? []).length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {myRank && (
+            <div className="ks-card" style={{ padding: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Trophy size={16} color="var(--gold-dark)" />
+                <span style={{ fontSize: 13.5 }}>
+                  You're <b>#{myRank.rank}</b> of {leaderboardEntries.length} on the leaderboard this week.
+                </span>
+              </div>
+              <span onClick={() => onGo("leaderboard")} style={{ fontSize: 13, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                View leaderboard →
+              </span>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* #213 — "Popular this month", the testimonials band, and the
           demo-copy footer are all logged-out marketing content: a
           course-recommendation strip (redundant with Catalogue's own
@@ -133,20 +334,7 @@ export function HomeScreen({ onGo, onAuth, courses, loggedIn, user, enrolled = [
               <span onClick={() => onGo("catalogue")} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" }}>View catalogue →</span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
-              {courses.slice(0, 3).map((c) => (
-                <div key={c.id} className="ks-card" onClick={() => onGo("catalogue")} style={{ padding: 18, cursor: "pointer" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                    <CategoryDot color={c.color} />
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{c.category}</span>
-                  </div>
-                  <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 6, lineHeight: 1.3 }}>{c.title}</div>
-                  <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, marginBottom: 14 }}>{c.blurb}</div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <Stars rating={c.rating} />
-                    <span style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.hours}h</span>
-                  </div>
-                </div>
-              ))}
+              {courses.slice(0, 3).map(renderCourseCard)}
             </div>
           </section>
 
