@@ -1,12 +1,22 @@
 import { useState, useEffect } from "react";
 import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star, AlertTriangle } from "lucide-react";
 
-// #240 — a module's quiz score has to clear this to count as "passed."
-// Purely a comparison bar for display/nudging, never a gate on progress
-// — see quizBlocksCompletion below, which stays keyed on `taken`, not on
-// this threshold. Matches the same 70% bar used elsewhere (Coursera's
-// common pass grade, Udemy's own accredited-content requirement).
-const MODULE_PASS_THRESHOLD_PCT = 70;
+// #240/#254 — a module's quiz score has to clear this to count as
+// "passed." Purely a comparison bar for display/nudging, never a gate on
+// progress — see quizBlocksCompletion below, which stays keyed on
+// `taken`, not on this threshold. Matches Coursera's common pass grade
+// and Udemy's own accredited-content requirement.
+//
+// This is intentionally the SAME NAME AND VALUE as backend's
+// PASS_THRESHOLD_PCT in enrollments.service.ts (used there to decide the
+// "Passed" vs "Completed" certificate tier). There's no shared module
+// between this CRA frontend and the NestJS backend (CRA blocks importing
+// from outside frontend/src, and there's no workspace tooling set up),
+// so the two constants are kept in sync by convention: same name, same
+// value, cross-referencing comments, and a test on each side asserting
+// the value is 70 (see LearningScreen.threshold.test.js). If you change
+// one, change the other.
+export const PASS_THRESHOLD_PCT = 70;
 
 export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack, initialModuleId = null, initialTab = null }) {
   // #229 — a notification click-through wants a specific tab (always
@@ -686,10 +696,10 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                       quizBlocksCompletion above, unchanged by this
                       threshold. */}
                   {currentQuizStatus.total > 0 &&
-                    Math.round((currentQuizStatus.score / currentQuizStatus.total) * 100) < MODULE_PASS_THRESHOLD_PCT && (
+                    Math.round((currentQuizStatus.score / currentQuizStatus.total) * 100) < PASS_THRESHOLD_PCT && (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>
                       <AlertTriangle size={13} />
-                      Below the {MODULE_PASS_THRESHOLD_PCT}% pass bar — consider retaking to improve your course grade.
+                      Below the {PASS_THRESHOLD_PCT}% pass bar — consider retaking to improve your course grade.
                     </div>
                   )}
                   <button className="ks-btn ks-btn-ghost" onClick={startRetake}>
@@ -876,7 +886,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                 <span
                   style={{
                     fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600,
-                    color: courseGradePct < MODULE_PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--gold-dark)",
+                    color: courseGradePct < PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--gold-dark)",
                   }}
                   title="Course grade — average quiz score across every quizzed module you've taken"
                 >
@@ -894,7 +904,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                 // the pass bar, same threshold the course grade above is
                 // compared against.
                 const belowPassBar = r.taken && r.total > 0 &&
-                  Math.round((r.score / r.total) * 100) < MODULE_PASS_THRESHOLD_PCT;
+                  Math.round((r.score / r.total) * 100) < PASS_THRESHOLD_PCT;
                 return (
                   <div
                     key={r.moduleId}
