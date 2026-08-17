@@ -30,13 +30,19 @@ import { ModulesService } from '../modules/modules.service';
 import { BadgesService } from '../badges/badges.service';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 
-// #241 — a course grade at/above this earns the "Passed" certificate
-// tier instead of the standard "Completed" one. Same 70% bar as #240's
-// frontend MODULE_PASS_THRESHOLD_PCT — duplicated rather than shared
-// across the frontend/backend boundary (there's no existing shared
-// constants module between them), but both are named/commented to make
-// that intentional parity obvious if either ever changes.
-const CERTIFICATE_PASS_THRESHOLD_PCT = 70;
+// #241/#254 — a course grade at/above this earns the "Passed"
+// certificate tier instead of the standard "Completed" one.
+//
+// This is intentionally the SAME NAME AND VALUE as frontend's
+// PASS_THRESHOLD_PCT in LearningScreen.jsx (used there for the below-bar
+// nudge/grade-color display). There's no shared module between this
+// NestJS backend and the CRA frontend (CRA blocks importing from outside
+// frontend/src, and there's no workspace tooling set up), so the two
+// constants are kept in sync by convention: same name, same value,
+// cross-referencing comments, and a test on each side asserting the
+// value is 70 (see enrollments.service.spec.ts). If you change one,
+// change the other.
+export const PASS_THRESHOLD_PCT = 70;
 
 @Injectable()
 export class EnrollmentsService {
@@ -410,8 +416,7 @@ export class EnrollmentsService {
           )
         : null;
     const passed =
-      courseGradePct !== null &&
-      courseGradePct >= CERTIFICATE_PASS_THRESHOLD_PCT;
+      courseGradePct !== null && courseGradePct >= PASS_THRESHOLD_PCT;
 
     const pdfDoc = await PDFDocument.create();
 
