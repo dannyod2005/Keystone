@@ -1,4 +1,4 @@
-import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut, X, Trophy } from "lucide-react";
+import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut, X, Trophy, Settings as SettingsIcon } from "lucide-react";
 import { getDisplayName, getInitials } from "../../lib/userDisplay";
 import { KeystoneMark } from "../common/Primitives";
 
@@ -34,6 +34,10 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
   if (role === "trainer") {
     items.push({ key: "trainer", label: "Trainer studio", icon: Pencil });
   }
+  // #255 — always last, regardless of role: a personal-account link fits
+  // more naturally at the end of the list than mixed in with the
+  // content-browsing items above it.
+  items.push({ key: "settings", label: "Settings", icon: SettingsIcon });
   return (
     <>
       {/* Backdrop: mobile only, tap to dismiss. Never rendered on md+. */}
