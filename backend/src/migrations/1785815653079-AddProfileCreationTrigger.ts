@@ -1,9 +1,7 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddProfileCreationTrigger1785815653079
-  implements MigrationInterface
-{
-  name = "AddProfileCreationTrigger1785815653079";
+export class AddProfileCreationTrigger1785815653079 implements MigrationInterface {
+  name = 'AddProfileCreationTrigger1785815653079';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Profiles should use the auth.users UUID instead of generating their own.

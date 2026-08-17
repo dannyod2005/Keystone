@@ -20,7 +20,9 @@ export class AddModuleToActivityEvents1786020000000 implements MigrationInterfac
   name = 'AddModuleToActivityEvents1786020000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "activity_events" ADD "module_id" uuid`);
+    await queryRunner.query(
+      `ALTER TABLE "activity_events" ADD "module_id" uuid`,
+    );
     await queryRunner.query(
       `ALTER TABLE "activity_events" ADD CONSTRAINT "FK_activity_events_module_id" FOREIGN KEY ("module_id") REFERENCES "course_modules"("id") ON DELETE SET NULL ON UPDATE NO ACTION`,
     );
@@ -30,6 +32,8 @@ export class AddModuleToActivityEvents1786020000000 implements MigrationInterfac
     await queryRunner.query(
       `ALTER TABLE "activity_events" DROP CONSTRAINT "FK_activity_events_module_id"`,
     );
-    await queryRunner.query(`ALTER TABLE "activity_events" DROP COLUMN "module_id"`);
+    await queryRunner.query(
+      `ALTER TABLE "activity_events" DROP COLUMN "module_id"`,
+    );
   }
 }

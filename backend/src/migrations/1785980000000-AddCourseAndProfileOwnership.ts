@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 // #137 — course update/delete was gated purely on role ("any trainer can
 // edit any course"), not on who actually owns the course. This adds real
@@ -21,31 +21,42 @@ import { MigrationInterface, QueryRunner } from "typeorm";
 // All three FKs are ON DELETE SET NULL: deleting a profile or provider
 // should not cascade-delete or block-delete courses tied to them.
 export class AddCourseAndProfileOwnership1785980000000 implements MigrationInterface {
-    name = 'AddCourseAndProfileOwnership1785980000000'
+  name = 'AddCourseAndProfileOwnership1785980000000';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "profiles" ADD "provider_id" uuid`);
-        await queryRunner.query(`ALTER TABLE "profiles" ADD CONSTRAINT "FK_profiles_provider_id" FOREIGN KEY ("provider_id") REFERENCES "providers"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`ALTER TABLE "profiles" ADD "provider_id" uuid`);
+    await queryRunner.query(
+      `ALTER TABLE "profiles" ADD CONSTRAINT "FK_profiles_provider_id" FOREIGN KEY ("provider_id") REFERENCES "providers"("id") ON DELETE SET NULL ON UPDATE NO ACTION`,
+    );
 
-        await queryRunner.query(`ALTER TABLE "courses" ADD "owner_id" uuid`);
-        await queryRunner.query(`ALTER TABLE "courses" ADD CONSTRAINT "FK_courses_owner_id" FOREIGN KEY ("owner_id") REFERENCES "profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "courses" ADD "owner_id" uuid`);
+    await queryRunner.query(
+      `ALTER TABLE "courses" ADD CONSTRAINT "FK_courses_owner_id" FOREIGN KEY ("owner_id") REFERENCES "profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`,
+    );
 
-        await queryRunner.query(`ALTER TABLE "courses" ADD "provider_id" uuid`);
-        await queryRunner.query(`ALTER TABLE "courses" ADD CONSTRAINT "FK_courses_provider_id" FOREIGN KEY ("provider_id") REFERENCES "providers"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "courses" ADD "provider_id" uuid`);
+    await queryRunner.query(
+      `ALTER TABLE "courses" ADD CONSTRAINT "FK_courses_provider_id" FOREIGN KEY ("provider_id") REFERENCES "providers"("id") ON DELETE SET NULL ON UPDATE NO ACTION`,
+    );
 
-        // Existing courses stay owner_id = NULL / provider_id = NULL —
-        // deliberately not backfilled, see class comment above.
-    }
+    // Existing courses stay owner_id = NULL / provider_id = NULL —
+    // deliberately not backfilled, see class comment above.
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "courses" DROP CONSTRAINT "FK_courses_provider_id"`);
-        await queryRunner.query(`ALTER TABLE "courses" DROP COLUMN "provider_id"`);
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "courses" DROP CONSTRAINT "FK_courses_provider_id"`,
+    );
+    await queryRunner.query(`ALTER TABLE "courses" DROP COLUMN "provider_id"`);
 
-        await queryRunner.query(`ALTER TABLE "courses" DROP CONSTRAINT "FK_courses_owner_id"`);
-        await queryRunner.query(`ALTER TABLE "courses" DROP COLUMN "owner_id"`);
+    await queryRunner.query(
+      `ALTER TABLE "courses" DROP CONSTRAINT "FK_courses_owner_id"`,
+    );
+    await queryRunner.query(`ALTER TABLE "courses" DROP COLUMN "owner_id"`);
 
-        await queryRunner.query(`ALTER TABLE "profiles" DROP CONSTRAINT "FK_profiles_provider_id"`);
-        await queryRunner.query(`ALTER TABLE "profiles" DROP COLUMN "provider_id"`);
-    }
-
+    await queryRunner.query(
+      `ALTER TABLE "profiles" DROP CONSTRAINT "FK_profiles_provider_id"`,
+    );
+    await queryRunner.query(`ALTER TABLE "profiles" DROP COLUMN "provider_id"`);
+  }
 }

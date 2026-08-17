@@ -104,7 +104,10 @@ describe('CoursesService', () => {
       const builtCourse = { title: dto.title } as Course;
       mockRepo.create.mockReturnValue(builtCourse);
       mockRepo.save.mockResolvedValue({ ...builtCourse, id: 'new-id' });
-      mockProfilesRepo.findOne.mockResolvedValue({ id: 'owner-1', providerId: null });
+      mockProfilesRepo.findOne.mockResolvedValue({
+        id: 'owner-1',
+        providerId: null,
+      });
 
       await service.create(dto, 'owner-1');
 
@@ -124,7 +127,7 @@ describe('CoursesService', () => {
       expect(repo.save).toHaveBeenCalledWith(builtCourse);
     });
 
-    it('stamps the course with the owner\'s providerId when they belong to one', async () => {
+    it("stamps the course with the owner's providerId when they belong to one", async () => {
       const dto: CreateCourseDto = {
         title: 'Team Course',
         provider: 'Provider',
@@ -138,12 +141,18 @@ describe('CoursesService', () => {
       const builtCourse = { title: dto.title } as Course;
       mockRepo.create.mockReturnValue(builtCourse);
       mockRepo.save.mockResolvedValue({ ...builtCourse, id: 'new-id' });
-      mockProfilesRepo.findOne.mockResolvedValue({ id: 'owner-2', providerId: 'provider-1' });
+      mockProfilesRepo.findOne.mockResolvedValue({
+        id: 'owner-2',
+        providerId: 'provider-1',
+      });
 
       await service.create(dto, 'owner-2');
 
       expect(repo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ ownerId: 'owner-2', providerId: 'provider-1' }),
+        expect.objectContaining({
+          ownerId: 'owner-2',
+          providerId: 'provider-1',
+        }),
       );
     });
   });
@@ -190,10 +199,9 @@ describe('CoursesService', () => {
 
       await service.update('c1', dto);
 
-      expect(mockManager.delete).toHaveBeenCalledWith(
-        CourseModule,
-        { id: In(['m2']) },
-      );
+      expect(mockManager.delete).toHaveBeenCalledWith(CourseModule, {
+        id: In(['m2']),
+      });
     });
 
     it('does NOT delete anything when all existing ids are still present', async () => {
