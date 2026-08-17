@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  Unique,
+} from 'typeorm';
 import { Course } from './course.entity';
 
 @Entity('course_modules')
@@ -7,7 +14,10 @@ export class CourseModule {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Course, (course) => course.modules, { onDelete: 'CASCADE', nullable: false })
+  @ManyToOne(() => Course, (course) => course.modules, {
+    onDelete: 'CASCADE',
+    nullable: false,
+  })
   @JoinColumn({ name: 'course_id' })
   course: Course;
 

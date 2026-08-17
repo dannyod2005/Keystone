@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil, Medal, Bookmark, Trophy } from "lucide-react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Medal, Bookmark, Trophy, X } from "lucide-react";
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
@@ -7,54 +7,14 @@ import { getDisplayName, getFirstName } from "../lib/userDisplay";
 
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, pointsThisWeek: 0, dailyGoalPoints: 300, goalHitDays: 0, week: [] };
 
-// #188/#246 — presets rather than a free-text/number input: the dashboard
-// card is a tight space, and a handful of realistic options (matching
-// UpdateDailyGoalDto's 50–2400 pt bounds on the backend, the same 15/30/
-// 45/60/90-minute presets scaled through POINTS_PER_MINUTE) covers the
-// realistic range without needing input validation UI here too.
-const DAILY_GOAL_PRESETS = [150, 300, 450, 600, 900];
-
-export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal, leaderboardOptIn = false, onUpdateLeaderboardOptIn, onOpenLeaderboard }) {
+export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, onUnenrol, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, leaderboardOptIn = false, onOpenLeaderboard }) {
   const firstName = getFirstName(getDisplayName(user));
-  // #188 — the DB column already existed; this is the first real UI for
-  // it. Inline on the dashboard card rather than a separate settings
-  // screen (there isn't one yet) or folded into the #107 goal-onboarding
-  // modal (that's a one-tap "pick a track" flow — adding a second,
-  // differently-shaped question to it would complicate a flow that's
-  // deliberately kept to a single click today).
-  const [editingGoal, setEditingGoal] = useState(false);
-  const [savingGoal, setSavingGoal] = useState(false);
-  // #231 — leaderboard opt-in toggle, own saving flag so a slow request
-  // can't be double-fired by a second click, same guard shape as
-  // savingGoal above.
-  const [savingLeaderboardOptIn, setSavingLeaderboardOptIn] = useState(false);
-
-  async function handlePickDailyGoal(points) {
-    if (savingGoal || points === activitySummary.dailyGoalPoints) {
-      setEditingGoal(false);
-      return;
-    }
-    setSavingGoal(true);
-    try {
-      await onUpdateDailyGoal(points);
-      setEditingGoal(false);
-    } catch (err) {
-      console.error("Failed to update daily goal:", err.message);
-    } finally {
-      setSavingGoal(false);
-    }
-  }
-  async function handleToggleLeaderboardOptIn() {
-    if (savingLeaderboardOptIn) return;
-    setSavingLeaderboardOptIn(true);
-    try {
-      await onUpdateLeaderboardOptIn(!leaderboardOptIn);
-    } catch (err) {
-      console.error("Failed to update leaderboard opt-in:", err.message);
-    } finally {
-      setSavingLeaderboardOptIn(false);
-    }
-  }
+  // #255 — course pending unenrol confirmation ({ enrollmentId, title,
+  // isComplete }), or null. Same three-state shape (pending item + error +
+  // busy flag) as TrainerScreen's deletingCourse/deleteError/deleting.
+  const [unenrollingCourse, setUnenrollingCourse] = useState(null);
+  const [unenrollError, setUnenrollError] = useState(null);
+  const [unenrolling, setUnenrolling] = useState(false);
 
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
@@ -103,6 +63,19 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
       await onViewCertificate(enrollmentId);
     } catch (err) {
       console.error("Failed to load certificate:", err.message);
+    }
+  }
+
+  async function handleConfirmUnenroll() {
+    setUnenrolling(true);
+    setUnenrollError(null);
+    try {
+      await onUnenrol(unenrollingCourse.enrollmentId);
+      setUnenrollingCourse(null);
+    } catch (err) {
+      setUnenrollError(err.message || "Failed to unenrol.");
+    } finally {
+      setUnenrolling(false);
     }
   }
 
@@ -180,6 +153,15 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                       </div>
                     </div>
                     <button className="ks-btn ks-btn-primary" onClick={() => onStartLearning(c)}>Start</button>
+                    {onUnenrol && (
+                      <button
+                        className="ks-btn ks-btn-ghost"
+                        style={{ color: "var(--coral)" }}
+                        onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: false }); setUnenrollError(null); }}
+                      >
+                        Unenroll
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -208,6 +190,15 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                     </div>
                   </div>
                   <button className="ks-btn ks-btn-primary" onClick={() => onStartLearning(c)}>Resume</button>
+                  {onUnenrol && (
+                    <button
+                      className="ks-btn ks-btn-ghost"
+                      style={{ color: "var(--coral)" }}
+                      onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: false }); setUnenrollError(null); }}
+                    >
+                      Unenroll
+                    </button>
+                  )}
                 </div>
               );
             })
@@ -227,6 +218,15 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                   <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>Completed {e.lastAccessed} · certificate issued</div>
                 </div>
                 <button className="ks-btn ks-btn-ghost" onClick={() => handleViewCertificate(e.id)}>View certificate</button>
+                {onUnenrol && (
+                  <button
+                    className="ks-btn ks-btn-ghost"
+                    style={{ color: "var(--coral)" }}
+                    onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: true }); setUnenrollError(null); }}
+                  >
+                    Unenroll
+                  </button>
+                )}
               </div>
             );
           })}
@@ -270,33 +270,13 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
               })}
             </div>
             <hr className="ks-hairline" style={{ margin: "16px 0" }} />
-            {editingGoal ? (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {DAILY_GOAL_PRESETS.map((m) => (
-                  <span
-                    key={m}
-                    onClick={() => handlePickDailyGoal(m)}
-                    style={{
-                      fontSize: 12, fontWeight: 600, padding: "5px 10px", borderRadius: 100,
-                      cursor: savingGoal ? "default" : "pointer", opacity: savingGoal ? 0.6 : 1,
-                      background: m === activitySummary.dailyGoalPoints ? "var(--ink)" : "var(--paper-2)",
-                      color: m === activitySummary.dailyGoalPoints ? "var(--paper)" : "var(--slate)",
-                      border: "1px solid var(--line)",
-                    }}
-                  >
-                    {m}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div
-                onClick={() => setEditingGoal(true)}
-                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--slate)", cursor: "pointer" }}
-              >
-                Daily goal · {activitySummary.dailyGoalPoints} pts
-                <Pencil size={11} color="var(--slate-light)" />
-              </div>
-            )}
+            {/* #255 — used to be a click-to-edit pill picker right here;
+                editing now lives on the Account Settings screen (see
+                SettingsScreen's Preferences card), so this is just a
+                read-only reflection of the current value. */}
+            <div style={{ fontSize: 12.5, color: "var(--slate)" }}>
+              Daily goal · {activitySummary.dailyGoalPoints} pts
+            </div>
             <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>{activitySummary.goalHitDays} of 7 days hit this week</div>
           </div>
 
@@ -307,40 +287,18 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
             <hr className="ks-hairline" style={{ margin: "16px 0" }} />
             <div style={{ fontSize: 12.5, color: "var(--slate)" }}>Enrolled in {enrolledCourseCount} course{enrolledCourseCount === 1 ? "" : "s"}</div>
 
-            {/* #231 — opt-in toggle for the global leaderboard, default off
-                (see the profiles.leaderboard_opt_in column comment). Only
-                rendered when the caller wired it up (onUpdateLeaderboardOptIn
-                passed in), same "optional prop gates the UI" convention as
-                the bookmark toggle. "View leaderboard" only shown once
-                opted in — opting out is what makes a learner disappear from
-                it, so there's nothing useful to view before that. */}
-            {onUpdateLeaderboardOptIn && (
+            {/* #231/#255 — the opt-in toggle itself moved to Account
+                Settings (see SettingsScreen's Preferences card); this stays
+                as just the "View leaderboard" link, shown once opted in —
+                opting out is what makes a learner disappear from it, so
+                there's nothing useful to view before that. */}
+            {leaderboardOptIn && onOpenLeaderboard && (
               <>
                 <hr className="ks-hairline" style={{ margin: "16px 0" }} />
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <div
-                    onClick={handleToggleLeaderboardOptIn}
-                    style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--slate)", cursor: savingLeaderboardOptIn ? "default" : "pointer", opacity: savingLeaderboardOptIn ? 0.6 : 1 }}
-                  >
-                    <Trophy size={13} color="var(--gold-dark)" />
-                    Show me on the leaderboard
-                  </div>
-                  <div
-                    onClick={handleToggleLeaderboardOptIn}
-                    style={{
-                      width: 32, height: 18, borderRadius: 100, padding: 2, cursor: savingLeaderboardOptIn ? "default" : "pointer",
-                      background: leaderboardOptIn ? "var(--gold)" : "var(--line)", opacity: savingLeaderboardOptIn ? 0.6 : 1,
-                      display: "flex", justifyContent: leaderboardOptIn ? "flex-end" : "flex-start",
-                    }}
-                  >
-                    <div style={{ width: 14, height: 14, borderRadius: 99, background: "#fff" }} />
-                  </div>
+                <div onClick={onOpenLeaderboard} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>
+                  <Trophy size={13} color="var(--gold-dark)" />
+                  View leaderboard →
                 </div>
-                {leaderboardOptIn && onOpenLeaderboard && (
-                  <div onClick={onOpenLeaderboard} style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, marginTop: 10, cursor: "pointer" }}>
-                    View leaderboard →
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -453,6 +411,49 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
           )}
         </div>
       </div>
+
+      {/* #255 — same modal shape as TrainerScreen's delete-course
+          confirmation (backdrop click/X/Cancel all close it, guarded by
+          !unenrolling so a click mid-request can't dismiss and lose the
+          error). Completed courses get an extra line warning about
+          certificate access specifically, since that's the one thing a
+          learner loses here that isn't obvious from "unenroll" alone —
+          their quiz answers and notes for the course are left in place
+          (see EnrollmentsService.remove) and resurface if they re-enrol,
+          but the certificate is only ever generated from a live
+          enrollment row. */}
+      {unenrollingCourse && (
+        <div
+          onClick={() => !unenrolling && setUnenrollingCourse(null)}
+          className="ks-modal-backdrop"
+          style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Unenroll from this course?</div>
+              <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !unenrolling && setUnenrollingCourse(null)} />
+            </div>
+            <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
+              You'll be removed from <strong>{unenrollingCourse.title}</strong> and your progress will reset if you enrol again.
+              {unenrollingCourse.isComplete && " You'll also lose access to this course's certificate."}
+            </div>
+            {unenrollError && (
+              <div style={{ fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>{unenrollError}</div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button className="ks-btn ks-btn-ghost" disabled={unenrolling} onClick={() => setUnenrollingCourse(null)}>Cancel</button>
+              <button
+                className="ks-btn"
+                style={{ background: "var(--coral)", color: "#fff", opacity: unenrolling ? 0.7 : 1 }}
+                disabled={unenrolling}
+                onClick={handleConfirmUnenroll}
+              >
+                {unenrolling ? "Unenrolling…" : "Unenroll"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Profile } from './entities/profile.entity';
@@ -53,6 +57,26 @@ export class ProfilesService {
   ): Promise<Profile> {
     const profile = await this.getMine(userId);
     profile.dailyGoalPoints = dailyGoalPoints;
+    return this.profilesRepo.save(profile);
+  }
+
+  // #255 — Account Settings screen's name field. This is deliberately a
+  // separate write from what the frontend also does client-side against
+  // Supabase auth (updateUser({ data: { name } })) — see
+  // App.jsx.updateName. That auth-side write is what
+  // getDisplayName/getInitials read everywhere a user sees their *own*
+  // name (greeting, sidebar, avatar); this column is what other users see
+  // about them (forum post authors, course review authors — see
+  // ModulesService.createPost and EnrollmentsService.getReviewsForCourse).
+  // Both need updating together for the two to stay in sync, same as they
+  // were seeded together at signup (see AddProfileCreationTrigger).
+  async updateName(userId: string, name: string): Promise<Profile> {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      throw new BadRequestException('Name cannot be empty');
+    }
+    const profile = await this.getMine(userId);
+    profile.name = trimmed;
     return this.profilesRepo.save(profile);
   }
 

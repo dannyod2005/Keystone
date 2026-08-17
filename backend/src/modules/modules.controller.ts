@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { ModulesService } from './modules.service';
 import { QuizQuestionResponseDto } from '../quiz/dto/quiz-question-response.dto';
@@ -29,7 +39,9 @@ export class ModulesController {
 
   @Get(':id/quiz/edit')
   @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
-  getQuizForEdit(@Param('id') id: string): Promise<QuizQuestionEditResponseDto[]> {
+  getQuizForEdit(
+    @Param('id') id: string,
+  ): Promise<QuizQuestionEditResponseDto[]> {
     return this.modulesService.getQuizForEdit(id);
   }
 

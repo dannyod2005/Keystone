@@ -20,6 +20,7 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
 import { LeaderboardScreen } from "./screens/LeaderboardScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 import { LearningScreen } from "./screens/LearningScreen";
 import { TrainerScreen } from "./screens/trainer/TrainerScreen";
 
@@ -32,6 +33,7 @@ function screenKeyFromPath(pathname) {
   if (pathname.startsWith("/dashboard")) return "dashboard";
   if (pathname.startsWith("/learning")) return "learning";
   if (pathname.startsWith("/leaderboard")) return "leaderboard";
+  if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/trainer")) return "trainer";
   return "home";
 }
@@ -653,6 +655,54 @@ function KeystonePrototype() {
     setLeaderboardOptIn(optIn);
   }
 
+  // #255 — Account Settings' name field. Writes both sides that carry a
+  // "name": the backend Profile row (what other users see — forum post
+  // authors, course review authors) via PATCH, and Supabase auth's own
+  // user_metadata (what this user sees about *themselves* — the sidebar
+  // greeting/avatar, via getDisplayName) via updateUser. The auth update
+  // fires a USER_UPDATED event that AuthContext's onAuthStateChange
+  // already listens for, so `user` (and everything deriving from it)
+  // refreshes on its own — no separate setUser call needed here. Backend
+  // write goes first and is the one that throws on failure before
+  // touching auth state, so a failed save never leaves the two sources
+  // half-synced.
+  async function updateName(name) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me/name`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    const { error } = await supabase.auth.updateUser({ data: { name } });
+    if (error) throw new Error(error.message);
+
+    setToast("Name updated");
+    setTimeout(() => setToast(null), 2600);
+  }
+
+  // #255 — Account Settings' password field. Same call
+  // ResetPasswordModal's forgot-password flow makes (supabase.auth.
+  // updateUser({ password })) — the only difference is how the session
+  // that authorizes it got there (a normal logged-in session here, vs. a
+  // PASSWORD_RECOVERY session from the reset-email link there). Supabase
+  // itself doesn't require re-entering the current password for this
+  // call as long as the session is valid.
+  async function changePassword(password) {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw new Error(error.message);
+
+    setToast("Password updated");
+    setTimeout(() => setToast(null), 2600);
+  }
+
   // #231 — the Leaderboard screen's own fetch-on-mount, same
   // on-demand-per-screen shape as fetchCourseAnalytics: nothing else in
   // the app needs this data, so it isn't fetched globally on login like
@@ -1020,6 +1070,30 @@ function KeystonePrototype() {
 
     setSelectedCourse(null);
     navigate("/dashboard");
+  }
+
+  // #255 — leave a course. DELETE follows deleteCourse's shape below
+  // exactly (no body, throw on !res.ok with the server's message), but
+  // updates local state via refetchEnrollments + refetchPathEnrollments
+  // (Promise.all, same as completeEnrolPath above) rather than a plain
+  // local filter — unenrolling from a course that's part of an enrolled
+  // learning path can also shift that path's derived progress, so both
+  // need a fresh read from the server rather than being patched by hand
+  // here.
+  async function unenrolCourse(enrollmentId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    await Promise.all([refetchEnrollments(), refetchPathEnrollments()]);
+    setToast("Unenrolled");
+    setTimeout(() => setToast(null), 2600);
   }
 
   // #207 — the other half of the sessionStorage mirror set in handleEnrol:
@@ -1427,6 +1501,7 @@ function KeystonePrototype() {
     screen === "catalogue" ? "Catalogue" :
     screen === "learning" ? (coursesForLearners.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
     screen === "leaderboard" ? "Leaderboard" :
+    screen === "settings" ? "Account settings" :
     screen === "trainer" ? "Trainer studio" :
     screen === "home" ? "Discover" : "";
 
@@ -1511,6 +1586,7 @@ function KeystonePrototype() {
                   onStartLearning={handleStartLearning}
                   courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
+                  onUnenrol={unenrolCourse}
                   user={user}
                   goal={learnerGoal}
                   activitySummary={activitySummary}
@@ -1518,12 +1594,10 @@ function KeystonePrototype() {
                   calendarWeekOffset={calendarWeekOffset}
                   onPrevWeek={() => setCalendarWeekOffset((n) => n - 1)}
                   onNextWeek={() => setCalendarWeekOffset((n) => n + 1)}
-                  onUpdateDailyGoal={updateDailyGoal}
                   pathEnrollments={pathEnrollments}
                   bookmarks={bookmarks}
                   onToggleBookmark={toggleBookmark}
                   leaderboardOptIn={leaderboardOptIn}
-                  onUpdateLeaderboardOptIn={updateLeaderboardOptIn}
                   onOpenLeaderboard={() => navigate("/leaderboard")}
                 />
               </AppShell>
@@ -1537,6 +1611,32 @@ function KeystonePrototype() {
             <RequireAuth loggedIn={loggedIn}>
               <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
                 <LeaderboardScreen onFetchLeaderboard={fetchLeaderboard} />
+              </AppShell>
+            </RequireAuth>
+          }
+        />
+
+        {/* #255 — Account settings. Same RequireAuth+AppShell wrapper shape
+            as /leaderboard right above; onUpdateDailyGoal/
+            onUpdateLeaderboardOptIn moved here from DashboardScreen's props
+            (see DashboardScreen.jsx's own #255 comment) — the /dashboard
+            route above keeps leaderboardOptIn/onOpenLeaderboard only, for
+            its now-read-only "View leaderboard" link. */}
+        <Route
+          path="/settings"
+          element={
+            <RequireAuth loggedIn={loggedIn}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
+                <SettingsScreen
+                  user={user}
+                  onUpdateName={updateName}
+                  onChangePassword={changePassword}
+                  activitySummary={activitySummary}
+                  onUpdateDailyGoal={updateDailyGoal}
+                  leaderboardOptIn={leaderboardOptIn}
+                  onUpdateLeaderboardOptIn={updateLeaderboardOptIn}
+                  onOpenLeaderboard={() => navigate("/leaderboard")}
+                />
               </AppShell>
             </RequireAuth>
           }

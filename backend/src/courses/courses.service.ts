@@ -115,9 +115,24 @@ export class CoursesService {
       // module reuses a position a soon-to-be-deleted module still
       // occupies. Deleting explicitly beforehand means that position is
       // already free by the time save() runs.
-      await this.deleteOrphaned(manager, CourseModule, course.modules, dto.modules);
-      await this.deleteOrphaned(manager, CourseCredit, course.credits, dto.credits ?? []);
-      await this.deleteOrphaned(manager, CourseFaq, course.faqs, dto.faqs ?? []);
+      await this.deleteOrphaned(
+        manager,
+        CourseModule,
+        course.modules,
+        dto.modules,
+      );
+      await this.deleteOrphaned(
+        manager,
+        CourseCredit,
+        course.credits,
+        dto.credits ?? [],
+      );
+      await this.deleteOrphaned(
+        manager,
+        CourseFaq,
+        course.faqs,
+        dto.faqs ?? [],
+      );
 
       course.title = dto.title;
       course.provider = dto.provider;
@@ -131,7 +146,11 @@ export class CoursesService {
       course.modules = this.mergeChildren(
         course.modules,
         dto.modules,
-        (m, position) => ({ position, title: m.title, videoUrl: m.videoUrl ?? null }),
+        (m, position) => ({
+          position,
+          title: m.title,
+          videoUrl: m.videoUrl ?? null,
+        }),
       ) as Course['modules'];
       course.credits = this.mergeChildren(
         course.credits,
@@ -154,7 +173,10 @@ export class CoursesService {
    * mergeChildren/save so the (course_id, position) unique constraint
    * never sees a stale row still occupying a position a new row wants.
    */
-  private async deleteOrphaned<Existing extends { id: string }, Incoming extends { id?: string }>(
+  private async deleteOrphaned<
+    Existing extends { id: string },
+    Incoming extends { id?: string },
+  >(
     manager: import('typeorm').EntityManager,
     entityClass: new () => Existing,
     existing: Existing[],
@@ -179,8 +201,8 @@ export class CoursesService {
    * position is always re-derived from array order, never trusted from
    * the client.
    */
-  private mergeChildren
-    <Existing extends { id: string },
+  private mergeChildren<
+    Existing extends { id: string },
     Incoming extends { id?: string },
     Fields,
   >(

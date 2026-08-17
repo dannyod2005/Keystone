@@ -30,13 +30,19 @@ import { ModulesService } from '../modules/modules.service';
 import { BadgesService } from '../badges/badges.service';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 
-// #241 — a course grade at/above this earns the "Passed" certificate
-// tier instead of the standard "Completed" one. Same 70% bar as #240's
-// frontend MODULE_PASS_THRESHOLD_PCT — duplicated rather than shared
-// across the frontend/backend boundary (there's no existing shared
-// constants module between them), but both are named/commented to make
-// that intentional parity obvious if either ever changes.
-const CERTIFICATE_PASS_THRESHOLD_PCT = 70;
+// #241/#254 — a course grade at/above this earns the "Passed"
+// certificate tier instead of the standard "Completed" one.
+//
+// This is intentionally the SAME NAME AND VALUE as frontend's
+// PASS_THRESHOLD_PCT in LearningScreen.jsx (used there for the below-bar
+// nudge/grade-color display). There's no shared module between this
+// NestJS backend and the CRA frontend (CRA blocks importing from outside
+// frontend/src, and there's no workspace tooling set up), so the two
+// constants are kept in sync by convention: same name, same value,
+// cross-referencing comments, and a test on each side asserting the
+// value is 70 (see enrollments.service.spec.ts). If you change one,
+// change the other.
+export const PASS_THRESHOLD_PCT = 70;
 
 @Injectable()
 export class EnrollmentsService {
@@ -81,6 +87,40 @@ export class EnrollmentsService {
       }
       throw err;
     }
+  }
+
+  // #255 — lets a learner leave a course. A hard delete rather than a
+  // status flag: Enrollment carries no soft-delete column (unlike Course,
+  // #41), and nothing else in the schema references enrollment.id by FK
+  // (quiz submissions/notes/forum posts are all keyed on (user, module/
+  // question) directly, not on the enrollment row — see the entity
+  // comments), so removing this row cleanly drops the enrollment without
+  // touching anything downstream. A learner's quiz answers and notes for
+  // this course are left in place and simply resurface if they re-enrol
+  // later — deliberately not wiped here, since there's no "wipe a user's
+  // course history" concept anywhere else in this app either. If this
+  // course was part of a learning path the learner is enrolled in, that
+  // path's derived progress (LearningPathEnrollmentsService) naturally
+  // reflects the drop on its next read — nothing to update here.
+  async remove(userId: string, enrollmentId: string): Promise<void> {
+    const enrollment = await this.enrollmentsRepo.findOne({
+      where: { id: enrollmentId },
+      relations: { user: true },
+    });
+
+    if (!enrollment) {
+      throw new NotFoundException(
+        `Enrollment with id "${enrollmentId}" not found`,
+      );
+    }
+
+    // Ownership check: same principle as updateProgress/submitRating above
+    // — never trust the client to only ever send its own enrollment id.
+    if (enrollment.user.id !== userId) {
+      throw new ForbiddenException('This enrollment does not belong to you');
+    }
+
+    await this.enrollmentsRepo.remove(enrollment);
   }
 
   async findAllForUser(userId: string): Promise<EnrollmentResponseDto[]> {
@@ -410,8 +450,7 @@ export class EnrollmentsService {
           )
         : null;
     const passed =
-      courseGradePct !== null &&
-      courseGradePct >= CERTIFICATE_PASS_THRESHOLD_PCT;
+      courseGradePct !== null && courseGradePct >= PASS_THRESHOLD_PCT;
 
     const pdfDoc = await PDFDocument.create();
 

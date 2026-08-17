@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { Course } from './entities/course.entity';
@@ -44,12 +50,16 @@ export class RequireCourseOwnerGuard implements CanActivate {
     }
 
     if (course.providerId) {
-      const profile = await this.profilesRepo.findOne({ where: { id: userId } });
+      const profile = await this.profilesRepo.findOne({
+        where: { id: userId },
+      });
       if (profile?.providerId && profile.providerId === course.providerId) {
         return true;
       }
     }
 
-    throw new ForbiddenException('You do not have permission to modify this course');
+    throw new ForbiddenException(
+      'You do not have permission to modify this course',
+    );
   }
 }

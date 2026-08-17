@@ -3,6 +3,7 @@ import { Request } from 'express';
 import { ProfilesService } from './profiles.service';
 import { Profile } from './entities/profile.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateNameDto } from './dto/update-name.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UpdateDailyGoalDto } from './dto/update-daily-goal.dto';
 import { UpdateLeaderboardOptInDto } from './dto/update-leaderboard-opt-in.dto';
@@ -40,6 +41,17 @@ export class ProfilesController {
     @Body() dto: UpdateProfileDto,
   ): Promise<Profile> {
     return this.profilesService.updateGoal(req.user.id, dto.goal);
+  }
+
+  // #255 — Account Settings screen's name field. Same guard/ownership
+  // shape as the routes above.
+  @Patch('me/name')
+  @UseGuards(SupabaseAuthGuard)
+  updateName(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateNameDto,
+  ): Promise<Profile> {
+    return this.profilesService.updateName(req.user.id, dto.name);
   }
 
   // #186 — RoleOnboardingModal calls this once, right after a Google

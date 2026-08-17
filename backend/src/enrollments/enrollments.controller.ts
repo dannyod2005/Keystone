@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { EnrollmentsService } from './enrollments.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
@@ -27,8 +39,23 @@ export class EnrollmentsController {
 
   @Get()
   @UseGuards(SupabaseAuthGuard)
-  findAllForUser(@Req() req: AuthenticatedRequest): Promise<EnrollmentResponseDto[]> {
+  findAllForUser(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<EnrollmentResponseDto[]> {
     return this.enrollmentsService.findAllForUser(req.user.id);
+  }
+
+  // #255 — unenrol. 204/no body on success, matching CoursesController's
+  // deleteCourse convention for a destructive action with nothing useful
+  // to return.
+  @Delete(':id')
+  @HttpCode(204)
+  @UseGuards(SupabaseAuthGuard)
+  remove(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.enrollmentsService.remove(req.user.id, id);
   }
 
   @Patch(':id')
@@ -58,7 +85,10 @@ export class EnrollmentsController {
     @Param('id') id: string,
     @Res() res: Response,
   ): Promise<void> {
-    const pdfBuffer = await this.enrollmentsService.generateCertificate(req.user.id, id);
+    const pdfBuffer = await this.enrollmentsService.generateCertificate(
+      req.user.id,
+      id,
+    );
 
     res.set({
       'Content-Type': 'application/pdf',
