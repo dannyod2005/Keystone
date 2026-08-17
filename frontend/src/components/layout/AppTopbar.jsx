@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Menu, Bell } from "lucide-react";
+import { Menu, Bell, MessageSquare, Award, CheckCircle2 } from "lucide-react";
+
+// #257 — one icon per notification type, including forum_reply (which had
+// none before this) — now that the list can mix three different kinds of
+// row, giving every row an icon keeps them visually consistent rather
+// than making the two new types stand out as the only ones with one.
+const TYPE_ICON = {
+  forum_reply: MessageSquare,
+  badge_earned: Award,
+  course_completed: CheckCircle2,
+};
 
 // #104 — hamburger is mobile-only (md:hidden); on md+ this renders nothing
 // and the topbar is pixel-identical to before this issue.
@@ -77,27 +87,54 @@ export function AppTopbar({ title, onMenuClick, notifications = [], unreadCount 
                   Nothing here yet.
                 </div>
               ) : (
-                notifications.map((n, i) => (
-                  <div
-                    key={n.id}
-                    onClick={() => handleSelect(n)}
-                    style={{
-                      padding: "12px 16px", cursor: "pointer",
-                      borderBottom: i < notifications.length - 1 ? "1px solid var(--line)" : "none",
-                      background: n.read ? "transparent" : "var(--gold-tint)",
-                    }}
-                  >
-                    <div style={{ fontSize: 12.5, fontWeight: 600 }}>
-                      {n.actorName} replied to your post
+                notifications.map((n, i) => {
+                  const Icon = TYPE_ICON[n.type] ?? MessageSquare;
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => handleSelect(n)}
+                      style={{
+                        display: "flex", gap: 10, padding: "12px 16px", cursor: "pointer",
+                        borderBottom: i < notifications.length - 1 ? "1px solid var(--line)" : "none",
+                        background: n.read ? "transparent" : "var(--gold-tint)",
+                      }}
+                    >
+                      <div style={{ width: 26, height: 26, borderRadius: 7, background: "var(--paper-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Icon size={13} color="var(--gold-dark)" />
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        {n.type === "forum_reply" && (
+                          <>
+                            <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                              {n.actorName} replied to your post
+                            </div>
+                            <div style={{ fontSize: 12, color: "var(--slate)", marginTop: 2, lineHeight: 1.4 }}>
+                              {n.excerpt}
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--slate-light)", marginTop: 4 }}>
+                              {n.moduleTitle} · {n.courseTitle}
+                            </div>
+                          </>
+                        )}
+                        {n.type === "badge_earned" && (
+                          <>
+                            <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                              You earned a badge: {n.badgeLabel}
+                            </div>
+                            <div style={{ fontSize: 12, color: "var(--slate)", marginTop: 2, lineHeight: 1.4 }}>
+                              {n.badgeDescription}
+                            </div>
+                          </>
+                        )}
+                        {n.type === "course_completed" && (
+                          <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                            You completed {n.courseTitle}!
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--slate)", marginTop: 2, lineHeight: 1.4 }}>
-                      {n.excerpt}
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--slate-light)", marginTop: 4 }}>
-                      {n.moduleTitle} · {n.courseTitle}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}

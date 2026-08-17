@@ -3,9 +3,16 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BadgesController } from './badges.controller';
 import { BadgesService } from './badges.service';
 import { UserBadge } from './entities/user-badge.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserBadge])],
+  imports: [
+    TypeOrmModule.forFeature([UserBadge]),
+    // #257 — award() calls NotificationsService.createForBadge on a
+    // genuine new award. No cycle: NotificationsModule doesn't import
+    // BadgesModule back (or anything that transitively does).
+    NotificationsModule,
+  ],
   controllers: [BadgesController],
   providers: [BadgesService],
   // #225 — EnrollmentsModule and ModulesModule both import this to call

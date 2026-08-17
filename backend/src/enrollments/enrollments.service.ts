@@ -28,6 +28,7 @@ import {
 } from '../activity/activity.service';
 import { ModulesService } from '../modules/modules.service';
 import { BadgesService } from '../badges/badges.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 
 // #241/#254 — a course grade at/above this earns the "Passed"
@@ -56,6 +57,7 @@ export class EnrollmentsService {
     private readonly activityService: ActivityService,
     private readonly modulesService: ModulesService,
     private readonly badgesService: BadgesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(userId: string, dto: CreateEnrollmentDto): Promise<Enrollment> {
@@ -237,6 +239,18 @@ export class EnrollmentsService {
       await this.badgesService.evaluateCourseCompletion(
         userId,
         completedCourseCount,
+      );
+
+      // #257 — same in-progress -> complete transition guard as the badge
+      // check just above, so this fires exactly once per course, not on
+      // every subsequent no-op re-save of an already-complete enrollment.
+      // saved.user/saved.course are the same already-loaded relations the
+      // rest of this method uses (see the findOne above and the comment
+      // on the toResponseDto call at the end of this method) — no extra
+      // query needed to notify.
+      await this.notificationsService.createForCourseCompletion(
+        saved.user,
+        saved.course,
       );
     }
 
