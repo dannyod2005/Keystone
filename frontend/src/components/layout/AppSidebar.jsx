@@ -1,16 +1,23 @@
-import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut, X } from "lucide-react";
+import { BookOpen, LayoutGrid, Home as HomeIcon, Pencil, LogOut, X, Trophy } from "lucide-react";
 import { getDisplayName, getInitials } from "../../lib/userDisplay";
 import { KeystoneMark } from "../common/Primitives";
 
 /* ---------- Logged-in app shell ---------- */
 
-// #104 — off-canvas on mobile (< md), a normal in-flow sidebar on md+.
-// mobileOpen/onCloseMobile only matter below md; the md: classes below
-// override them back to a static, always-visible sidebar exactly like
-// before this issue, so desktop is unaffected. Position/visibility live
-// on Tailwind classes (the one thing inline style={{}} genuinely can't
-// express — media queries); everything else (color, padding, layout)
-// stays as the existing inline styles, unchanged.
+// #104/#218 — off-canvas on mobile (< md), a sticky in-flow sidebar on
+// md+. mobileOpen/onCloseMobile only matter below md; the md: classes
+// below override the mobile fixed/off-canvas positioning back to a
+// normal flex item that also stays pinned to the viewport top while the
+// page content scrolls (md:sticky + md:top-0), rather than #104's
+// original md:static, which let the sidebar scroll away with the page
+// on any content taller than one screen (#218). md:self-start stops the
+// flex row's default align-items: stretch from forcing the aside's box
+// to match the (possibly much taller) main content's height — without
+// it, "sticky" has nothing to stick within because the box is already
+// as tall as the whole page. Position/visibility live on Tailwind
+// classes (the one thing inline style={{}} genuinely can't express —
+// media queries); everything else (color, padding, layout) stays as the
+// existing inline styles, unchanged.
 export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mobileOpen = false, onCloseMobile }) {
   const displayName = getDisplayName(user);
   const initials = getInitials(displayName);
@@ -18,6 +25,11 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
     { key: "dashboard", label: "My learning", icon: LayoutGrid },
     { key: "catalogue", label: "Catalogue", icon: BookOpen },
     { key: "home", label: "Discover", icon: HomeIcon },
+    // #231 — always visible, regardless of this learner's own opt-in
+    // state: the leaderboard itself only ever lists learners who've
+    // opted in, but browsing it (to see if anyone has) shouldn't require
+    // having opted in yourself.
+    { key: "leaderboard", label: "Leaderboard", icon: Trophy },
   ];
   if (role === "trainer") {
     items.push({ key: "trainer", label: "Trainer studio", icon: Pencil });
@@ -33,7 +45,7 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 transform transition-transform duration-200 md:static md:translate-x-0 md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-40 transform transition-transform duration-200 md:sticky md:top-0 md:self-start md:translate-x-0 md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{ width: 220, flexShrink: 0, background: "var(--ink)", color: "var(--paper)", padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, minHeight: "100vh" }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "0 10px 22px" }}>
@@ -46,12 +58,20 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
         {items.map((it) => {
           const Icon = it.icon;
           const active = screen === it.key;
+          // #219 — a real <button>, not a click-only <div>: gets keyboard
+          // focus, Enter/Space activation, and "button" screen-reader
+          // semantics for free. fontFamily/textAlign/width/border/background
+          // are all set explicitly because browsers don't inherit typical
+          // typography onto form controls by default (the old div did,
+          // implicitly, via .ks-root) — every property here exists to make
+          // the button visually identical to the div it replaces, not to
+          // change the look.
           return (
-            <div key={it.key} onClick={() => onGo(it.key)}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 500, color: active ? "var(--ink)" : "var(--paper)", background: active ? "var(--gold-tint)" : "transparent" }}>
+            <button key={it.key} type="button" onClick={() => onGo(it.key)} aria-current={active ? "page" : undefined}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "none", width: "100%", textAlign: "left", fontFamily: "inherit", cursor: "pointer", fontSize: 14, fontWeight: 500, color: active ? "var(--ink)" : "var(--paper)", background: active ? "var(--gold-tint)" : "transparent" }}>
               <Icon size={16} color={active ? "var(--gold-dark)" : "var(--paper)"} />
               {it.label}
-            </div>
+            </button>
           );
         })}
         <hr style={{ border: "none", borderTop: "1px solid #FFFFFF22", margin: "16px 4px" }} />
@@ -67,13 +87,14 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
           </div>
         </div>
         {onLogout && (
-          <div
+          <button
+            type="button"
             onClick={onLogout}
-            style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 500, color: "#B9C0CC", marginTop: 8 }}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "none", width: "100%", textAlign: "left", fontFamily: "inherit", background: "transparent", cursor: "pointer", fontSize: 14, fontWeight: 500, color: "#B9C0CC", marginTop: 8 }}
           >
             <LogOut size={16} color="#B9C0CC" />
             Log out
-          </div>
+          </button>
         )}
       </aside>
     </>

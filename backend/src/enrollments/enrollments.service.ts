@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, QueryFailedError, Repository } from 'typeorm';
+import { IsNull, Not, QueryFailedError, Repository } from 'typeorm';
 import { PDFDocument, rgb } from 'pdf-lib';
 import * as fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'fs/promises';
@@ -15,11 +15,28 @@ import { Enrollment } from './entities/enrollment.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { Course } from '../courses/entities/course.entity';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
-import { EnrolledCourseDto, EnrollmentResponseDto } from './dto/enrollment-response.dto';
+import {
+  EnrolledCourseDto,
+  EnrollmentResponseDto,
+} from './dto/enrollment-response.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
 import { SubmitRatingDto } from './dto/submit-rating.dto';
-import { ActivityService } from '../activity/activity.service';
+import { CourseReviewDto } from './dto/course-review.dto';
+import {
+  ActivityService,
+  POINTS_PER_MINUTE,
+} from '../activity/activity.service';
 import { ModulesService } from '../modules/modules.service';
+import { BadgesService } from '../badges/badges.service';
+import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
+
+// #241 — a course grade at/above this earns the "Passed" certificate
+// tier instead of the standard "Completed" one. Same 70% bar as #240's
+// frontend MODULE_PASS_THRESHOLD_PCT — duplicated rather than shared
+// across the frontend/backend boundary (there's no existing shared
+// constants module between them), but both are named/commented to make
+// that intentional parity obvious if either ever changes.
+const CERTIFICATE_PASS_THRESHOLD_PCT = 70;
 
 @Injectable()
 export class EnrollmentsService {
@@ -32,6 +49,7 @@ export class EnrollmentsService {
     private readonly coursesRepo: Repository<Course>,
     private readonly activityService: ActivityService,
     private readonly modulesService: ModulesService,
+    private readonly badgesService: BadgesService,
   ) {}
 
   async create(userId: string, dto: CreateEnrollmentDto): Promise<Enrollment> {
@@ -58,10 +76,7 @@ export class EnrollmentsService {
     try {
       return await this.enrollmentsRepo.save(enrollment);
     } catch (err) {
-      if (
-        err instanceof QueryFailedError &&
-        (err as any).code === '23505'
-      ) {
+      if (err instanceof QueryFailedError && (err as any).code === '23505') {
         throw new ConflictException('Already enrolled in this course');
       }
       throw err;
@@ -94,7 +109,9 @@ export class EnrollmentsService {
     });
 
     if (!enrollment) {
-      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+      throw new NotFoundException(
+        `Enrollment with id "${enrollmentId}" not found`,
+      );
     }
 
     // Ownership check: a user can only update their own enrollment. Never
@@ -117,15 +134,20 @@ export class EnrollmentsService {
     const oldCompletedModules =
       totalModules > 0 ? Math.round(enrollment.progress * totalModules) : 0;
 
-    // #205 — server-side mirror of LearningScreen's Mark Complete gate: a
-    // module with a quiz can't be counted as complete until that quiz has
-    // actually been submitted, so a client can't bypass the frontend gate
-    // by just calling this endpoint directly with a bumped
+    // #205/#246 — server-side mirror of LearningScreen's Mark Complete
+    // gate: a module with a quiz can't be counted as complete until that
+    // quiz has actually been submitted, so a client can't bypass the
+    // frontend gate by just calling this endpoint directly with a bumped
     // completedModules. Only checked when progress is actually advancing
     // (a same-or-lower value has nothing newly "completed" to validate).
     // getQuizResultsForCourse is the same lookup CoursesModule's
     // GET /courses/:id/quiz-results already uses, so "taken" here means
-    // exactly what the frontend's quizResultsOverview shows.
+    // exactly what the frontend's quizResultsOverview shows. Hoisted out
+    // of this block (rather than being local to it) so the points-logging
+    // block further down can reuse the exact same quiz snapshot for its
+    // grade multiplier — one query, not two, and both reads see the same
+    // moment-in-time quiz state.
+    let quizStatusByModuleId: Map<string, ModuleQuizResultDto> | null = null;
     if (completedModules > oldCompletedModules) {
       const newlyCompletedModules = enrollment.course.modules.slice(
         oldCompletedModules,
@@ -135,11 +157,9 @@ export class EnrollmentsService {
         userId,
         enrollment.course.id,
       );
-      const quizStatusByModuleId = new Map(
-        quizResults.map((r) => [r.moduleId, r]),
-      );
+      quizStatusByModuleId = new Map(quizResults.map((r) => [r.moduleId, r]));
       const blockedModule = newlyCompletedModules.find((m) => {
-        const status = quizStatusByModuleId.get(m.id);
+        const status = quizStatusByModuleId!.get(m.id);
         return status?.hasQuiz && !status.taken;
       });
       if (blockedModule) {
@@ -149,25 +169,50 @@ export class EnrollmentsService {
       }
     }
 
-    enrollment.progress = totalModules > 0 ? completedModules / totalModules : 0;
-    enrollment.status = completedModules >= totalModules && totalModules > 0
-      ? 'complete'
-      : 'in-progress';
+    // #225 — captured before the assignment below so the badge check
+    // after save() can tell "just became complete" apart from "was
+    // already complete" (e.g. a no-op re-save from a stale/duplicate
+    // client call shouldn't re-evaluate the completion badges).
+    const wasComplete = enrollment.status === 'complete';
+
+    enrollment.progress =
+      totalModules > 0 ? completedModules / totalModules : 0;
+    enrollment.status =
+      completedModules >= totalModules && totalModules > 0
+        ? 'complete'
+        : 'in-progress';
     enrollment.lastAccessed = new Date();
 
     const saved = await this.enrollmentsRepo.save(enrollment);
 
+    // #225 — course-completion badges, only on a genuine in-progress ->
+    // complete transition. completedCourseCount is this learner's total
+    // completed enrollments *including* the one just saved, since
+    // BadgesService.evaluateCourseCompletion checks against the exact
+    // count at which each badge is first earned (see that method).
+    if (!wasComplete && saved.status === 'complete') {
+      const completedCourseCount = await this.enrollmentsRepo.count({
+        where: { user: { id: userId }, status: 'complete' },
+      });
+      await this.badgesService.evaluateCourseCompletion(
+        userId,
+        completedCourseCount,
+      );
+    }
+
     const newlyCompleted = Math.max(completedModules - oldCompletedModules, 0);
     if (newlyCompleted > 0 && totalModules > 0) {
       // Estimate: this course's total hours spread evenly across its
-      // modules. Not a measured duration — see #37.
-      const minutesPerModule = Math.round(
-        (enrollment.course.hours * 60) / totalModules,
+      // modules, converted to points via the same POINTS_PER_MINUTE scale
+      // as every other flat estimate in this app. Not a measured duration
+      // — see #37.
+      const basePointsPerModule = Math.round(
+        (enrollment.course.hours * 60 * POINTS_PER_MINUTE) / totalModules,
       );
 
       // #124 — log per specific module rather than one lump sum for
       // "however many modules got completed this call", so each module's
-      // estimated minutes can be split across the distinct days *that*
+      // estimated points can be split across the distinct days *that*
       // module was actually viewed (see ActivityService.logModuleCompletion)
       // instead of all landing on whichever day this request happened to
       // fire. enrollment.course.modules is already ordered by position
@@ -178,10 +223,30 @@ export class EnrollmentsService {
         completedModules,
       );
       for (const module of newlyCompletedModules) {
+        // #246 — a module's completion points are its base estimate times
+        // its quiz grade (score/total) as a decimal, so a module actually
+        // mastered earns full credit and one scraped through on a weak
+        // score earns proportionally less. quizStatusByModuleId is the
+        // same snapshot the #205 gate check above already fetched — reused
+        // here rather than queried again. A module with no quiz, or one
+        // whose quiz hasn't been taken (shouldn't happen given the gate
+        // above, but this is what "untaken" maps to if it somehow does),
+        // gets the full 1.0 multiplier: no quiz means nothing to be
+        // graded down by. This is a one-time, moment-of-completion
+        // calculation — a later quiz retake changes future course-grade
+        // reads (#240/#241) but deliberately does not reach back and
+        // recompute points already logged here.
+        const quizStatus = quizStatusByModuleId?.get(module.id);
+        const gradeMultiplier =
+          quizStatus?.hasQuiz && quizStatus.taken && quizStatus.total > 0
+            ? (quizStatus.score ?? 0) / quizStatus.total
+            : 1;
+        const modulePoints = Math.round(basePointsPerModule * gradeMultiplier);
+
         await this.activityService.logModuleCompletion(
           userId,
           module.id,
-          minutesPerModule,
+          modulePoints,
         );
       }
     }
@@ -202,6 +267,7 @@ export class EnrollmentsService {
       createdAt: enrollment.createdAt,
       course: this.toEnrolledCourseDto(enrollment.course),
       rating: enrollment.rating,
+      reviewText: enrollment.reviewText,
     };
   }
 
@@ -222,7 +288,9 @@ export class EnrollmentsService {
     });
 
     if (!enrollment) {
-      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+      throw new NotFoundException(
+        `Enrollment with id "${enrollmentId}" not found`,
+      );
     }
 
     if (enrollment.user.id !== userId) {
@@ -230,13 +298,44 @@ export class EnrollmentsService {
     }
 
     if (enrollment.status !== 'complete') {
-      throw new BadRequestException('You can only rate a course after completing it');
+      throw new BadRequestException(
+        'You can only rate a course after completing it',
+      );
     }
 
     enrollment.rating = dto.rating;
+    // #228 — normalize "" / whitespace-only to null rather than storing it
+    // as-is, so an empty textarea submission reads the same as never
+    // having left a review (and doesn't show up as a blank entry in
+    // getReviewsForCourse below, which filters on reviewText IS NOT NULL).
+    const trimmedReview = dto.reviewText?.trim();
+    enrollment.reviewText = trimmedReview ? trimmedReview : null;
     const saved = await this.enrollmentsRepo.save(enrollment);
 
     return this.toResponseDto(saved);
+  }
+
+  // #228 — public, course-scoped reviews list for CourseDetailModal: every
+  // enrollment against this course that has actual review text, most
+  // recent first. Ordered by the enrollment's createdAt (when the learner
+  // enrolled) rather than a dedicated "rated at" timestamp, since #106
+  // never added one — an enrollment only ever has one rating/review at a
+  // time (re-rating overwrites, see submitRating above), so this is the
+  // closest existing timestamp and good enough for "most recent reviews
+  // first" without adding a new column just for ordering.
+  async getReviewsForCourse(courseId: string): Promise<CourseReviewDto[]> {
+    const enrollments = await this.enrollmentsRepo.find({
+      where: { course: { id: courseId }, reviewText: Not(IsNull()) },
+      relations: { user: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    return enrollments.map((e) => ({
+      authorName: e.user.name || 'Keystone Learner',
+      rating: e.rating as number,
+      reviewText: e.reviewText as string,
+      createdAt: e.createdAt,
+    }));
   }
 
   private toEnrolledCourseDto(course: Course): EnrolledCourseDto {
@@ -252,14 +351,19 @@ export class EnrollmentsService {
     };
   }
 
-  async generateCertificate(userId: string, enrollmentId: string): Promise<Buffer> {
+  async generateCertificate(
+    userId: string,
+    enrollmentId: string,
+  ): Promise<Buffer> {
     const enrollment = await this.enrollmentsRepo.findOne({
       where: { id: enrollmentId },
       relations: { user: true, course: true },
     });
 
     if (!enrollment) {
-      throw new NotFoundException(`Enrollment with id "${enrollmentId}" not found`);
+      throw new NotFoundException(
+        `Enrollment with id "${enrollmentId}" not found`,
+      );
     }
 
     if (enrollment.user.id !== userId) {
@@ -267,15 +371,47 @@ export class EnrollmentsService {
     }
 
     if (enrollment.status !== 'complete') {
-      throw new BadRequestException('Certificate is only available for completed courses');
+      throw new BadRequestException(
+        'Certificate is only available for completed courses',
+      );
     }
 
     const learnerName = enrollment.user.name || 'Keystone Learner';
     const courseTitle = enrollment.course.title;
-    const completionDate = (enrollment.lastAccessed ?? new Date()).toLocaleDateString(
-      'en-US',
-      { year: 'numeric', month: 'long', day: 'numeric' },
+    const completionDate = (
+      enrollment.lastAccessed ?? new Date()
+    ).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    // #241 — same pooled, question-weighted course grade as #240's
+    // frontend course grade and CourseAnalyticsService's per-learner
+    // quiz average: sum correct answers over sum question counts across
+    // every taken-and-quizzed module. Reuses
+    // ModulesService.getQuizResultsForCourse (already injected here for
+    // #205's quiz-completion check) rather than a third calculation of
+    // the same thing. null (not 0%) when this course has no
+    // taken-and-quizzed modules — including a course with no quiz
+    // content anywhere — so it can never accidentally clear the pass
+    // bar below.
+    const moduleResults = await this.modulesService.getQuizResultsForCourse(
+      userId,
+      enrollment.course.id,
     );
+    const gradedModules = moduleResults.filter((m) => m.hasQuiz && m.taken);
+    const courseGradePct =
+      gradedModules.length > 0
+        ? Math.round(
+            (gradedModules.reduce((sum, m) => sum + (m.score ?? 0), 0) /
+              gradedModules.reduce((sum, m) => sum + m.total, 0)) *
+              100,
+          )
+        : null;
+    const passed =
+      courseGradePct !== null &&
+      courseGradePct >= CERTIFICATE_PASS_THRESHOLD_PCT;
 
     const pdfDoc = await PDFDocument.create();
 
@@ -305,27 +441,52 @@ export class EnrollmentsService {
     const gold = rgb(0.78, 0.6, 0.16);
     const slate = rgb(0.4, 0.44, 0.52);
 
-    // Border
+    // #241 — Border, title, and the "has successfully completed" line are
+    // the only things that change between tiers; a "Passed" certificate
+    // is a thicker gold border and a gold (not ink) title on top of the
+    // exact same layout, rather than a second, separately-designed
+    // template — the issue calls for reusing this PDF generation, not
+    // building a parallel one. When `passed` is false this renders
+    // byte-for-byte the same certificate as before this issue.
     page.drawRectangle({
       x: 24,
       y: 24,
       width: width - 48,
       height: height - 48,
       borderColor: gold,
-      borderWidth: 2,
+      borderWidth: passed ? 4 : 2,
     });
 
-    const centerText = (text: string, y: number, font = fontRegular, size = 14, color = ink) => {
+    const centerText = (
+      text: string,
+      y: number,
+      font = fontRegular,
+      size = 14,
+      color = ink,
+    ) => {
       const textWidth = font.widthOfTextAtSize(text, size);
       page.drawText(text, { x: (width - textWidth) / 2, y, size, font, color });
     };
 
-    centerText('CERTIFICATE OF COMPLETION', height - 120, fontBold, 22, ink);
+    const title = passed
+      ? 'CERTIFICATE OF ACHIEVEMENT'
+      : 'CERTIFICATE OF COMPLETION';
+    const completedLine = passed
+      ? 'has successfully completed, with distinction,'
+      : 'has successfully completed';
+    // #241 — the grade only appears on the Passed tier; the Completed
+    // tier's bottom line is deliberately identical to before this issue,
+    // whether or not this course even has a grade to show.
+    const bottomLine = passed
+      ? `Course grade: ${courseGradePct}%  ·  Completed on ${completionDate}`
+      : `Completed on ${completionDate}`;
+
+    centerText(title, height - 120, fontBold, 22, passed ? gold : ink);
     centerText('This certifies that', height - 180, fontRegular, 14, slate);
     centerText(learnerName, height - 220, fontBold, 30, ink);
-    centerText('has successfully completed', height - 265, fontRegular, 14, slate);
+    centerText(completedLine, height - 265, fontRegular, 14, slate);
     centerText(courseTitle, height - 300, fontBold, 20, gold);
-    centerText(`Completed on ${completionDate}`, height - 350, fontRegular, 12, slate);
+    centerText(bottomLine, height - 350, fontRegular, 12, slate);
     centerText('Keystone Learning', height - 80, fontBold, 14, ink);
 
     const pdfBytes = await pdfDoc.save();

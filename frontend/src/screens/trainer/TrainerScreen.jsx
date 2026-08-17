@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, X, BarChart3 } from "lucide-react";
 
 import { CategoryDot } from "../../components/common/Primitives";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
 import { TeamTab } from "./TeamTab";
+import { LearningPathEditor } from "./LearningPathEditor";
+import { CourseAnalyticsView } from "./CourseAnalyticsView";
 
 export function TrainerScreen({
   courses,
@@ -18,15 +20,33 @@ export function TrainerScreen({
   onRegenerateInviteCode,
   onLeaveProvider,
   currentUserId,
+  paths = [],
+  onSavePath,
+  onDeletePath,
+  onFetchCourseAnalytics,
 }) {
   const [editingId, setEditingId] = useState(null); // null = list view, "__new" = creating, else course id
   const [deletingCourse, setDeletingCourse] = useState(null); // course pending delete confirmation, or null
   const [deleteError, setDeleteError] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  // #227 — same whole-screen-swap convention as editingId/editingPathId
+  // above, but view-only (no onSave/onCancel-into-list-refresh dance
+  // needed) — just which course's analytics is currently open, or null.
+  const [viewingAnalyticsId, setViewingAnalyticsId] = useState(null);
+  // #224 — path editor mirrors the course editor's editingId state machine
+  // exactly: null = list view, "__new" = creating, else the path id being
+  // edited. Kept as its own state (not reused editingId) since a path and
+  // a course are different resources that can never both be "being
+  // edited" at once, but each needs its own independent list-view default.
+  const [editingPathId, setEditingPathId] = useState(null);
+  const [deletingPath, setDeletingPath] = useState(null);
+  const [deletePathError, setDeletePathError] = useState(null);
+  const [deletingPathBusy, setDeletingPathBusy] = useState(false);
   // #139 — "Courses" (existing list/editor flow, untouched) vs "Team"
   // (provider create/join/manage). Deliberately a separate tab rather than
   // anything on the course form itself — provider scoping stays an opt-in
   // upgrade managed from here, never a gate on creating a course.
+  // #224 adds a third "Paths" tab following the same convention.
   const [tab, setTab] = useState("courses");
 
   // #185 — search-by-title + ownership filter for the course list,
@@ -96,6 +116,22 @@ export function TrainerScreen({
     editingId === "__new" ? null :
     editingId ? courses.find((c) => c.id === editingId) : null;
 
+  // #224 — mirrors canEditCourse exactly, against a LearningPath instead of
+  // a Course (same ownerId/providerId shape server-side, via
+  // RequireLearningPathOwnerGuard).
+  function canEditPath(path) {
+    if (path.ownerId == null) return true;
+    if (path.ownerId === currentUserId) return true;
+    if (path.providerId && myProfile?.providerId === path.providerId) {
+      return true;
+    }
+    return false;
+  }
+
+  const editingPath =
+    editingPathId === "__new" ? null :
+    editingPathId ? paths.find((p) => p.id === editingPathId) : null;
+
   async function handleSave(draft) {
     await onSaveCourse(draft); // throws on failure — editor catches and shows the error
     setEditingId(null);
@@ -114,6 +150,24 @@ export function TrainerScreen({
     }
   }
 
+  async function handleSavePath(draft) {
+    await onSavePath(draft); // throws on failure — editor catches and shows the error
+    setEditingPathId(null);
+  }
+
+  async function handleConfirmDeletePath() {
+    setDeletingPathBusy(true);
+    setDeletePathError(null);
+    try {
+      await onDeletePath(deletingPath.id);
+      setDeletingPath(null);
+    } catch (err) {
+      setDeletePathError(err.message || "Failed to delete learning path.");
+    } finally {
+      setDeletingPathBusy(false);
+    }
+  }
+
   if (editingId) {
     return (
       <TrainerCourseEditor
@@ -128,6 +182,35 @@ export function TrainerScreen({
     );
   }
 
+  if (editingPathId) {
+    return (
+      <LearningPathEditor
+        path={editingPath}
+        courses={courses}
+        onCancel={() => setEditingPathId(null)}
+        onSave={handleSavePath}
+      />
+    );
+  }
+
+  // Course no longer exists (e.g. deleted from another tab/session) — falls
+  // through to the normal list view below rather than rendering a view for
+  // nothing; no render-time state mutation needed since viewingAnalyticsId
+  // just naturally resets the next time the trainer opens/closes this view.
+  const viewingAnalyticsCourse = viewingAnalyticsId
+    ? courses.find((c) => c.id === viewingAnalyticsId)
+    : null;
+
+  if (viewingAnalyticsCourse) {
+    return (
+      <CourseAnalyticsView
+        course={viewingAnalyticsCourse}
+        onBack={() => setViewingAnalyticsId(null)}
+        onFetchAnalytics={onFetchCourseAnalytics}
+      />
+    );
+  }
+
   return (
     <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080 }}>
       <div style={{ marginBottom: 20 }}>
@@ -135,12 +218,15 @@ export function TrainerScreen({
         <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>
           {tab === "courses"
             ? "Add courses, edit catalogue details, and manage module videos."
-            : "Create or join a provider to share course edit access with your team."}
+            : tab === "paths"
+              ? "Bundle existing courses into an ordered, guided sequence."
+              : "Create or join a provider to share course edit access with your team."}
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 20 }}>
         <div className={`ks-tab ${tab === "courses" ? "active" : ""}`} onClick={() => setTab("courses")}>Courses</div>
+        <div className={`ks-tab ${tab === "paths" ? "active" : ""}`} onClick={() => setTab("paths")}>Paths</div>
         <div className={`ks-tab ${tab === "team" ? "active" : ""}`} onClick={() => setTab("team")}>Team</div>
       </div>
 
@@ -190,6 +276,7 @@ export function TrainerScreen({
                 </div>
                 {canEditCourse(c) ? (
                   <>
+                    <button className="ks-btn ks-btn-ghost" onClick={() => setViewingAnalyticsId(c.id)}><BarChart3 size={14} /> Analytics</button>
                     <button className="ks-btn ks-btn-ghost" onClick={() => setEditingId(c.id)}><Pencil size={14} /> Edit</button>
                     <button
                       className="ks-btn ks-btn-ghost"
@@ -215,6 +302,44 @@ export function TrainerScreen({
                   : query
                     ? `No courses match "${courseSearch.trim()}".`
                     : "No courses match this filter."}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {tab === "paths" && (
+        <>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+            <button className="ks-btn ks-btn-gold" onClick={() => setEditingPathId("__new")}><Plus size={15} /> New path</button>
+          </div>
+
+          <div className="ks-card" style={{ padding: 0, overflow: "hidden" }}>
+            {paths.map((p, i) => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderBottom: i < paths.length - 1 ? "1px solid var(--line)" : "none" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{p.title || "(untitled path)"}</div>
+                  <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>{p.courses.length} courses</div>
+                </div>
+                {canEditPath(p) ? (
+                  <>
+                    <button className="ks-btn ks-btn-ghost" onClick={() => setEditingPathId(p.id)}><Pencil size={14} /> Edit</button>
+                    <button
+                      className="ks-btn ks-btn-ghost"
+                      style={{ color: "var(--coral)" }}
+                      onClick={() => { setDeletingPath(p); setDeletePathError(null); }}
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  </>
+                ) : (
+                  <span style={{ fontSize: 12, color: "var(--slate-light)" }}>View only</span>
+                )}
+              </div>
+            ))}
+            {paths.length === 0 && (
+              <div style={{ padding: 24, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
+                No learning paths yet — bundle 2 or more of your courses into one.
               </div>
             )}
           </div>
@@ -259,6 +384,38 @@ export function TrainerScreen({
                 onClick={handleConfirmDelete}
               >
                 {deleting ? "Deleting…" : "Delete course"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingPath && (
+        <div
+          onClick={() => !deletingPathBusy && setDeletingPath(null)}
+          className="ks-modal-backdrop"
+          style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete learning path?</div>
+              <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !deletingPathBusy && setDeletingPath(null)} />
+            </div>
+            <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
+              This removes <strong>{deletingPath.title || "(untitled path)"}</strong> from the catalogue. Learners already enrolled keep their course progress and access — this can't be undone from the catalogue side, so double-check before continuing.
+            </div>
+            {deletePathError && (
+              <div style={{ fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>{deletePathError}</div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button className="ks-btn ks-btn-ghost" disabled={deletingPathBusy} onClick={() => setDeletingPath(null)}>Cancel</button>
+              <button
+                className="ks-btn"
+                style={{ background: "var(--coral)", color: "#fff", opacity: deletingPathBusy ? 0.7 : 1 }}
+                disabled={deletingPathBusy}
+                onClick={handleConfirmDeletePath}
+              >
+                {deletingPathBusy ? "Deleting…" : "Delete path"}
               </button>
             </div>
           </div>

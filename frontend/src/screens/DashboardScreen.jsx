@@ -1,19 +1,20 @@
 import { useState } from "react";
-import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil } from "lucide-react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil, Medal, Bookmark, Trophy } from "lucide-react";
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
 /* ---------- Screen: Dashboard ---------- */
 
-const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, minutesThisWeek: 0, dailyGoalMin: 30, goalHitDays: 0, week: [] };
+const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, pointsThisWeek: 0, dailyGoalPoints: 300, goalHitDays: 0, week: [] };
 
-// #188 — presets rather than a free-text/number input: the dashboard card
-// is a tight space, and a handful of realistic options (matching
-// UpdateDailyGoalDto's 5–240 min bounds on the backend) covers the
+// #188/#246 — presets rather than a free-text/number input: the dashboard
+// card is a tight space, and a handful of realistic options (matching
+// UpdateDailyGoalDto's 50–2400 pt bounds on the backend, the same 15/30/
+// 45/60/90-minute presets scaled through POINTS_PER_MINUTE) covers the
 // realistic range without needing input validation UI here too.
-const DAILY_GOAL_PRESETS = [15, 30, 45, 60, 90];
+const DAILY_GOAL_PRESETS = [150, 300, 450, 600, 900];
 
-export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal }) {
+export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal, leaderboardOptIn = false, onUpdateLeaderboardOptIn, onOpenLeaderboard }) {
   const firstName = getFirstName(getDisplayName(user));
   // #188 — the DB column already existed; this is the first real UI for
   // it. Inline on the dashboard card rather than a separate settings
@@ -23,15 +24,19 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
   // deliberately kept to a single click today).
   const [editingGoal, setEditingGoal] = useState(false);
   const [savingGoal, setSavingGoal] = useState(false);
+  // #231 — leaderboard opt-in toggle, own saving flag so a slow request
+  // can't be double-fired by a second click, same guard shape as
+  // savingGoal above.
+  const [savingLeaderboardOptIn, setSavingLeaderboardOptIn] = useState(false);
 
-  async function handlePickDailyGoal(minutes) {
-    if (savingGoal || minutes === activitySummary.dailyGoalMin) {
+  async function handlePickDailyGoal(points) {
+    if (savingGoal || points === activitySummary.dailyGoalPoints) {
       setEditingGoal(false);
       return;
     }
     setSavingGoal(true);
     try {
-      await onUpdateDailyGoal(minutes);
+      await onUpdateDailyGoal(points);
       setEditingGoal(false);
     } catch (err) {
       console.error("Failed to update daily goal:", err.message);
@@ -39,6 +44,18 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
       setSavingGoal(false);
     }
   }
+  async function handleToggleLeaderboardOptIn() {
+    if (savingLeaderboardOptIn) return;
+    setSavingLeaderboardOptIn(true);
+    try {
+      await onUpdateLeaderboardOptIn(!leaderboardOptIn);
+    } catch (err) {
+      console.error("Failed to update leaderboard opt-in:", err.message);
+    } finally {
+      setSavingLeaderboardOptIn(false);
+    }
+  }
+
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
   // #86 — "in-progress" (not yet complete) splits into two display groups:
@@ -51,6 +68,29 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
   const enrolledCourseCount = inProgress.length + complete.length;
   const notStarted = inProgress.filter((e) => e.progress === 0);
   const continuing = inProgress.filter((e) => e.progress > 0);
+
+  // #226 — learner skills profile: unique skill tags aggregated from every
+  // completed course. Same courses.find(...) lookup already used for the
+  // "Completed" list above, so this naturally inherits its behavior for a
+  // completed enrollment whose course was later deleted from the
+  // catalogue (c is undefined, filtered out — see EnrolledCourseDto's
+  // deliberately minimal shape, which carries no skills field).
+  const skillsLearned = Array.from(
+    new Set(
+      complete.flatMap((e) => courses.find((x) => x.id === e.courseId)?.skills ?? []),
+    ),
+  );
+
+  // #230 — bookmarked-but-not-enrolled courses (or bookmarked while also
+  // enrolled — bookmarking has no effect on enrollment state either way,
+  // per the issue's acceptance criteria, so no filtering against
+  // `enrolled` here). Same courses.find(...) + drop-if-missing pattern as
+  // every other section on this screen (a bookmark whose course has since
+  // been soft-deleted from the catalogue just silently disappears here,
+  // same as a completed enrollment would for skillsLearned above).
+  const savedCourses = bookmarks
+    .map((b) => courses.find((x) => x.id === b.courseId))
+    .filter(Boolean);
 
   const days = ["M", "T", "W", "T", "F", "S", "S"];
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -239,8 +279,8 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
                     style={{
                       fontSize: 12, fontWeight: 600, padding: "5px 10px", borderRadius: 100,
                       cursor: savingGoal ? "default" : "pointer", opacity: savingGoal ? 0.6 : 1,
-                      background: m === activitySummary.dailyGoalMin ? "var(--ink)" : "var(--paper-2)",
-                      color: m === activitySummary.dailyGoalMin ? "var(--paper)" : "var(--slate)",
+                      background: m === activitySummary.dailyGoalPoints ? "var(--ink)" : "var(--paper-2)",
+                      color: m === activitySummary.dailyGoalPoints ? "var(--paper)" : "var(--slate)",
                       border: "1px solid var(--line)",
                     }}
                   >
@@ -253,7 +293,7 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
                 onClick={() => setEditingGoal(true)}
                 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--slate)", cursor: "pointer" }}
               >
-                Daily goal · {activitySummary.dailyGoalMin} min
+                Daily goal · {activitySummary.dailyGoalPoints} pts
                 <Pencil size={11} color="var(--slate-light)" />
               </div>
             )}
@@ -262,11 +302,155 @@ export function DashboardScreen({ enrolled, onOpenCourse, onStartLearning, cours
 
           <div className="ks-card" style={{ padding: 18 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>This week</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 26, fontWeight: 500 }}>{activitySummary.minutesThisWeek}<span style={{ fontSize: 13, color: "var(--slate-light)" }}> min</span></div>
-            <div style={{ fontSize: 12, color: "var(--slate-light)" }}>learning time logged</div>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: 26, fontWeight: 500 }}>{activitySummary.pointsThisWeek}<span style={{ fontSize: 13, color: "var(--slate-light)" }}> pts</span></div>
+            <div style={{ fontSize: 12, color: "var(--slate-light)" }}>learning points logged</div>
             <hr className="ks-hairline" style={{ margin: "16px 0" }} />
             <div style={{ fontSize: 12.5, color: "var(--slate)" }}>Enrolled in {enrolledCourseCount} course{enrolledCourseCount === 1 ? "" : "s"}</div>
+
+            {/* #231 — opt-in toggle for the global leaderboard, default off
+                (see the profiles.leaderboard_opt_in column comment). Only
+                rendered when the caller wired it up (onUpdateLeaderboardOptIn
+                passed in), same "optional prop gates the UI" convention as
+                the bookmark toggle. "View leaderboard" only shown once
+                opted in — opting out is what makes a learner disappear from
+                it, so there's nothing useful to view before that. */}
+            {onUpdateLeaderboardOptIn && (
+              <>
+                <hr className="ks-hairline" style={{ margin: "16px 0" }} />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div
+                    onClick={handleToggleLeaderboardOptIn}
+                    style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--slate)", cursor: savingLeaderboardOptIn ? "default" : "pointer", opacity: savingLeaderboardOptIn ? 0.6 : 1 }}
+                  >
+                    <Trophy size={13} color="var(--gold-dark)" />
+                    Show me on the leaderboard
+                  </div>
+                  <div
+                    onClick={handleToggleLeaderboardOptIn}
+                    style={{
+                      width: 32, height: 18, borderRadius: 100, padding: 2, cursor: savingLeaderboardOptIn ? "default" : "pointer",
+                      background: leaderboardOptIn ? "var(--gold)" : "var(--line)", opacity: savingLeaderboardOptIn ? 0.6 : 1,
+                      display: "flex", justifyContent: leaderboardOptIn ? "flex-end" : "flex-start",
+                    }}
+                  >
+                    <div style={{ width: 14, height: 14, borderRadius: 99, background: "#fff" }} />
+                  </div>
+                </div>
+                {leaderboardOptIn && onOpenLeaderboard && (
+                  <div onClick={onOpenLeaderboard} style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, marginTop: 10, cursor: "pointer" }}>
+                    View leaderboard →
+                  </div>
+                )}
+              </>
+            )}
           </div>
+
+          {/* #225 — small badges row/section, only shown once there's at
+              least one to show (no "no badges yet" placeholder — a
+              learner with none looks exactly like before this feature). */}
+          {badges.length > 0 && (
+            <div className="ks-card" style={{ padding: 18, marginTop: 16 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Badges</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {badges.map((b) => (
+                  <div key={b.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 8, background: "var(--gold-tint)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Medal size={15} color="var(--gold-dark)" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{b.label}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--slate-light)" }}>
+                        {b.description} · Earned {new Date(b.earnedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* #226 — same "hidden until non-empty" convention as the badges
+              card above it. */}
+          {skillsLearned.length > 0 && (
+            <div className="ks-card" style={{ padding: 18, marginTop: 16 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Skills</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {skillsLearned.map((s) => (
+                  <span
+                    key={s}
+                    style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper-2)", border: "1px solid var(--line)", borderRadius: 999, padding: "4px 10px" }}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* #224 — same "hidden until non-empty" convention as badges/
+              skills above: completedCount/totalCount/status arrive
+              precomputed from the backend (see
+              LearningPathEnrollmentsService), so this is pure display,
+              same as how the course progress bars in the left column
+              never compute anything themselves either. */}
+          {pathEnrollments.length > 0 && (
+            <div className="ks-card" style={{ padding: 18, marginTop: 16 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Learning paths</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {pathEnrollments.map((pe) => (
+                  <div key={pe.id}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{pe.title}</span>
+                      {pe.status === "complete" && <CheckCircle2 size={14} color="var(--success)" />}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginBottom: 6 }}>
+                      {pe.completedCount} of {pe.totalCount} course{pe.totalCount === 1 ? "" : "s"} complete
+                    </div>
+                    <div style={{ height: 5, background: "var(--line)", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%",
+                        width: `${pe.totalCount > 0 ? (pe.completedCount / pe.totalCount) * 100 : 0}%`,
+                        background: pe.status === "complete" ? "var(--success)" : "var(--gold)",
+                      }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* #230 — same "hidden until non-empty" convention as badges/
+              skills/paths above. Unbookmarking from here reuses the exact
+              same onToggleBookmark the Catalogue card's icon calls — this
+              card is just another place that toggle is exposed, not a
+              separate code path. */}
+          {savedCourses.length > 0 && (
+            <div className="ks-card" style={{ padding: 18, marginTop: 16 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Saved</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {savedCourses.map((c) => (
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{ flex: 1, cursor: "pointer" }}
+                      onClick={() => onOpenCourse(c)}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{c.title}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--slate-light)" }}>{c.provider}</div>
+                    </div>
+                    {onToggleBookmark && (
+                      <Bookmark
+                        size={15}
+                        color="var(--gold-dark)"
+                        fill="var(--gold-dark)"
+                        style={{ cursor: "pointer", flexShrink: 0 }}
+                        onClick={() => onToggleBookmark(c, true)}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

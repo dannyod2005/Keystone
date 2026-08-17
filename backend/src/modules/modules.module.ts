@@ -11,6 +11,8 @@ import { ModuleNote } from '../notes/entities/module-note.entity';
 import { ForumPost } from '../forum/entities/forum-post.entity';
 import { RequireTrainerGuard } from '../auth/require-trainer.guard';
 import { ActivityModule } from '../activity/activity.module';
+import { BadgesModule } from '../badges/badges.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -24,6 +26,12 @@ import { ActivityModule } from '../activity/activity.module';
       ForumPost,
     ]),
     ActivityModule,
+    // #225 — reuses BadgesService.evaluateQuizSubmission/evaluateForumPost
+    // from submitQuiz/createPost below.
+    BadgesModule,
+    // #229 — reuses NotificationsService.createForReply from createPost
+    // below, same cross-module pattern as BadgesModule above.
+    NotificationsModule,
   ],
   controllers: [ModulesController],
   providers: [ModulesService, RequireTrainerGuard],

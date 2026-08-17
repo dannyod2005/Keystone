@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation
+  BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation, useSearchParams
 } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
@@ -10,6 +10,7 @@ import { AppSidebar } from "./components/layout/AppSidebar";
 import { AppTopbar } from "./components/layout/AppTopbar";
 
 import { CourseDetailModal } from "./components/modals/CourseDetailModal";
+import { LearningPathDetailModal } from "./components/modals/LearningPathDetailModal";
 import { AuthModal } from "./components/modals/AuthModal";
 import { GoalOnboardingModal } from "./components/modals/GoalOnboardingModal";
 import { RoleOnboardingModal } from "./components/modals/RoleOnboardingModal";
@@ -18,6 +19,7 @@ import { ResetPasswordModal } from "./components/modals/ResetPasswordModal";
 import { HomeScreen } from "./screens/HomeScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
+import { LeaderboardScreen } from "./screens/LeaderboardScreen";
 import { LearningScreen } from "./screens/LearningScreen";
 import { TrainerScreen } from "./screens/trainer/TrainerScreen";
 
@@ -29,6 +31,7 @@ function screenKeyFromPath(pathname) {
   if (pathname.startsWith("/catalogue")) return "catalogue";
   if (pathname.startsWith("/dashboard")) return "dashboard";
   if (pathname.startsWith("/learning")) return "learning";
+  if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/trainer")) return "trainer";
   return "home";
 }
@@ -63,7 +66,7 @@ function normalizeCourse(c) {
 }
 
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
-function AppShell({ loggedIn, role, onLogout, title, children, user, goal }) {
+function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notifications, unreadCount, onOpenNotification }) {
   const location = useLocation();
   const screen = screenKeyFromPath(location.pathname);
   const navigate = useNavigate();
@@ -96,7 +99,15 @@ function AppShell({ loggedIn, role, onLogout, title, children, user, goal }) {
         />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {showSidebar && <AppTopbar title={title} onMenuClick={() => setMobileNavOpen(true)} />}
+        {showSidebar && (
+          <AppTopbar
+            title={title}
+            onMenuClick={() => setMobileNavOpen(true)}
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onOpenNotification={onOpenNotification}
+          />
+        )}
         {children}
       </div>
     </div>
@@ -123,6 +134,12 @@ function RequireTrainer({ role, children }) {
 function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
+  // #229 — a notification click-through lands here as
+  // /learning/:courseId?module=<id>&tab=forum; both are optional and
+  // LearningScreen falls back to its normal defaults when absent, so
+  // every other caller of this route (Dashboard's "Resume"/"Start", etc.)
+  // is completely unaffected.
+  const [searchParams] = useSearchParams();
   const course = courses.find((c) => String(c.id) === courseId);
   const enrollment = enrolled.find((e) => e.courseId === courseId);
 
@@ -163,6 +180,8 @@ function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onS
       onEditPost={onEditPost}
       currentUserId={currentUserId}
       onBack={() => navigate("/dashboard")}
+      initialModuleId={searchParams.get("module")}
+      initialTab={searchParams.get("tab")}
     />
   );
 }
@@ -178,6 +197,9 @@ function KeystonePrototype() {
 
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [enrolled, setEnrolled] = useState([]);
+  const [badges, setBadges] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [bookmarks, setBookmarks] = useState([]);
   const [enrolling, setEnrolling] = useState(false); // #154 — the in-flight POST /enrollments request, so CourseDetailModal's Enrol button can disable/show pending state instead of allowing a double-click.
   const [toast, setToast] = useState(null);
   const [authMode, setAuthMode] = useState(null); // null | "login" | "signup"
@@ -185,6 +207,16 @@ function KeystonePrototype() {
   const [courses, setCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [enrolledLoading, setEnrolledLoading] = useState(true);
+  // #224 — learning paths follow the exact same public-list/private-
+  // enrollment split as courses/enrolled above: `learningPaths` is the
+  // public GET /learning-paths list (no auth), `pathEnrollments` is this
+  // learner's own GET /learning-path-enrollments (auth, reset on logout).
+  const [selectedPath, setSelectedPath] = useState(null);
+  const [learningPaths, setLearningPaths] = useState([]);
+  const [learningPathsLoading, setLearningPathsLoading] = useState(true);
+  const [pathEnrollments, setPathEnrollments] = useState([]);
+  const [enrollingPath, setEnrollingPath] = useState(false);
+  const [pendingPath, setPendingPath] = useState(null);
   // #183 — which 7-day week the Dashboard's mini-calendar is showing,
   // in weeks relative to the current one (0 = this week, -1 = last
   // week, ...). Lives here rather than in DashboardScreen so it resets
@@ -192,8 +224,8 @@ function KeystonePrototype() {
   const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
   const [activitySummary, setActivitySummary] = useState({
     streak: 0,
-    minutesThisWeek: 0,
-    dailyGoalMin: 30,
+    pointsThisWeek: 0,
+    dailyGoalPoints: 300,
     goalHitDays: 0,
     week: [],
   });
@@ -213,6 +245,10 @@ function KeystonePrototype() {
   // now," which is what the trigger effect below needs to know.
   const [profileRole, setProfileRole] = useState(null);
   const [showRoleOnboarding, setShowRoleOnboarding] = useState(false);
+  // #231 — profiles.leaderboardOptIn, fetched alongside goal/role below
+  // (same /profiles/me call). Defaults false so a not-yet-fetched or
+  // logged-out state never optimistically reads as "opted in".
+  const [leaderboardOptIn, setLeaderboardOptIn] = useState(false);
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_URL}/courses`)
@@ -263,15 +299,197 @@ function KeystonePrototype() {
       .finally(() => setEnrolledLoading(false));
   }, [loggedIn, session]);
 
-  // Real streak / minutes-this-week / daily-goal data (#37), replacing the
-  // old LEARNER mock. Re-runs on login state change like enrollments above;
-  // resets to a neutral empty shape on logout.
+  // #224 — public list of learning paths, same fetch-on-mount shape as
+  // courses above.
+  useEffect(() => {
+    fetch(`${process.env.REACT_APP_API_URL}/learning-paths`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setLearningPaths)
+      .catch((err) => console.error("Failed to load learning paths:", err.message))
+      .finally(() => setLearningPathsLoading(false));
+  }, []);
+
+  // #224 — this learner's path enrollments (with live completedCount/
+  // totalCount/status from the backend). Same re-run-on-login-change/
+  // reset-on-logout pattern as enrolled above.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setPathEnrollments([]);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/learning-path-enrollments`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setPathEnrollments)
+      .catch((err) => {
+        console.error("Failed to load learning path enrollments:", err.message);
+        setPathEnrollments([]);
+      });
+  }, [loggedIn, session]);
+
+  // #225 — this learner's earned badges, for the Dashboard's badges card.
+  // Same re-run-on-login-change/reset-on-logout pattern as enrollments
+  // above. No dedicated loading flag: the card only renders once there's
+  // at least one badge (see DashboardScreen), so briefly showing nothing
+  // while this resolves reads the same as "no badges yet" rather than
+  // needing its own loading state.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setBadges([]);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/badges/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setBadges)
+      .catch((err) => {
+        console.error("Failed to load badges:", err.message);
+        setBadges([]);
+      });
+  }, [loggedIn, session]);
+
+  // #229 — forum-reply notifications, for the topbar bell. Same
+  // on-login-change fetch shape as badges above. This app has no polling
+  // precedent anywhere (every fetch here is on-mount/on-navigation or
+  // fired directly by a user action) — a new notification becomes visible
+  // the next time this effect re-runs (login, reload, or a route change
+  // that remounts the relevant screen), not the instant it's created on
+  // the server. A deliberate v1 scope boundary, not an oversight.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setNotifications([]);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/notifications`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setNotifications)
+      .catch((err) => {
+        console.error("Failed to load notifications:", err.message);
+        setNotifications([]);
+      });
+  }, [loggedIn, session]);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // #230 — this learner's saved-without-enrolling courses, for the
+  // Catalogue card toggle and the Dashboard's Saved section. Same
+  // on-login-change fetch/reset shape as badges/notifications above.
+  useEffect(() => {
+    if (!loggedIn || !session) {
+      setBookmarks([]);
+      return;
+    }
+
+    fetch(`${process.env.REACT_APP_API_URL}/bookmarks`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setBookmarks)
+      .catch((err) => {
+        console.error("Failed to load bookmarks:", err.message);
+        setBookmarks([]);
+      });
+  }, [loggedIn, session]);
+
+  const bookmarkedIds = bookmarks.map((b) => b.courseId);
+
+  // #230 — single toggle for both the Catalogue card's icon and the
+  // Dashboard Saved section's icon: `isBookmarked` tells it which
+  // direction to go, optimistically updated in local state first so the
+  // icon flips immediately rather than waiting on the round trip (a
+  // failed request just re-fetches to correct it, same "don't block the
+  // UI on a best-effort follow-up" reasoning as markNotificationRead).
+  async function toggleBookmark(course, isBookmarked) {
+    if (!session) return;
+    try {
+      if (isBookmarked) {
+        setBookmarks((prev) => prev.filter((b) => b.courseId !== course.id));
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/bookmarks/${course.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      } else {
+        setBookmarks((prev) => [...prev, { id: `pending-${course.id}`, courseId: course.id, createdAt: new Date().toISOString() }]);
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/bookmarks`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ courseId: course.id }),
+        });
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        const saved = await res.json();
+        setBookmarks((prev) => prev.map((b) => (b.courseId === course.id ? saved : b)));
+      }
+    } catch (err) {
+      console.error("Failed to toggle bookmark:", err.message);
+      // Re-sync from the server rather than guessing what the optimistic
+      // update above should roll back to.
+      fetch(`${process.env.REACT_APP_API_URL}/bookmarks`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+        .then((res) => (res.ok ? res.json() : []))
+        .then(setBookmarks)
+        .catch(() => {});
+    }
+  }
+
+  // #229 — best-effort: if the PATCH fails, the notification just stays
+  // marked unread locally rather than blocking navigation on it — the
+  // learner still gets taken to the right forum post either way, which is
+  // the part that actually matters.
+  async function markNotificationRead(notificationId) {
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/notifications/${notificationId}/read`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      const updated = await res.json();
+      setNotifications((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+    } catch (err) {
+      console.error("Failed to mark notification read:", err.message);
+    }
+  }
+
+  function handleOpenNotification(notification) {
+    if (!notification.read) markNotificationRead(notification.id);
+    navigate(`/learning/${notification.courseId}?module=${notification.moduleId}&tab=forum`);
+  }
+
+  // Real streak / points-this-week / daily-goal data (#37, #246), replacing
+  // the old LEARNER mock. Re-runs on login state change like enrollments
+  // above; resets to a neutral empty shape on logout.
   useEffect(() => {
     if (!loggedIn || !session) {
       setActivitySummary({
         streak: 0,
-        minutesThisWeek: 0,
-        dailyGoalMin: 30,
+        pointsThisWeek: 0,
+        dailyGoalPoints: 300,
         goalHitDays: 0,
         week: [],
       });
@@ -280,7 +498,7 @@ function KeystonePrototype() {
     }
 
     // #183 — weekOffset pages the calendar's day grid only; the backend
-    // keeps streak/minutesThisWeek/goalHitDays pinned to the real
+    // keeps streak/pointsThisWeek/goalHitDays pinned to the real
     // current week regardless, so those don't flicker as the calendar is
     // browsed.
     fetch(`${process.env.REACT_APP_API_URL}/activity/summary?weekOffset=${calendarWeekOffset}`, {
@@ -308,6 +526,7 @@ function KeystonePrototype() {
       setLearnerGoal(null);
       setGoalLoaded(false);
       setProfileRole(null);
+      setLeaderboardOptIn(false);
       return;
     }
 
@@ -318,6 +537,7 @@ function KeystonePrototype() {
       .then((profile) => {
         setLearnerGoal(profile?.goal ?? null);
         setProfileRole(profile?.role ?? null);
+        setLeaderboardOptIn(profile?.leaderboardOptIn ?? false);
         setGoalLoaded(true);
       })
       .catch((err) => console.error("Failed to load profile:", err.message));
@@ -385,21 +605,22 @@ function KeystonePrototype() {
     }
   }
 
-  // #188 — DashboardScreen's inline editor calls this. Refetches the whole
-  // summary afterward rather than patching activitySummary.dailyGoalMin in
-  // place: goalHit per day (and therefore goalHitDays) is computed
-  // server-side against dailyGoalMin, so a new goal value changes more
-  // than just the number shown — refetching is what keeps the calendar's
-  // highlighted days and "N of 7 days hit" in sync with it, same as any
-  // other action that calls refetchActivitySummary above.
-  async function updateDailyGoal(dailyGoalMin) {
+  // #188/#246 — DashboardScreen's inline editor calls this. Refetches the
+  // whole summary afterward rather than patching
+  // activitySummary.dailyGoalPoints in place: goalHit per day (and
+  // therefore goalHitDays) is computed server-side against
+  // dailyGoalPoints, so a new goal value changes more than just the
+  // number shown — refetching is what keeps the calendar's highlighted
+  // days and "N of 7 days hit" in sync with it, same as any other action
+  // that calls refetchActivitySummary above.
+  async function updateDailyGoal(dailyGoalPoints) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me/daily-goal`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ dailyGoalMin }),
+      body: JSON.stringify({ dailyGoalPoints }),
     });
 
     if (!res.ok) {
@@ -408,6 +629,43 @@ function KeystonePrototype() {
     }
 
     await refetchActivitySummary();
+  }
+
+  // #231 — Dashboard settings toggle calls this. Unlike updateDailyGoal,
+  // nothing else on this screen derives from leaderboardOptIn, so there's
+  // no equivalent "refetch a whole summary" step needed — just reflect
+  // the new value locally once the write succeeds.
+  async function updateLeaderboardOptIn(optIn) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/profiles/me/leaderboard-opt-in`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ optIn }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    setLeaderboardOptIn(optIn);
+  }
+
+  // #231 — the Leaderboard screen's own fetch-on-mount, same
+  // on-demand-per-screen shape as fetchCourseAnalytics: nothing else in
+  // the app needs this data, so it isn't fetched globally on login like
+  // badges/notifications/bookmarks are.
+  async function fetchLeaderboard() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/leaderboard`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+    return res.json();
   }
 
   const screen = screenKeyFromPath(location.pathname);
@@ -498,6 +756,64 @@ function KeystonePrototype() {
     setTimeout(() => setToast(null), 2600);
   }
 
+  // #224 — same POST-if-new/PUT-if-existing + upsert-by-id shape as
+  // saveCourse above. No normalizeCourse-style pass needed: the learning
+  // path response DTO carries no decimal columns of its own (the nested
+  // `courses` array is already normalized Course data from the same
+  // /courses response shape, but re-fetching GET /learning-paths on the
+  // next load is what keeps that in sync — this optimistic upsert is only
+  // ever as fresh as what the create/update response itself returned).
+  async function savePath(draft) {
+    const isNew = !draft.id;
+    const url = isNew
+      ? `${process.env.REACT_APP_API_URL}/learning-paths`
+      : `${process.env.REACT_APP_API_URL}/learning-paths/${draft.id}`;
+
+    const res = await fetch(url, {
+      method: isNew ? "POST" : "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(draft.payload),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const message = Array.isArray(body?.message)
+        ? body.message.join(", ")
+        : body?.message || `Request failed: ${res.status}`;
+      throw new Error(message);
+    }
+
+    const saved = await res.json();
+
+    setLearningPaths((prev) => {
+      const exists = prev.some((p) => p.id === saved.id);
+      return exists ? prev.map((p) => (p.id === saved.id ? saved : p)) : [...prev, saved];
+    });
+    setToast(`Saved "${saved.title}"`);
+    setTimeout(() => setToast(null), 2600);
+    return saved;
+  }
+
+  // Soft delete, same shape as deleteCourse above.
+  async function deletePath(pathId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/learning-paths/${pathId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    setLearningPaths((prev) => prev.filter((p) => p.id !== pathId));
+    setToast("Learning path deleted");
+    setTimeout(() => setToast(null), 2600);
+  }
+
   async function saveProgress(enrollmentId, completedModules) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}`, {
       method: "PATCH",
@@ -527,14 +843,18 @@ function KeystonePrototype() {
   // #106 — same pattern as saveProgress: PATCH the enrollment, merge the
   // returned row into `enrolled` by id so LearningScreen's `enrollment`
   // prop picks up the new rating on its next render without a refetch.
-  async function submitRating(enrollmentId, rating) {
+  // #228 — reviewText is optional (defaults to "" from LearningScreen's
+  // reviewDraft state); the backend normalizes an empty string to null,
+  // so this stays a no-op body-wise for the pure-star-rating case that
+  // worked before #228.
+  async function submitRating(enrollmentId, rating, reviewText = "") {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}/rating`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ rating }),
+      body: JSON.stringify({ rating, reviewText }),
     });
 
     if (!res.ok) {
@@ -553,7 +873,7 @@ function KeystonePrototype() {
   }
 
   // #124 — fire-and-forget ping so the backend has a per-day "this module
-  // was open" marker to split a module's completion minutes across later
+  // was open" marker to split a module's completion points across later
   // (see ActivityService.logModuleView/logModuleCompletion). No response
   // body, no local state to update — LearningScreen calls this once per
   // module focus and doesn't need to await anything beyond error logging.
@@ -611,6 +931,58 @@ function KeystonePrototype() {
         lastAccessed: formatLastAccessed(e.lastAccessed),
       })),
     );
+  }
+
+  async function refetchPathEnrollments() {
+    if (!session) return;
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/learning-path-enrollments`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) return;
+    setPathEnrollments(await res.json());
+  }
+
+  // #224 — same shape as completeEnrol below, but enrolling in a path also
+  // cascade-enrolls the learner in each of its constituent courses
+  // server-side (see LearningPathEnrollmentsService), so both
+  // pathEnrollments and enrolled need refetching afterward to pick up the
+  // new state in one pass.
+  async function completeEnrolPath(path) {
+    const alreadyEnrolled = pathEnrollments.some((pe) => pe.pathId === path.id);
+    if (alreadyEnrolled) {
+      setSelectedPath(null);
+      navigate("/dashboard");
+      return;
+    }
+
+    setEnrollingPath(true);
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/learning-path-enrollments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ pathId: path.id }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || `Request failed: ${res.status}`);
+      }
+
+      await Promise.all([refetchPathEnrollments(), refetchEnrollments()]);
+      setToast(`Enrolled in "${path.title}"`);
+      setTimeout(() => setToast(null), 2600);
+    } catch (err) {
+      setToast(`Couldn't enrol: ${err.message}`);
+      setTimeout(() => setToast(null), 3200);
+    } finally {
+      setEnrollingPath(false);
+    }
+
+    setSelectedPath(null);
+    navigate("/dashboard");
   }
 
   async function completeEnrol(course) {
@@ -703,6 +1075,15 @@ function KeystonePrototype() {
     return res.json();
   }
 
+  // #228 — public like fetchPosts below: CourseDetailModal shows reviews to
+  // anyone browsing the catalogue, logged in or not, so this needs no auth
+  // header.
+  async function fetchCourseReviews(courseId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/${courseId}/reviews`);
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  }
+
   async function fetchPosts(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/forum`);
     if (!res.ok) throw new Error(`Request failed: ${res.status}`);
@@ -748,7 +1129,7 @@ function KeystonePrototype() {
     }
 
     // No activity refetch here — editing isn't new activity, deliberately
-    // (an unlimited edit loop shouldn't be a way to farm streak minutes).
+    // (an unlimited edit loop shouldn't be a way to farm streak points).
     return res.json();
   }
 
@@ -901,6 +1282,21 @@ function KeystonePrototype() {
     }
   }
 
+  // #227 — trainer-only, course-owner-gated on the backend
+  // (RequireCourseOwnerGuard, same stack as PUT/DELETE /courses/:id) —
+  // exposes individual learners' names/progress, so this is never a public
+  // fetch like fetchCourseReviews above.
+  async function fetchCourseAnalytics(courseId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/${courseId}/analytics`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
   async function fetchQuizForEdit(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz/edit`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
@@ -940,6 +1336,16 @@ function KeystonePrototype() {
       // is no longer needed — clear it so a later, unrelated signup on
       // this browser can't pick up a stale value.
       sessionStorage.removeItem(PENDING_ENROL_STORAGE_KEY);
+    } else if (pendingPath) {
+      // #224 — mirrors the pendingCourse branch above, but deliberately
+      // without #207's sessionStorage mirror: a logged-out learner picking
+      // Google sign-in (a full-page redirect that clears this in-memory
+      // state) will lose a pending path enrol and just land on Catalogue
+      // needing to click Enrol again. Documented, known gap rather than
+      // silently attempted — scoped out to keep this feature's surface
+      // area contained; the synchronous email-signup path here works fine.
+      completeEnrolPath(pendingPath);
+      setPendingPath(null);
     } else {
       navigate("/dashboard");
     }
@@ -978,6 +1384,16 @@ function KeystonePrototype() {
     completeEnrol(course);
   }
 
+  function handleEnrolPath(path) {
+    if (!loggedIn) {
+      setPendingPath(path);
+      setSelectedPath(null);
+      setAuthMode("signup");
+      return;
+    }
+    completeEnrolPath(path);
+  }
+
   function handleStartLearning(course) {
     navigate(`/learning/${course.id}`);
   }
@@ -1004,6 +1420,7 @@ function KeystonePrototype() {
     screen === "dashboard" ? "My learning" :
     screen === "catalogue" ? "Catalogue" :
     screen === "learning" ? (coursesForLearners.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
+    screen === "leaderboard" ? "Leaderboard" :
     screen === "trainer" ? "Trainer studio" : "";
 
   if (authLoading) {
@@ -1021,7 +1438,7 @@ function KeystonePrototype() {
           path="/"
           element={
             loggedIn ? (
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user} goal={learnerGoal}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
                 <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
               </AppShell>
             ) : (
@@ -1033,7 +1450,7 @@ function KeystonePrototype() {
         <Route
           path="/catalogue"
           element={
-            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
               <CatalogueScreen
                 loggedIn={loggedIn}
                 onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
@@ -1043,6 +1460,12 @@ function KeystonePrototype() {
                 courses={courses}
                 loading={coursesLoading}
                 goal={learnerGoal}
+                learningPaths={learningPaths}
+                onOpenPath={setSelectedPath}
+                enrolledPathIds={pathEnrollments.map((pe) => pe.pathId)}
+                pathsLoading={learningPathsLoading}
+                bookmarkedIds={bookmarkedIds}
+                onToggleBookmark={loggedIn ? toggleBookmark : undefined}
               />
             </AppShell>
           }
@@ -1052,9 +1475,10 @@ function KeystonePrototype() {
           path="/dashboard"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
                 <DashboardScreen
                   enrolled={enrolled}
+                  badges={badges}
                   onOpenCourse={setSelectedCourse}
                   onStartLearning={handleStartLearning}
                   courses={coursesForLearners}
@@ -1067,7 +1491,24 @@ function KeystonePrototype() {
                   onPrevWeek={() => setCalendarWeekOffset((n) => n - 1)}
                   onNextWeek={() => setCalendarWeekOffset((n) => n + 1)}
                   onUpdateDailyGoal={updateDailyGoal}
+                  pathEnrollments={pathEnrollments}
+                  bookmarks={bookmarks}
+                  onToggleBookmark={toggleBookmark}
+                  leaderboardOptIn={leaderboardOptIn}
+                  onUpdateLeaderboardOptIn={updateLeaderboardOptIn}
+                  onOpenLeaderboard={() => navigate("/leaderboard")}
                 />
+              </AppShell>
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/leaderboard"
+          element={
+            <RequireAuth loggedIn={loggedIn}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
+                <LeaderboardScreen onFetchLeaderboard={fetchLeaderboard} />
               </AppShell>
             </RequireAuth>
           }
@@ -1077,7 +1518,7 @@ function KeystonePrototype() {
           path="/learning/:courseId"
           element={
             <RequireAuth loggedIn={loggedIn}>
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
                 <LearningRoute
                   courses={coursesForLearners}
                   enrolled={enrolled}
@@ -1106,7 +1547,7 @@ function KeystonePrototype() {
           element={
             <RequireAuth loggedIn={loggedIn}>
               <RequireTrainer role={role}>
-                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal}>
+                <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
                   <TrainerScreen
                     courses={courses}
                     onSaveCourse={saveCourse}
@@ -1120,6 +1561,10 @@ function KeystonePrototype() {
                     onRegenerateInviteCode={regenerateInviteCode}
                     onLeaveProvider={leaveProvider}
                     currentUserId={user?.id}
+                    paths={learningPaths}
+                    onSavePath={savePath}
+                    onDeletePath={deletePath}
+                    onFetchCourseAnalytics={fetchCourseAnalytics}
                   />
                 </AppShell>
               </RequireTrainer>
@@ -1138,6 +1583,17 @@ function KeystonePrototype() {
         onGoToDashboard={() => { setSelectedCourse(null); navigate("/dashboard"); }}
         isEnrolled={selectedCourse ? enrolledIds.includes(selectedCourse.id) : false}
         enrolling={enrolling}
+        onFetchReviews={fetchCourseReviews}
+      />
+
+      <LearningPathDetailModal
+        path={selectedPath}
+        onClose={() => setSelectedPath(null)}
+        onEnrol={handleEnrolPath}
+        onGoToDashboard={() => { setSelectedPath(null); navigate("/dashboard"); }}
+        isEnrolled={selectedPath ? pathEnrollments.some((pe) => pe.pathId === selectedPath.id) : false}
+        enrolling={enrollingPath}
+        onOpenCourse={(course) => { setSelectedPath(null); setSelectedCourse(course); }}
       />
 
       <AuthModal
@@ -1145,6 +1601,7 @@ function KeystonePrototype() {
         onClose={() => {
           setAuthMode(null);
           setPendingCourse(null);
+          setPendingPath(null);
           // #207 — closing without completing signup abandons the intent
           // to enrol; clear the sessionStorage mirror too so it can't
           // surface as a surprise auto-enrol on some later, unrelated

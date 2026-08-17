@@ -24,13 +24,20 @@ import { UpsertQuizDto } from '../quiz/dto/upsert-quiz.dto';
 import { QuizOption } from '../quiz/entities/quiz-option.entity';
 import { QuizQuestionEditResponseDto } from '../quiz/dto/quiz-question-edit-response.dto';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
-import { ActivityService } from '../activity/activity.service';
+import {
+  ActivityService,
+  POINTS_PER_MINUTE,
+} from '../activity/activity.service';
+import { BadgesService } from '../badges/badges.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
-// Fixed per-event minute estimates for actions that aren't naturally
-// scaled by course length the way module completion is (see #37).
-const QUIZ_SUBMIT_MINUTES = 5;
-const NOTE_SAVE_MINUTES = 3;
-const FORUM_POST_MINUTES = 3;
+// Fixed per-event point estimates for actions that aren't naturally
+// scaled by course length the way module completion is (see #37). #246 —
+// the same "minutes" figures as before (5/3/3), just multiplied through
+// POINTS_PER_MINUTE like every other flat estimate in this migration.
+const QUIZ_SUBMIT_POINTS = 5 * POINTS_PER_MINUTE;
+const NOTE_SAVE_POINTS = 3 * POINTS_PER_MINUTE;
+const FORUM_POST_POINTS = 3 * POINTS_PER_MINUTE;
 
 function isEdited(post: ForumPost): boolean {
   return post.updatedAt.getTime() !== post.createdAt.getTime();
@@ -61,6 +68,8 @@ export class ModulesService {
     @InjectRepository(ForumPost)
     private readonly forumPostsRepo: Repository<ForumPost>,
     private readonly activityService: ActivityService,
+    private readonly badgesService: BadgesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getQuiz(moduleId: string): Promise<QuizQuestionResponseDto[]> {
@@ -126,11 +135,9 @@ export class ModulesService {
     // never trusted from the client.
     const questionById = new Map(questions.map((q) => [q.id, q]));
 
-    // #40 — builds the response shape for a submission that's already
-    // been graded and stored (isCorrect lives on the submission itself
-    // now, for both question types — see the QuizSubmission entity
-    // comment). Used for both the "already submitted" path (existing
-    // rows) and the fresh-submission path (rows just saved) below.
+    // #40 — builds the response shape for a graded-and-stored submission
+    // (isCorrect lives on the submission itself now, for both question
+    // types — see the QuizSubmission entity comment).
     const buildResultItem = (
       question: QuizQuestion,
       submission: {
@@ -168,42 +175,24 @@ export class ModulesService {
       };
     };
 
-    // Single-attempt check: does this user already have submissions for
-    // any of this module's questions? Direct question_id lookup (#40) —
-    // previously this had to join through quiz_options, which had no
-    // equivalent path for a short-answer submission anyway.
-    const existingSubmissions = await this.quizSubmissionsRepo.find({
+    // #239 — was this a retake (had a prior submission) or a genuine
+    // first attempt? Purely informational for the response below —
+    // every submission is graded fresh from what was just sent, see the
+    // delete-then-insert further down, so this count doesn't gate
+    // anything.
+    const priorSubmissionCount = await this.quizSubmissionsRepo.count({
       where: {
         user: { id: userId },
         question: { id: In([...questionById.keys()]) },
       },
-      relations: { question: true, option: true },
     });
+    const isRetake = priorSubmissionCount > 0;
 
-    if (existingSubmissions.length > 0) {
-      const results = existingSubmissions.map((s) => {
-        const question = questionById.get(s.question.id);
-        if (!question) {
-          // Should be unreachable — s.question.id always comes from this
-          // module's own questions, matched via the In() filter above.
-          throw new NotFoundException(
-            `Submission's question "${s.question.id}" not found in this module's quiz`,
-          );
-        }
-        return buildResultItem(question, s);
-      });
-      return {
-        score: results.filter((r) => r.isCorrect).length,
-        total: questions.length,
-        alreadySubmitted: true,
-        results,
-      };
-    }
-
-    // Fresh submission: validate the answers cover exactly this module's
-    // questions — no missing, no extra — and that each answer has the
-    // right shape for its question's type, before grading or storing
-    // anything.
+    // Validate the answers cover exactly this module's questions — no
+    // missing, no extra — and that each answer has the right shape for
+    // its question's type, before grading or storing anything. Required
+    // on a retake too — resubmitting means answering the whole quiz
+    // again, not patching individual questions.
     const submittedQuestionIds = new Set(dto.answers.map((a) => a.questionId));
     const realQuestionIds = new Set(questions.map((q) => q.id));
 
@@ -265,6 +254,21 @@ export class ModulesService {
       return { answer: a, question, isCorrect: !!selected?.isCorrect };
     });
 
+    // #239 — unlimited retakes: a resubmission replaces the learner's
+    // prior answers for this module entirely rather than accumulating a
+    // second set of rows alongside the first. Deleting before inserting
+    // keeps exactly one QuizSubmission per (user, question) at all
+    // times, which is what every downstream reader assumes — this
+    // module's own getQuizResultsForCourse below, CourseAnalyticsService's
+    // per-learner quiz average, and the perfect-score badge check all
+    // just pool "this user's submissions" without expecting more than
+    // one per question. A no-op delete (nothing to remove) is harmless
+    // on a genuine first attempt.
+    await this.quizSubmissionsRepo.delete({
+      user: { id: userId },
+      question: { id: In([...questionById.keys()]) },
+    });
+
     const submissionsToSave = graded.map((g) =>
       this.quizSubmissionsRepo.create({
         user: profile,
@@ -276,10 +280,25 @@ export class ModulesService {
       }),
     );
     await this.quizSubmissionsRepo.save(submissionsToSave);
+    // #239 — logged on every submission, retakes included: reanswering
+    // every question is real, fresh work (the validation above requires
+    // a complete set of answers again, not a shortcut), so it earns
+    // activity points the same as a first attempt does.
     await this.activityService.logEvent(
       userId,
       'quiz_submit',
-      QUIZ_SUBMIT_MINUTES,
+      QUIZ_SUBMIT_POINTS,
+    );
+
+    // #225/#239 — perfect-score badge, evaluated on every fresh grading
+    // pass, including retakes — award() is idempotent, so a learner who
+    // already has this badge just no-ops here, and one who newly hits
+    // 100% on a retake earns it exactly when they should.
+    const score = graded.filter((g) => g.isCorrect).length;
+    await this.badgesService.evaluateQuizSubmission(
+      userId,
+      score,
+      questions.length,
     );
 
     const results = graded.map((g) =>
@@ -294,7 +313,12 @@ export class ModulesService {
     return {
       score: results.filter((r) => r.isCorrect).length,
       total: questions.length,
-      alreadySubmitted: false,
+      // #239 — repurposed from its old "returning stale, previously-
+      // graded data" meaning (that path no longer exists — every
+      // response here is a fresh grade) to "this attempt replaced a
+      // prior one," so the frontend can label a retake's result
+      // differently from a first attempt.
+      alreadySubmitted: isRetake,
       results,
     };
   }
@@ -446,7 +470,7 @@ export class ModulesService {
     }
 
     const saved = await this.notesRepo.save(note);
-    await this.activityService.logEvent(userId, 'note_save', NOTE_SAVE_MINUTES);
+    await this.activityService.logEvent(userId, 'note_save', NOTE_SAVE_POINTS);
 
     return {
       content: saved.content,
@@ -496,9 +520,12 @@ export class ModulesService {
 
     let parentPost: ForumPost | null = null;
     if (dto.parentPostId) {
+      // #229 — user (not just module) loaded here too: it's the original
+      // author, needed below to decide whether this reply earns them a
+      // notification.
       parentPost = await this.forumPostsRepo.findOne({
         where: { id: dto.parentPostId },
-        relations: { module: true },
+        relations: { module: true, user: true },
       });
       if (!parentPost) {
         throw new NotFoundException(
@@ -526,8 +553,27 @@ export class ModulesService {
     await this.activityService.logEvent(
       userId,
       'forum_post',
-      FORUM_POST_MINUTES,
+      FORUM_POST_POINTS,
     );
+
+    // #225 — "first ever post" badge. Counted after save() so the post
+    // just created is included — a count of exactly 1 means this was it.
+    const totalPosts = await this.forumPostsRepo.count({
+      where: { user: { id: userId } },
+    });
+    await this.badgesService.evaluateForumPost(userId, totalPosts === 1);
+
+    // #229 — a reply notifies the original post's author, skipping the
+    // self-reply case (someone replying to their own post shouldn't
+    // notify themselves). Only fires for an actual reply (parentPost set)
+    // — a fresh top-level post has no one to notify.
+    if (parentPost && parentPost.user.id !== userId) {
+      await this.notificationsService.createForReply(
+        parentPost.user,
+        profile,
+        saved,
+      );
+    }
 
     return {
       id: saved.id,

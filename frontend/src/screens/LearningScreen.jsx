@@ -1,17 +1,20 @@
 import { useState, useEffect } from "react";
-import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star } from "lucide-react";
+import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star, AlertTriangle } from "lucide-react";
 
+// #240 — a module's quiz score has to clear this to count as "passed."
+// Purely a comparison bar for display/nudging, never a gate on progress
+// — see quizBlocksCompletion below, which stays keyed on `taken`, not on
+// this threshold. Matches the same 70% bar used elsewhere (Coursera's
+// common pass grade, Udemy's own accredited-content requirement).
+const MODULE_PASS_THRESHOLD_PCT = 70;
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack }) {
-  const [tab, setTab] = useState("video");
+export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack, initialModuleId = null, initialTab = null }) {
+  // #229 — a notification click-through wants a specific tab (always
+  // "forum" today) rather than the usual video-first default.
+  const [tab, setTab] = useState(initialTab || "video");
 
   const modules = course?.modules ?? [];
 
-  const initialActiveModule = enrollment
-    ? Math.min(Math.round(enrollment.progress * modules.length), modules.length)
-    : 0;
-
-  const [activeModule, setActiveModule] = useState(initialActiveModule);
   // #180 — activeModule doubles as "which module's content is currently
   // shown" (video/notes/quiz/forum tabs, sidebar highlight) and, before
   // this fix, was also what the progress bar and checkmarks read from.
@@ -21,10 +24,33 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   // complete even though nothing had been saved, and reloading (which
   // re-derives activeModule from the real enrollment.progress) reverted
   // it, looking like lost progress. completedCount is the actual
-  // persisted progress: seeded from the same enrollment.progress value,
-  // but only ever advanced by handleMarkComplete below — never by
-  // sidebar preview clicks.
-  const [completedCount, setCompletedCount] = useState(initialActiveModule);
+  // persisted progress: seeded from the real enrollment.progress value
+  // below, but only ever advanced by handleMarkComplete below — never by
+  // sidebar preview clicks, and — #229 — never by a notification
+  // click-through jump either (see initialActiveModule's comment).
+  const progressDerivedModule = enrollment
+    ? Math.min(Math.round(enrollment.progress * modules.length), modules.length)
+    : 0;
+
+  // #229 — a notification click-through targets a specific module (the
+  // one its reply belongs to) rather than the usual "next incomplete
+  // module" default. Falls through to the real-progress derivation above
+  // whenever initialModuleId isn't set, or doesn't match any module in
+  // this course (e.g. a stale/bad id) — same "never trust, always fall
+  // back to a safe default" posture as everywhere else client input is
+  // used to index into real data. Deliberately only affects which module
+  // is *shown* (activeModule) — completedCount below always seeds from
+  // progressDerivedModule regardless, so jumping to a notification's
+  // module can never make earlier, genuinely-incomplete modules look
+  // complete (the exact bug #180 already fixed once for sidebar preview
+  // clicks).
+  const initialModuleIndex = initialModuleId
+    ? modules.findIndex((m) => m.id === initialModuleId)
+    : -1;
+  const initialActiveModule = initialModuleIndex >= 0 ? initialModuleIndex : progressDerivedModule;
+
+  const [activeModule, setActiveModule] = useState(initialActiveModule);
+  const [completedCount, setCompletedCount] = useState(progressDerivedModule);
   const [saving, setSaving] = useState(false);
 
   // #106 — star-rating prompt on the "Course complete" card. hoverRating
@@ -35,6 +61,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   // handleMarkComplete/onSaveProgress above).
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [ratingHover, setRatingHover] = useState(0);
+  // #228 — optional comment that goes along with whichever star gets
+  // clicked; see handleSubmitRating. Not its own separate submit step,
+  // to keep the original "click a star, done" flow unchanged for anyone
+  // who doesn't want to leave a comment.
+  const [reviewDraft, setReviewDraft] = useState("");
 
   // Quiz state — reset whenever the active module changes, since each
   // module has its own separate quiz.
@@ -44,6 +75,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const [selectedAnswers, setSelectedAnswers] = useState({}); // { [questionId]: optionId }
   const [quizResult, setQuizResult] = useState(null); // set after submitting
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
+  // #239 — an already-taken quiz shows a read-only "you scored X/Y" summary
+  // by default rather than silently re-presenting a blank, answerable form;
+  // retaking is a deliberate action (clicking "Retake quiz"), not something
+  // that happens by just reopening the tab. See the render block below.
+  const [retaking, setRetaking] = useState(false);
 
   // Grades overview (#82) — every module's quiz result for this course,
   // not just the currently active one. Course-scoped (not per-module), so
@@ -70,7 +106,13 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const [postsLoading, setPostsLoading] = useState(false);
   const [newPostContent, setNewPostContent] = useState("");
   const [postingError, setPostingError] = useState(null);
-  const [posting, setPosting] = useState(false);
+  // #220 — which post/reply target is currently submitting: null (nothing
+  // in flight), "new" (the top-level composer), or a post id (that post's
+  // reply form). Was a single shared `posting` boolean, which disabled and
+  // relabeled every reply button *and* the top-level Post button at once
+  // for any single submission — scoped per-target instead so only the form
+  // actually submitting shows a loading state.
+  const [postingTarget, setPostingTarget] = useState(null);
   // Threading (#39): only one reply box open at a time, keyed by which
   // post it's replying to. null = the top-level composer is in use instead.
   const [replyingTo, setReplyingTo] = useState(null);
@@ -84,7 +126,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const currentModule = modules[activeModule];
 
   // #124 — one ping per module focus, so the backend has a per-day "this
-  // module was open" marker to later split its completion minutes across
+  // module was open" marker to later split its completion points across
   // (see ActivityService.logModuleView/logModuleCompletion). Fire-and-forget:
   // no loading/error state here, this is a background signal, not something
   // the learner is waiting on. Same currentModule.id-only dependency
@@ -104,6 +146,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     setSelectedAnswers({});
     setQuizResult(null);
     setQuizError(null);
+    setRetaking(false);
     setQuizLoading(true);
 
     onFetchQuiz(currentModule.id)
@@ -194,6 +237,25 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     ? true // don't know yet whether this module has a quiz — block rather than flash unlocked
     : !!currentQuizStatus?.hasQuiz && !quizAlreadySatisfied;
 
+  // #240 — continuous course grade: summed correct answers over summed
+  // question counts, across every taken-and-quizzed module. This is
+  // mathematically identical to CourseAnalyticsService's per-learner
+  // quizAverageScorePct (which pools every raw QuizSubmission's
+  // isCorrect across the course) rather than a divergent calculation —
+  // a "taken" module always has a graded answer for every one of its
+  // questions (submitQuiz requires a complete set, no partial
+  // submissions), so summing score/total per module and summing every
+  // submission directly land on the same number. Null (not a 0%) when
+  // no quizzed module has been taken yet, so the UI can show "—" instead
+  // of a misleadingly bad grade before any quiz exists to grade.
+  const gradedModules = quizResultsOverview.filter((r) => r.hasQuiz && r.taken);
+  const courseGradePct = gradedModules.length > 0
+    ? Math.round(
+        (gradedModules.reduce((sum, r) => sum + r.score, 0) /
+          gradedModules.reduce((sum, r) => sum + r.total, 0)) * 100,
+      )
+    : null;
+
   async function handleMarkComplete() {
     if (quizBlocksCompletion) return; // defense in depth — the button is already disabled for this
 
@@ -218,7 +280,12 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
 
     setRatingSubmitting(true);
     try {
-      await onSubmitRating(enrollment.id, stars);
+      // #228 — whatever's currently in the optional comment box goes along
+      // with the star click, so a pure star submission (box left empty)
+      // behaves exactly like before #228: reviewDraft defaults to "", and
+      // an empty string is normalized to null server-side (see
+      // EnrollmentsService.submitRating).
+      await onSubmitRating(enrollment.id, stars, reviewDraft.trim());
     } catch (err) {
       console.error("Failed to submit rating:", err.message);
     } finally {
@@ -229,6 +296,16 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   function selectAnswer(questionId, optionId) {
     if (quizResult) return; // locked once submitted
     setSelectedAnswers((prev) => ({ ...prev, [questionId]: optionId }));
+  }
+
+  // #239 — clears any leftover selections before showing the blank,
+  // answerable form again, same starting state as a genuine first
+  // attempt (defensive — selectedAnswers should already be empty at this
+  // point, but a retake shouldn't ever be able to inherit stale picks).
+  function startRetake() {
+    setSelectedAnswers({});
+    setQuizError(null);
+    setRetaking(true);
   }
 
   async function handleSubmitQuiz() {
@@ -290,7 +367,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     if (!currentModule || !onCreatePost || !content.trim()) return;
 
     setPostingError(null);
-    setPosting(true);
+    setPostingTarget(parentPostId ?? "new");
     try {
       const post = await onCreatePost(currentModule.id, content.trim(), parentPostId);
       setPosts((prev) => [...prev, post]);
@@ -303,7 +380,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     } catch (err) {
       setPostingError(err.message || "Failed to post.");
     } finally {
-      setPosting(false);
+      setPostingTarget(null);
     }
   }
 
@@ -431,11 +508,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                 {postingError && <div style={{ fontSize: 12, color: "var(--coral)", marginBottom: 8 }}>{postingError}</div>}
                 <button
                   className="ks-btn ks-btn-gold"
-                  disabled={posting || !replyContent.trim()}
-                  style={{ opacity: posting || !replyContent.trim() ? 0.6 : 1, padding: "6px 14px", fontSize: 13 }}
+                  disabled={postingTarget === p.id || !replyContent.trim()}
+                  style={{ opacity: postingTarget === p.id || !replyContent.trim() ? 0.6 : 1, padding: "6px 14px", fontSize: 13 }}
                   onClick={() => handleCreatePost(p.id)}
                 >
-                  {posting ? "Posting…" : "Reply"}
+                  {postingTarget === p.id ? "Posting…" : "Reply"}
                 </button>
               </div>
             )}
@@ -475,6 +552,14 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
               {enrollment.rating ? (
                 <div style={{ fontSize: 13.5, color: "var(--slate)" }}>
                   Thanks for rating this course {enrollment.rating} star{enrollment.rating === 1 ? "" : "s"}.
+                  {/* #228 — only shown if a comment was actually left; a
+                      pure star rating (the only option before #228) has
+                      no reviewText and this stays hidden. */}
+                  {enrollment.reviewText && (
+                    <div style={{ marginTop: 10, padding: "10px 12px", background: "var(--paper)", borderRadius: 8, fontSize: 13, color: "var(--ink-70)", textAlign: "left" }}>
+                      “{enrollment.reviewText}”
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
@@ -492,6 +577,16 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                       />
                     ))}
                   </div>
+                  {/* #228 — optional, submitted together with whichever star
+                      gets clicked above (see handleSubmitRating); leaving
+                      this empty is the same pure-star flow as before #228. */}
+                  <textarea
+                    value={reviewDraft}
+                    onChange={(e) => setReviewDraft(e.target.value)}
+                    disabled={ratingSubmitting}
+                    placeholder="Leave a comment (optional)"
+                    style={{ width: "100%", minHeight: 60, marginTop: 12, border: "1px solid var(--line)", borderRadius: 8, padding: 10, fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical" }}
+                  />
                   {ratingSubmitting && (
                     <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>Saving…</div>
                   )}
@@ -574,11 +669,38 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                 <div style={{ fontSize: 13.5, color: "var(--slate-light)" }}>
                   This module doesn't have a quiz yet.
                 </div>
+              ) : currentQuizStatus?.taken && !quizResult && !retaking ? (
+                // #239 — already taken, and neither just-submitted-this-
+                // session (quizResult) nor mid-retake: show a read-only
+                // summary + an explicit opt-in to try again, instead of
+                // silently re-presenting a blank form on every reopen.
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+                    Quick check — {quizQuestions.length} question{quizQuestions.length === 1 ? "" : "s"}
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 10 }}>
+                    You've already taken this quiz — scored {currentQuizStatus.score}/{currentQuizStatus.total}.
+                  </div>
+                  {/* #240 — below the pass bar: a nudge, not a block. Mark
+                      Complete/progress are never gated on this — see
+                      quizBlocksCompletion above, unchanged by this
+                      threshold. */}
+                  {currentQuizStatus.total > 0 &&
+                    Math.round((currentQuizStatus.score / currentQuizStatus.total) * 100) < MODULE_PASS_THRESHOLD_PCT && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>
+                      <AlertTriangle size={13} />
+                      Below the {MODULE_PASS_THRESHOLD_PCT}% pass bar — consider retaking to improve your course grade.
+                    </div>
+                  )}
+                  <button className="ks-btn ks-btn-ghost" onClick={startRetake}>
+                    Retake quiz
+                  </button>
+                </div>
               ) : (
                 <>
                   <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
                     Quick check — {quizQuestions.length} question{quizQuestions.length === 1 ? "" : "s"}
-                    {quizResult && ` — ${quizResult.score}/${quizResult.total}${quizResult.alreadySubmitted ? " (already submitted)" : ""}`}
+                    {quizResult && ` — ${quizResult.score}/${quizResult.total}${quizResult.alreadySubmitted ? " (retake)" : ""}`}
                   </div>
 
                   {quizQuestions.map((q, i) => {
@@ -691,11 +813,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                     {postingError && <div style={{ fontSize: 12, color: "var(--coral)", marginBottom: 8 }}>{postingError}</div>}
                     <button
                       className="ks-btn ks-btn-gold"
-                      disabled={posting || !newPostContent.trim()}
-                      style={{ opacity: posting || !newPostContent.trim() ? 0.6 : 1 }}
+                      disabled={postingTarget === "new" || !newPostContent.trim()}
+                      style={{ opacity: postingTarget === "new" || !newPostContent.trim() ? 0.6 : 1 }}
                       onClick={() => handleCreatePost()}
                     >
-                      {posting ? "Posting…" : "Post"}
+                      {postingTarget === "new" ? "Posting…" : "Post"}
                     </button>
                   </div>
                 </>
@@ -744,24 +866,51 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
             </div>
           </div>
           <div className="ks-card" style={{ padding: 16 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 10 }}>Grades</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Grades</span>
+              {/* #240 — hidden until there's at least one graded module,
+                  same "hidden until non-empty" convention as the rest of
+                  this app's optional cards — a fresh course with no
+                  quizzes taken yet shouldn't show a misleading 0%. */}
+              {courseGradePct !== null && (
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600,
+                    color: courseGradePct < MODULE_PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--gold-dark)",
+                  }}
+                  title="Course grade — average quiz score across every quizzed module you've taken"
+                >
+                  {courseGradePct}%
+                </span>
+              )}
+            </div>
             {quizResultsLoading ? (
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "6px 0" }}>Loading…</div>
             ) : quizResultsOverview.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "6px 0" }}>No modules yet.</div>
             ) : (
-              quizResultsOverview.map((r, i) => (
-                <div
-                  key={r.moduleId}
-                  onClick={() => { setActiveModule(i); setTab("quiz"); }}
-                  style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 0", cursor: "pointer" }}
-                >
-                  <span style={{ color: r.taken ? "var(--slate)" : "var(--slate-light)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.moduleTitle}</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: r.taken ? "var(--ink)" : "var(--slate-light)", flexShrink: 0 }}>
-                    {!r.hasQuiz ? "No quiz" : r.taken ? `${r.score}/${r.total}` : "Not yet taken"}
-                  </span>
-                </div>
-              ))
+              quizResultsOverview.map((r, i) => {
+                // #240 — visibly flag (never block) a taken module below
+                // the pass bar, same threshold the course grade above is
+                // compared against.
+                const belowPassBar = r.taken && r.total > 0 &&
+                  Math.round((r.score / r.total) * 100) < MODULE_PASS_THRESHOLD_PCT;
+                return (
+                  <div
+                    key={r.moduleId}
+                    onClick={() => { setActiveModule(i); setTab("quiz"); }}
+                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, fontSize: 13, padding: "6px 0", cursor: "pointer" }}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, color: r.taken ? "var(--slate)" : "var(--slate-light)", overflow: "hidden" }}>
+                      {belowPassBar && <AlertTriangle size={12} color="var(--coral)" style={{ flexShrink: 0 }} />}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.moduleTitle}</span>
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: belowPassBar ? "var(--coral)" : r.taken ? "var(--ink)" : "var(--slate-light)", flexShrink: 0 }}>
+                      {!r.hasQuiz ? "No quiz" : r.taken ? `${r.score}/${r.total}` : "Not yet taken"}
+                    </span>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

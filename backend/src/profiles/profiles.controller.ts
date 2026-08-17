@@ -5,6 +5,7 @@ import { Profile } from './entities/profile.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UpdateDailyGoalDto } from './dto/update-daily-goal.dto';
+import { UpdateLeaderboardOptInDto } from './dto/update-leaderboard-opt-in.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 
 interface AuthenticatedRequest extends Request {
@@ -56,7 +57,7 @@ export class ProfilesController {
     return this.profilesService.updateRole(req.user.id, dto.role);
   }
 
-  // #188 — DashboardScreen's inline "Daily goal · N min" editor calls
+  // #188 — DashboardScreen's inline "Daily goal · N pts" editor calls
   // this when a learner picks a new preset. Same guard/ownership shape as
   // the routes above: any authenticated user acting on their own row.
   @Patch('me/daily-goal')
@@ -65,6 +66,20 @@ export class ProfilesController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: UpdateDailyGoalDto,
   ): Promise<Profile> {
-    return this.profilesService.updateDailyGoal(req.user.id, dto.dailyGoalMin);
+    return this.profilesService.updateDailyGoal(
+      req.user.id,
+      dto.dailyGoalPoints,
+    );
+  }
+
+  // #231 — the leaderboard opt-in toggle in Dashboard settings calls this.
+  // Same guard/ownership shape as the routes above.
+  @Patch('me/leaderboard-opt-in')
+  @UseGuards(SupabaseAuthGuard)
+  updateLeaderboardOptIn(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateLeaderboardOptInDto,
+  ): Promise<Profile> {
+    return this.profilesService.updateLeaderboardOptIn(req.user.id, dto.optIn);
   }
 }

@@ -44,13 +44,29 @@ export class ProfilesService {
   // #188 — the DB already had a per-learner dailyGoalMin column; nothing
   // ever wrote to it, and ActivityService.getSummary ignored it too (see
   // that fix). This is the write side — DashboardScreen's inline editor
-  // calls it directly, no onboarding-modal step needed.
+  // calls it directly, no onboarding-modal step needed. #246 — column
+  // (and this param) renamed from dailyGoalMin to dailyGoalPoints; see
+  // RenameProfilesDailyGoalMinToPoints migration.
   async updateDailyGoal(
     userId: string,
-    dailyGoalMin: number,
+    dailyGoalPoints: number,
   ): Promise<Profile> {
     const profile = await this.getMine(userId);
-    profile.dailyGoalMin = dailyGoalMin;
+    profile.dailyGoalPoints = dailyGoalPoints;
+    return this.profilesRepo.save(profile);
+  }
+
+  // #231 — a profile settings toggle for the leaderboard. Same
+  // general-purpose "update your own profile" shape as updateGoal/
+  // updateRole/updateDailyGoal above; LeaderboardService is the only
+  // reader of this column, filtering opted-in profiles directly rather
+  // than trusting the frontend to hide opted-out learners.
+  async updateLeaderboardOptIn(
+    userId: string,
+    optIn: boolean,
+  ): Promise<Profile> {
+    const profile = await this.getMine(userId);
+    profile.leaderboardOptIn = optIn;
     return this.profilesRepo.save(profile);
   }
 }
