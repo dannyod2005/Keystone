@@ -72,8 +72,12 @@ export class CreateLearningPathTables1786070000000 implements MigrationInterface
     );
     await queryRunner.query(`DROP TABLE "learning_path_courses"`);
 
-    await queryRunner.query(`ALTER TABLE "learning_paths" DROP CONSTRAINT "FK_learning_paths_provider_id"`);
-    await queryRunner.query(`ALTER TABLE "learning_paths" DROP CONSTRAINT "FK_learning_paths_owner_id"`);
+    await queryRunner.query(
+      `ALTER TABLE "learning_paths" DROP CONSTRAINT "FK_learning_paths_provider_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "learning_paths" DROP CONSTRAINT "FK_learning_paths_owner_id"`,
+    );
     await queryRunner.query(`DROP TABLE "learning_paths"`);
   }
 }

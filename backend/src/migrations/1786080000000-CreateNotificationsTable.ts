@@ -36,10 +36,18 @@ export class CreateNotificationsTable1786080000000 implements MigrationInterface
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "IDX_notifications_recipient_read_created"`);
-    await queryRunner.query(`ALTER TABLE "notifications" DROP CONSTRAINT "FK_notifications_forum_post_id"`);
-    await queryRunner.query(`ALTER TABLE "notifications" DROP CONSTRAINT "FK_notifications_actor_id"`);
-    await queryRunner.query(`ALTER TABLE "notifications" DROP CONSTRAINT "FK_notifications_recipient_id"`);
+    await queryRunner.query(
+      `DROP INDEX "IDX_notifications_recipient_read_created"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "notifications" DROP CONSTRAINT "FK_notifications_forum_post_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "notifications" DROP CONSTRAINT "FK_notifications_actor_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "notifications" DROP CONSTRAINT "FK_notifications_recipient_id"`,
+    );
     await queryRunner.query(`DROP TABLE "notifications"`);
   }
 }

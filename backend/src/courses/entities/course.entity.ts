@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  OneToMany,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { CourseModule } from './course-module.entity';
 import { CourseCredit } from './course-credit.entity';
 import { CourseFaq } from './course-faq.entity';
@@ -75,12 +82,21 @@ export class Course {
   @Column({ name: 'provider_id', type: 'uuid', nullable: true })
   providerId: string | null;
 
-  @OneToMany(() => CourseModule, (m) => m.course, { cascade: true, orphanedRowAction: 'delete' })
+  @OneToMany(() => CourseModule, (m) => m.course, {
+    cascade: true,
+    orphanedRowAction: 'delete',
+  })
   modules: CourseModule[];
 
-  @OneToMany(() => CourseCredit, (c) => c.course, { cascade: true, orphanedRowAction: 'delete' })
+  @OneToMany(() => CourseCredit, (c) => c.course, {
+    cascade: true,
+    orphanedRowAction: 'delete',
+  })
   credits: CourseCredit[];
 
-  @OneToMany(() => CourseFaq, (f) => f.course, { cascade: true, orphanedRowAction: 'delete' })
+  @OneToMany(() => CourseFaq, (f) => f.course, {
+    cascade: true,
+    orphanedRowAction: 'delete',
+  })
   faqs: CourseFaq[];
 }
