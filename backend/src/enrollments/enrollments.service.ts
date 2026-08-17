@@ -89,6 +89,40 @@ export class EnrollmentsService {
     }
   }
 
+  // #255 — lets a learner leave a course. A hard delete rather than a
+  // status flag: Enrollment carries no soft-delete column (unlike Course,
+  // #41), and nothing else in the schema references enrollment.id by FK
+  // (quiz submissions/notes/forum posts are all keyed on (user, module/
+  // question) directly, not on the enrollment row — see the entity
+  // comments), so removing this row cleanly drops the enrollment without
+  // touching anything downstream. A learner's quiz answers and notes for
+  // this course are left in place and simply resurface if they re-enrol
+  // later — deliberately not wiped here, since there's no "wipe a user's
+  // course history" concept anywhere else in this app either. If this
+  // course was part of a learning path the learner is enrolled in, that
+  // path's derived progress (LearningPathEnrollmentsService) naturally
+  // reflects the drop on its next read — nothing to update here.
+  async remove(userId: string, enrollmentId: string): Promise<void> {
+    const enrollment = await this.enrollmentsRepo.findOne({
+      where: { id: enrollmentId },
+      relations: { user: true },
+    });
+
+    if (!enrollment) {
+      throw new NotFoundException(
+        `Enrollment with id "${enrollmentId}" not found`,
+      );
+    }
+
+    // Ownership check: same principle as updateProgress/submitRating above
+    // — never trust the client to only ever send its own enrollment id.
+    if (enrollment.user.id !== userId) {
+      throw new ForbiddenException('This enrollment does not belong to you');
+    }
+
+    await this.enrollmentsRepo.remove(enrollment);
+  }
+
   async findAllForUser(userId: string): Promise<EnrollmentResponseDto[]> {
     const enrollments = await this.enrollmentsRepo.find({
       where: { user: { id: userId } },

@@ -1022,6 +1022,30 @@ function KeystonePrototype() {
     navigate("/dashboard");
   }
 
+  // #255 — leave a course. DELETE follows deleteCourse's shape below
+  // exactly (no body, throw on !res.ok with the server's message), but
+  // updates local state via refetchEnrollments + refetchPathEnrollments
+  // (Promise.all, same as completeEnrolPath above) rather than a plain
+  // local filter — unenrolling from a course that's part of an enrolled
+  // learning path can also shift that path's derived progress, so both
+  // need a fresh read from the server rather than being patched by hand
+  // here.
+  async function unenrolCourse(enrollmentId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    await Promise.all([refetchEnrollments(), refetchPathEnrollments()]);
+    setToast("Unenrolled");
+    setTimeout(() => setToast(null), 2600);
+  }
+
   // #207 — the other half of the sessionStorage mirror set in handleEnrol:
   // picks up a pending enrollment that survived a Google OAuth redirect
   // (which clears pendingCourse along with all other in-memory state,
@@ -1511,6 +1535,7 @@ function KeystonePrototype() {
                   onStartLearning={handleStartLearning}
                   courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
+                  onUnenrol={unenrolCourse}
                   user={user}
                   goal={learnerGoal}
                   activitySummary={activitySummary}

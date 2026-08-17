@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -41,6 +43,19 @@ export class EnrollmentsController {
     @Req() req: AuthenticatedRequest,
   ): Promise<EnrollmentResponseDto[]> {
     return this.enrollmentsService.findAllForUser(req.user.id);
+  }
+
+  // #255 — unenrol. 204/no body on success, matching CoursesController's
+  // deleteCourse convention for a destructive action with nothing useful
+  // to return.
+  @Delete(':id')
+  @HttpCode(204)
+  @UseGuards(SupabaseAuthGuard)
+  remove(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.enrollmentsService.remove(req.user.id, id);
   }
 
   @Patch(':id')
