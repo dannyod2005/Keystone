@@ -49,21 +49,36 @@ export function AppTopbar({ title, onMenuClick, notifications = [], unreadCount 
 
   return (
     <div className="sticky top-0 z-20 md:static md:z-auto" style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 32px", borderBottom: "1px solid var(--line)", background: "var(--paper-2)" }}>
+      {/* #258 — real button, same reasoning as AppSidebar's own close
+          button right above it: a bare icon with onClick is invisible to
+          both keyboard and screen-reader users. */}
       {onMenuClick && (
-        <Menu
-          size={22}
-          color="var(--ink)"
-          className="cursor-pointer md:hidden"
+        <button
+          type="button"
+          aria-label="Open menu"
           onClick={onMenuClick}
-        />
+          className="cursor-pointer md:hidden"
+          style={{ background: "none", border: "none", padding: 0, display: "inline-flex", lineHeight: 0 }}
+        >
+          <Menu size={22} color="var(--ink)" />
+        </button>
       )}
       <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 22, margin: 0, flex: 1 }}>{title}</h1>
 
       {onOpenNotification && (
         <div ref={containerRef} style={{ position: "relative" }}>
-          <div
+          {/* #258 — real button + aria-expanded (the panel it controls is a
+              relative-positioned popover, not a native <details>/<dialog>,
+              so aria-expanded is what tells AT whether it's currently
+              open). aria-label folds the unread count in too, since the
+              badge itself is a plain <span> a screen reader would
+              otherwise just skip past. */}
+          <button
+            type="button"
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+            aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
-            style={{ position: "relative", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 8 }}
+            style={{ position: "relative", cursor: "pointer", background: "none", border: "none", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 8 }}
           >
             <Bell size={19} color="var(--ink)" />
             {unreadCount > 0 && (
@@ -75,7 +90,7 @@ export function AppTopbar({ title, onMenuClick, notifications = [], unreadCount 
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
-          </div>
+          </button>
 
           {open && (
             <div className="ks-card" style={{ position: "absolute", top: 42, right: 0, width: 320, maxHeight: 420, overflowY: "auto", padding: 0, zIndex: 40 }}>

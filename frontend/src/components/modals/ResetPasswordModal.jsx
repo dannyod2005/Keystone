@@ -87,9 +87,17 @@ export function ResetPasswordModal({ open, onSubmit, onClose }) {
               <input id="ks-new-pw" type={showPw ? "text" : "password"} className="ks-input" style={{ paddingRight: 40 }}
                 placeholder="At least 8 characters" autoComplete="new-password"
                 value={password} onChange={(e) => setPassword(e.target.value)} />
-              {showPw
-                ? <EyeOff size={15} color="var(--slate-light)" style={{ position: "absolute", right: 13, top: 12, cursor: "pointer" }} onClick={() => setShowPw(false)} />
-                : <Eye size={15} color="var(--slate-light)" style={{ position: "absolute", right: 13, top: 12, cursor: "pointer" }} onClick={() => setShowPw(true)} />}
+              {/* #258 — real button, aria-label flips with toggle state. */}
+              <button
+                type="button"
+                aria-label={showPw ? "Hide password" : "Show password"}
+                onClick={() => setShowPw((v) => !v)}
+                style={{ position: "absolute", right: 13, top: 12, background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                {showPw
+                  ? <EyeOff size={15} color="var(--slate-light)" />
+                  : <Eye size={15} color="var(--slate-light)" />}
+              </button>
             </div>
             {touched && !pwValid && <div style={errorText}>Password must be at least 8 characters.</div>}
           </div>

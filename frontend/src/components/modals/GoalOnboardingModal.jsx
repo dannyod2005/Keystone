@@ -60,7 +60,15 @@ export function GoalOnboardingModal({ open, onSelect, onSkip }) {
       <div className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`} style={{ width: "100%", maxWidth: 440, padding: "28px 28px 24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
           <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>What brings you here?</div>
-          <X size={18} color="var(--slate)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={onSkip} />
+          {/* #258 — real button (was a bare clickable icon). */}
+          <button
+            type="button"
+            aria-label="Skip"
+            onClick={onSkip}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0, flexShrink: 0 }}
+          >
+            <X size={18} color="var(--slate)" />
+          </button>
         </div>
         <div style={{ fontSize: 13.5, color: "var(--slate)", marginBottom: 20 }}>
           Pick a focus area — it shows up on your dashboard and helps point you at relevant courses.

@@ -168,7 +168,15 @@ export function AuthModal({ mode, onClose, onSubmit }) {
               <KeystoneMark variant="light" size={19} />
               <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16 }}>Keystone</span>
             </div>
-            <X size={19} color="var(--slate)" style={{ cursor: "pointer" }} onClick={onClose} />
+            {/* #258 — real button (was a bare clickable icon). */}
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={onClose}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+            >
+              <X size={19} color="var(--slate)" />
+            </button>
           </div>
 
           {/* #187 — tab strip hides itself on the forgot-password tab: it's
@@ -247,9 +255,19 @@ export function AuthModal({ mode, onClose, onSubmit }) {
                   placeholder={tab === "signup" ? "At least 8 characters" : "Your password"}
                   autoComplete={tab === "signup" ? "new-password" : "current-password"}
                   value={values.password} onChange={(e) => update("password", e.target.value)} />
-                {showPw
-                  ? <EyeOff size={15} color="var(--slate-light)" style={{ position: "absolute", right: 13, top: 12, cursor: "pointer" }} onClick={() => setShowPw(false)} />
-                  : <Eye size={15} color="var(--slate-light)" style={{ position: "absolute", right: 13, top: 12, cursor: "pointer" }} onClick={() => setShowPw(true)} />}
+                {/* #258 — real button, aria-label flips with the toggle
+                    state so it always describes the action a click will
+                    take, not just "eye icon". */}
+                <button
+                  type="button"
+                  aria-label={showPw ? "Hide password" : "Show password"}
+                  onClick={() => setShowPw((v) => !v)}
+                  style={{ position: "absolute", right: 13, top: 12, background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+                >
+                  {showPw
+                    ? <EyeOff size={15} color="var(--slate-light)" />
+                    : <Eye size={15} color="var(--slate-light)" />}
+                </button>
               </div>
               {touched && !pwValid && <div style={errorText}>Password must be at least 8 characters.</div>}
             </div>

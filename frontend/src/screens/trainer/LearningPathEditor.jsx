@@ -113,9 +113,36 @@ export function LearningPathEditor({ path, courses, onCancel, onSave }) {
             <div key={courseId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < draft.courseIds.length - 1 ? "1px solid var(--line)" : "none" }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--slate-light)", width: 20 }}>{String(i + 1).padStart(2, "0")}</span>
               <span style={{ flex: 1, fontSize: 14 }}>{c ? c.title : "(course no longer available)"}</span>
-              <ChevronUp size={15} color={i === 0 ? "var(--line)" : "var(--slate-light)"} style={{ cursor: i === 0 ? "not-allowed" : "pointer" }} onClick={() => moveCourse(i, -1)} />
-              <ChevronDown size={15} color={i === draft.courseIds.length - 1 ? "var(--line)" : "var(--slate-light)"} style={{ cursor: i === draft.courseIds.length - 1 ? "not-allowed" : "pointer" }} onClick={() => moveCourse(i, 1)} />
-              <Trash2 size={15} color="var(--slate-light)" style={{ cursor: "pointer" }} onClick={() => removeCourse(i)} />
+              {/* #258 — real buttons (were bare clickable icons). First/last
+                  items now use native `disabled` instead of a color/cursor
+                  "looks disabled" hack — excludes them from tab order and
+                  announces the disabled state to screen readers. */}
+              <button
+                type="button"
+                aria-label={`Move ${c ? c.title : "course"} up`}
+                disabled={i === 0}
+                onClick={() => moveCourse(i, -1)}
+                style={{ background: "none", border: "none", padding: 0, cursor: i === 0 ? "not-allowed" : "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <ChevronUp size={15} color={i === 0 ? "var(--line)" : "var(--slate-light)"} />
+              </button>
+              <button
+                type="button"
+                aria-label={`Move ${c ? c.title : "course"} down`}
+                disabled={i === draft.courseIds.length - 1}
+                onClick={() => moveCourse(i, 1)}
+                style={{ background: "none", border: "none", padding: 0, cursor: i === draft.courseIds.length - 1 ? "not-allowed" : "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <ChevronDown size={15} color={i === draft.courseIds.length - 1 ? "var(--line)" : "var(--slate-light)"} />
+              </button>
+              <button
+                type="button"
+                aria-label={`Remove ${c ? c.title : "course"} from path`}
+                onClick={() => removeCourse(i)}
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <Trash2 size={15} color="var(--slate-light)" />
+              </button>
             </div>
           );
         })}

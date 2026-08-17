@@ -204,11 +204,13 @@ export function TeamTab({ onFetchProvider, onCreateProvider, onJoinProvider, onR
         <label style={label}>Invite code</label>
         <div style={{ display: "flex", gap: 8 }}>
           <div style={{ ...rowInput, fontFamily: "monospace", letterSpacing: 1.5, flex: 1 }}>{provider.inviteCode}</div>
-          <button className="ks-btn ks-btn-ghost" type="button" onClick={handleCopy} title="Copy invite code">
+          {/* #258 — title alone isn't exposed to all screen readers; explicit
+              aria-label added, reflecting the copied/not-copied state. */}
+          <button className="ks-btn ks-btn-ghost" type="button" onClick={handleCopy} title="Copy invite code" aria-label={copied ? "Invite code copied" : "Copy invite code"}>
             {copied ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}
           </button>
           {isOwner && (
-            <button className="ks-btn ks-btn-ghost" type="button" onClick={handleRegenerate} disabled={regenerating} title="Regenerate invite code">
+            <button className="ks-btn ks-btn-ghost" type="button" onClick={handleRegenerate} disabled={regenerating} title="Regenerate invite code" aria-label="Regenerate invite code">
               <RefreshCw size={14} />
             </button>
           )}
@@ -250,7 +252,16 @@ export function TeamTab({ onFetchProvider, onCreateProvider, onJoinProvider, onR
           <div onClick={(e) => e.stopPropagation()} className="ks-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Leave provider?</div>
-              <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !leaving && setConfirmingLeave(false)} />
+              {/* #258 — real button (was a bare clickable icon). */}
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={leaving}
+                onClick={() => setConfirmingLeave(false)}
+                style={{ background: "none", border: "none", padding: 0, cursor: leaving ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <X size={18} color="var(--slate)" />
+              </button>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
               You'll lose shared edit access to courses scoped to <strong>{provider.name}</strong>. Courses you personally own are unaffected.
