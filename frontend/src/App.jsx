@@ -1416,12 +1416,19 @@ function KeystonePrototype() {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
   }
 
+  // #247 — "home" (screenKeyFromPath's fallback for "/") is now included
+  // here too: it used to be hardcoded as "Home" directly on the "/"
+  // route's AppShell below, which had silently drifted out of sync with
+  // AppSidebar's own label for that same nav item ("Discover") — the
+  // topbar title and the sidebar's active nav item should always say the
+  // same thing for whatever page is actually showing.
   const shellTitle =
     screen === "dashboard" ? "My learning" :
     screen === "catalogue" ? "Catalogue" :
     screen === "learning" ? (coursesForLearners.find((c) => `/learning/${c.id}` === location.pathname)?.title ?? "") :
     screen === "leaderboard" ? "Leaderboard" :
-    screen === "trainer" ? "Trainer studio" : "";
+    screen === "trainer" ? "Trainer studio" :
+    screen === "home" ? "Discover" : "";
 
   if (authLoading) {
     return (
@@ -1438,8 +1445,29 @@ function KeystonePrototype() {
           path="/"
           element={
             loggedIn ? (
-              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title="Home" user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
-                <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
+              <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
+                {/* #247 — the logged-in-only discovery sections (Recommended/
+                    New on Keystone/Learning paths/Leaderboard teaser) reuse
+                    the exact same data + handlers already wired up for
+                    Catalogue/Dashboard below, rather than fetching anything
+                    new. The logged-out branch of HomeScreen (right below)
+                    deliberately isn't touched — it doesn't need any of these. */}
+                <HomeScreen
+                  onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)}
+                  onAuth={openAuth}
+                  courses={courses}
+                  loggedIn={loggedIn}
+                  user={user}
+                  enrolled={enrolled}
+                  onOpenCourse={setSelectedCourse}
+                  enrolledIds={enrolledIds}
+                  goal={learnerGoal}
+                  learningPaths={learningPaths}
+                  onOpenPath={setSelectedPath}
+                  enrolledPathIds={pathEnrollments.map((pe) => pe.pathId)}
+                  leaderboardOptIn={leaderboardOptIn}
+                  onFetchLeaderboard={fetchLeaderboard}
+                />
               </AppShell>
             ) : (
               <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
