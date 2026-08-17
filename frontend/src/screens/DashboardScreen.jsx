@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil, Medal, Bookmark, Trophy } from "lucide-react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Pencil, Medal, Bookmark, Trophy, X } from "lucide-react";
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
@@ -14,7 +14,7 @@ const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, pointsThisWeek: 0, dailyGoalPoints
 // realistic range without needing input validation UI here too.
 const DAILY_GOAL_PRESETS = [150, 300, 450, 600, 900];
 
-export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal, leaderboardOptIn = false, onUpdateLeaderboardOptIn, onOpenLeaderboard }) {
+export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, onUnenrol, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, onUpdateDailyGoal, leaderboardOptIn = false, onUpdateLeaderboardOptIn, onOpenLeaderboard }) {
   const firstName = getFirstName(getDisplayName(user));
   // #188 — the DB column already existed; this is the first real UI for
   // it. Inline on the dashboard card rather than a separate settings
@@ -28,6 +28,12 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
   // can't be double-fired by a second click, same guard shape as
   // savingGoal above.
   const [savingLeaderboardOptIn, setSavingLeaderboardOptIn] = useState(false);
+  // #255 — course pending unenrol confirmation ({ enrollmentId, title,
+  // isComplete }), or null. Same three-state shape (pending item + error +
+  // busy flag) as TrainerScreen's deletingCourse/deleteError/deleting.
+  const [unenrollingCourse, setUnenrollingCourse] = useState(null);
+  const [unenrollError, setUnenrollError] = useState(null);
+  const [unenrolling, setUnenrolling] = useState(false);
 
   async function handlePickDailyGoal(points) {
     if (savingGoal || points === activitySummary.dailyGoalPoints) {
@@ -106,6 +112,19 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
     }
   }
 
+  async function handleConfirmUnenroll() {
+    setUnenrolling(true);
+    setUnenrollError(null);
+    try {
+      await onUnenrol(unenrollingCourse.enrollmentId);
+      setUnenrollingCourse(null);
+    } catch (err) {
+      setUnenrollError(err.message || "Failed to unenrol.");
+    } finally {
+      setUnenrolling(false);
+    }
+  }
+
   // #204/#213 — Catalogue/Discover center their content (maxWidth +
   // margin: "0 auto"); this only ever had the maxWidth half, so on a wide
   // viewport it hugged the left edge instead of centering like the rest
@@ -180,6 +199,15 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                       </div>
                     </div>
                     <button className="ks-btn ks-btn-primary" onClick={() => onStartLearning(c)}>Start</button>
+                    {onUnenrol && (
+                      <button
+                        className="ks-btn ks-btn-ghost"
+                        style={{ color: "var(--coral)" }}
+                        onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: false }); setUnenrollError(null); }}
+                      >
+                        Unenroll
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -208,6 +236,15 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                     </div>
                   </div>
                   <button className="ks-btn ks-btn-primary" onClick={() => onStartLearning(c)}>Resume</button>
+                  {onUnenrol && (
+                    <button
+                      className="ks-btn ks-btn-ghost"
+                      style={{ color: "var(--coral)" }}
+                      onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: false }); setUnenrollError(null); }}
+                    >
+                      Unenroll
+                    </button>
+                  )}
                 </div>
               );
             })
@@ -227,6 +264,15 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                   <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>Completed {e.lastAccessed} · certificate issued</div>
                 </div>
                 <button className="ks-btn ks-btn-ghost" onClick={() => handleViewCertificate(e.id)}>View certificate</button>
+                {onUnenrol && (
+                  <button
+                    className="ks-btn ks-btn-ghost"
+                    style={{ color: "var(--coral)" }}
+                    onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: true }); setUnenrollError(null); }}
+                  >
+                    Unenroll
+                  </button>
+                )}
               </div>
             );
           })}
@@ -453,6 +499,49 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
           )}
         </div>
       </div>
+
+      {/* #255 — same modal shape as TrainerScreen's delete-course
+          confirmation (backdrop click/X/Cancel all close it, guarded by
+          !unenrolling so a click mid-request can't dismiss and lose the
+          error). Completed courses get an extra line warning about
+          certificate access specifically, since that's the one thing a
+          learner loses here that isn't obvious from "unenroll" alone —
+          their quiz answers and notes for the course are left in place
+          (see EnrollmentsService.remove) and resurface if they re-enrol,
+          but the certificate is only ever generated from a live
+          enrollment row. */}
+      {unenrollingCourse && (
+        <div
+          onClick={() => !unenrolling && setUnenrollingCourse(null)}
+          className="ks-modal-backdrop"
+          style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Unenroll from this course?</div>
+              <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !unenrolling && setUnenrollingCourse(null)} />
+            </div>
+            <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
+              You'll be removed from <strong>{unenrollingCourse.title}</strong> and your progress will reset if you enrol again.
+              {unenrollingCourse.isComplete && " You'll also lose access to this course's certificate."}
+            </div>
+            {unenrollError && (
+              <div style={{ fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>{unenrollError}</div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button className="ks-btn ks-btn-ghost" disabled={unenrolling} onClick={() => setUnenrollingCourse(null)}>Cancel</button>
+              <button
+                className="ks-btn"
+                style={{ background: "var(--coral)", color: "#fff", opacity: unenrolling ? 0.7 : 1 }}
+                disabled={unenrolling}
+                onClick={handleConfirmUnenroll}
+              >
+                {unenrolling ? "Unenrolling…" : "Unenroll"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
