@@ -11,6 +11,7 @@ import { Profile } from '../profiles/entities/profile.entity';
 import { Enrollment } from '../enrollments/entities/enrollment.entity';
 import { QuizQuestion } from '../quiz/entities/quiz-question.entity';
 import { QuizSubmission } from '../quiz/entities/quiz-submission.entity';
+import { LearningPath } from '../learning-paths/entities/learning-path.entity';
 import { RequireTrainerGuard } from '../auth/require-trainer.guard';
 import { RequireCourseOwnerGuard } from './require-course-owner.guard';
 import { ModulesModule } from '../modules/modules.module';
@@ -32,6 +33,12 @@ import { EnrollmentsModule } from '../enrollments/enrollments.module';
       Enrollment,
       QuizQuestion,
       QuizSubmission,
+      // #259 — registered directly here (not via LearningPathsModule,
+      // which doesn't export its service) so CourseAnalyticsService can
+      // read LearningPath rows for the trainer-overview rollup, same
+      // cross-module direct-registration pattern LearningPathsModule
+      // already uses for the Course entity above.
+      LearningPath,
     ]),
     ModulesModule,
     // #228 — reuses EnrollmentsService.getReviewsForCourse for

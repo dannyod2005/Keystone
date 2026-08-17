@@ -1385,6 +1385,22 @@ function KeystonePrototype() {
     return res.json();
   }
 
+  // #259 — the cross-course rollup that powers Trainer Studio's stats
+  // panel. Same trainer-only gating as fetchCourseAnalytics above, but not
+  // course-owner-gated (there's no single course id to check ownership
+  // against) — the backend scopes the counts to whatever this caller owns
+  // or shares via their own provider.
+  async function fetchTrainerOverview() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/trainer-overview`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
   async function fetchQuizForEdit(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz/edit`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
@@ -1707,6 +1723,7 @@ function KeystonePrototype() {
                     onSavePath={savePath}
                     onDeletePath={deletePath}
                     onFetchCourseAnalytics={fetchCourseAnalytics}
+                    onFetchOverview={fetchTrainerOverview}
                   />
                 </AppShell>
               </RequireTrainer>

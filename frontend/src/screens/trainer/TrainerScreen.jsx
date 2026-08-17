@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Pencil, Plus, Search, Trash2, X, BarChart3 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, X, BarChart3, BookOpen, Users, Milestone, UsersRound } from "lucide-react";
 
 import { CategoryDot } from "../../components/common/Primitives";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
@@ -24,6 +24,7 @@ export function TrainerScreen({
   onSavePath,
   onDeletePath,
   onFetchCourseAnalytics,
+  onFetchOverview,
 }) {
   const [editingId, setEditingId] = useState(null); // null = list view, "__new" = creating, else course id
   const [deletingCourse, setDeletingCourse] = useState(null); // course pending delete confirmation, or null
@@ -71,6 +72,28 @@ export function TrainerScreen({
     onFetchProfile().then((profile) => {
       if (!cancelled) setMyProfile(profile);
     });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // #259 — the stats-panel data for the "trainer home" overview. Same
+  // fetch-once-on-mount, cancelled-flag shape as myProfile above; failure
+  // just leaves the panel hidden (see the `overview &&` guard below) rather
+  // than blocking the rest of the screen, since Trainer Studio's actual
+  // CRUD tools underneath don't depend on it at all.
+  const [overview, setOverview] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    onFetchOverview()
+      .then((data) => {
+        if (!cancelled) setOverview(data);
+      })
+      .catch(() => {
+        // Silently leave `overview` null — see comment above.
+      });
     return () => {
       cancelled = true;
     };
@@ -223,6 +246,30 @@ export function TrainerScreen({
               : "Create or join a provider to share course edit access with your team."}
         </div>
       </div>
+
+      {/* #259 — trainer-home stats row, same "flex row of stat cards"
+          convention as DashboardScreen's In progress/Completed/Certificates
+          row. Hidden until the overview has loaded (see the effect above);
+          no loading placeholder here since the tab content below it is
+          usable immediately regardless. */}
+      {overview && (
+        <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
+          {[
+            { label: "Courses", value: overview.totalCourses, icon: BookOpen, tint: "var(--gold-tint)", fg: "var(--gold-dark)" },
+            { label: "Students", value: overview.totalStudents, icon: Users, tint: "var(--success-tint)", fg: "var(--success)" },
+            { label: "Learning paths", value: overview.totalPaths, icon: Milestone, tint: "var(--coral-tint)", fg: "var(--coral)" },
+            { label: "Team", value: overview.teamSize, icon: UsersRound, tint: "var(--gold-tint)", fg: "var(--gold-dark)" },
+          ].map((s) => (
+            <div key={s.label} className="ks-card" style={{ flex: 1, minWidth: 140, padding: 16 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: s.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+                <s.icon size={15} color={s.fg} />
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 500 }}>{s.value}</div>
+              <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 20 }}>
         <div className={`ks-tab ${tab === "courses" ? "active" : ""}`} onClick={() => setTab("courses")}>Courses</div>
