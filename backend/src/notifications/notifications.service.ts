@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -22,6 +23,8 @@ const NOTIFICATION_LIST_LIMIT = 50;
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     @InjectRepository(Notification)
     private readonly notificationsRepo: Repository<Notification>,
@@ -97,7 +100,13 @@ export class NotificationsService {
       take: NOTIFICATION_LIST_LIMIT,
     });
 
-    return notifications.map((n) => this.toResponseDto(n));
+    // #278 — a single row whose payload relation unexpectedly comes back
+    // null (see toResponseDto's comment) used to throw and take down this
+    // recipient's *entire* list. Drop just that row (toResponseDto returns
+    // null for it) rather than letting one bad row 500 everything else.
+    return notifications
+      .map((n) => this.toResponseDto(n))
+      .filter((dto): dto is NotificationResponseDto => dto !== null);
   }
 
   async markRead(
@@ -130,33 +139,61 @@ export class NotificationsService {
       await this.notificationsRepo.save(notification);
     }
 
-    return this.toResponseDto(notification);
+    // #278 — this notification is real and the read-state write above
+    // already succeeded; a malformed payload relation (see toResponseDto)
+    // shouldn't make the mark-read action itself fail. Fall back to the
+    // base fields only rather than throwing, same "still show something
+    // rather than nothing" reasoning as the badge_earned retired-definition
+    // fallback below.
+    return this.toResponseDto(notification) ?? this.toBase(notification);
   }
 
-  // #257 — branches on `type` rather than just checking which relation
-  // happens to be populated: the migration's CHK_notifications_type_payload
-  // constraint already guarantees the two never disagree, so `type` is
-  // the one honest source of truth to switch on. The non-null assertions
-  // below (forumPost!, course!, badgeKey!) are safe for exactly the same
-  // reason — Postgres itself won't allow a row where they'd be wrong.
-  private toResponseDto(n: Notification): NotificationResponseDto {
-    const base = {
+  private toBase(
+    n: Notification,
+  ): Pick<
+    NotificationResponseDto,
+    'id' | 'read' | 'createdAt' | 'type' | 'actorName'
+  > {
+    return {
       id: n.id,
       read: n.read,
       createdAt: n.createdAt,
       type: n.type,
-      actorName: n.actor.name || 'Keystone Learner',
+      actorName: n.actor?.name || 'Keystone Learner',
     };
+  }
+
+  // #257/#278 — originally branched on `type` alone, trusting the
+  // migration's CHK_notifications_type_payload constraint to guarantee the
+  // matching payload relation (forumPost/course/badgeKey) could never be
+  // null, and used non-null assertions on that basis. That constraint is a
+  // real guarantee for what the *database* will accept on insert, but it's
+  // not a guarantee about what a relation lookup resolves to at read time
+  // (e.g. data touched outside the app, an edge case in how a row was
+  // written) — and a single row's non-null assertion throwing here used to
+  // take down this recipient's entire notification list (see
+  // findAllForUser). Every branch below now checks its relation instead of
+  // asserting it, logs, and returns null rather than throwing when it's
+  // unexpectedly missing — findAllForUser drops that one row from the
+  // response instead of failing the whole request over it.
+  private toResponseDto(n: Notification): NotificationResponseDto | null {
+    const base = this.toBase(n);
 
     if (n.type === 'forum_reply') {
-      const course = n.forumPost!.module.course;
-      const content = n.forumPost!.content;
+      if (!n.forumPost?.module?.course) {
+        this.logger.warn(
+          `Notification ${n.id} is type "forum_reply" but its forumPost/module/course relation is missing — dropping it instead of failing the whole list.`,
+        );
+        return null;
+      }
+      const course = n.forumPost.module.course;
+      const content = n.forumPost.content;
       return {
         ...base,
         courseId: course.id,
         courseTitle: course.title,
-        moduleId: n.forumPost!.module.id,
-        moduleTitle: n.forumPost!.module.title,
+        moduleId: n.forumPost.module.id,
+        moduleTitle: n.forumPost.module.title,
         excerpt:
           content.length > EXCERPT_MAX_LENGTH
             ? `${content.slice(0, EXCERPT_MAX_LENGTH)}…`
@@ -165,23 +202,43 @@ export class NotificationsService {
     }
 
     if (n.type === 'badge_earned') {
-      const def = BADGE_DEFINITIONS_BY_KEY.get(n.badgeKey!);
+      const def = BADGE_DEFINITIONS_BY_KEY.get(n.badgeKey ?? '');
       return {
         ...base,
         // Same "definition retired since it was earned" fallback as
         // BadgesService.getBadgesForUser, just surfaced instead of
         // dropped — a notification (unlike the badges list) has no
-        // reasonable way to just omit itself.
+        // reasonable way to just omit itself. A missing/blank badgeKey
+        // simply won't match anything in the map, which is handled the
+        // same way as a retired definition — no separate null check
+        // needed here.
         badgeLabel: def?.label ?? 'New badge',
         badgeDescription: def?.description ?? '',
       };
     }
 
-    // course_completed
-    return {
-      ...base,
-      courseId: n.course!.id,
-      courseTitle: n.course!.title,
-    };
+    if (n.type === 'course_completed') {
+      if (!n.course) {
+        this.logger.warn(
+          `Notification ${n.id} is type "course_completed" but its course relation is missing — dropping it instead of failing the whole list.`,
+        );
+        return null;
+      }
+      return {
+        ...base,
+        courseId: n.course.id,
+        courseTitle: n.course.title,
+      };
+    }
+
+    // Unrecognized type value. Shouldn't be reachable given the DB CHECK
+    // constraint only allows the three types above, but this is exactly
+    // the "don't trust the constraint alone at read time" case the rest
+    // of this method now guards against — never crash the whole list over
+    // a row this code doesn't know how to render.
+    this.logger.warn(
+      `Notification ${n.id} has unrecognized type "${String(n.type)}" — dropping it instead of failing the whole list.`,
+    );
+    return null;
   }
 }
