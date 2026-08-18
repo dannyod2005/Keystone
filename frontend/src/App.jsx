@@ -67,6 +67,23 @@ function normalizeCourse(c) {
   return { ...c, rating: c.rating == null ? null : Number(c.rating) };
 }
 
+// #289 — plain fetch() has no timeout: if a connection hangs (e.g. the
+// backend dev server restarting mid-request, or any other half-open
+// socket that never gets a response) the returned Promise just never
+// settles, so .then/.catch/.finally never run and a loading flag gated
+// on this fetch stays true forever — no error, just an infinite spinner
+// that nothing but a full page reload can clear. This wraps fetch with
+// an AbortController so a hung request eventually rejects like a normal
+// failure instead of hanging indefinitely, which is what actually lets
+// the .catch/.finally below do their job.
+function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+    clearTimeout(timeoutId),
+  );
+}
+
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
 function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notifications, unreadCount, onOpenNotification }) {
   const location = useLocation();
@@ -209,6 +226,18 @@ function KeystonePrototype() {
   const [courses, setCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [enrolledLoading, setEnrolledLoading] = useState(true);
+  // #289 — courses/enrolled are the two fetches DashboardScreen's "My
+  // learning" loading state is gated on (loading={coursesLoading ||
+  // enrolledLoading}); errors on either previously left it stuck showing
+  // "Loading your learning…" forever with no way back except a full page
+  // reload. dashboardRetryTick is a shared "try again" trigger: bumping
+  // it re-runs both effects below without needing separate retry state
+  // per fetch, since the fix (a hung request, or a real failure) is the
+  // same either way — just re-request both.
+  const [coursesError, setCoursesError] = useState(false);
+  const [enrolledError, setEnrolledError] = useState(false);
+  const [dashboardRetryTick, setDashboardRetryTick] = useState(0);
+  const retryDashboard = () => setDashboardRetryTick((n) => n + 1);
   // #224 — learning paths follow the exact same public-list/private-
   // enrollment split as courses/enrolled above: `learningPaths` is the
   // public GET /learning-paths list (no auth), `pathEnrollments` is this
@@ -253,15 +282,19 @@ function KeystonePrototype() {
   const [leaderboardOptIn, setLeaderboardOptIn] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_URL}/courses`)
+    setCoursesError(false);
+    fetchWithTimeout(`${process.env.REACT_APP_API_URL}/courses`)
       .then((res) => {
         if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         return res.json();
       })
       .then((data) => setCourses(data.map(normalizeCourse)))
-      .catch((err) => console.error("Failed to load courses:", err.message))
+      .catch((err) => {
+        console.error("Failed to load courses:", err.message);
+        setCoursesError(true);
+      })
       .finally(() => setCoursesLoading(false));
-  }, []);
+  }, [dashboardRetryTick]);
   // Fetch the logged-in user's real enrollments (#19), replacing the old
   // ENROLLED_DEFAULT mock. Re-runs whenever login state changes; clears
   // back to [] on logout rather than leaving stale data from a previous
@@ -270,11 +303,13 @@ function KeystonePrototype() {
     if (!loggedIn || !session) {
       setEnrolled([]);
       setEnrolledLoading(false);
+      setEnrolledError(false);
       return;
     }
 
     setEnrolledLoading(true);
-    fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
+    setEnrolledError(false);
+    fetchWithTimeout(`${process.env.REACT_APP_API_URL}/enrollments`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
       .then((res) => {
@@ -297,9 +332,10 @@ function KeystonePrototype() {
       .catch((err) => {
         console.error("Failed to load enrollments:", err.message);
         setEnrolled([]);
+        setEnrolledError(true);
       })
       .finally(() => setEnrolledLoading(false));
-  }, [loggedIn, session]);
+  }, [loggedIn, session, dashboardRetryTick]);
 
   // #224 — public list of learning paths, same fetch-on-mount shape as
   // courses above.
@@ -1664,6 +1700,8 @@ function KeystonePrototype() {
                   goal={learnerGoal}
                   activitySummary={activitySummary}
                   loading={coursesLoading || enrolledLoading}
+                  error={coursesError || enrolledError}
+                  onRetry={retryDashboard}
                   calendarWeekOffset={calendarWeekOffset}
                   onPrevWeek={() => setCalendarWeekOffset((n) => n - 1)}
                   onNextWeek={() => setCalendarWeekOffset((n) => n + 1)}
