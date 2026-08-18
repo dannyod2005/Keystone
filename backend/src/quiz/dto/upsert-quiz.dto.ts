@@ -12,7 +12,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-class UpsertOptionDto {
+// #274 — exported (were module-private) so CreateModuleDto can reuse the
+// exact same shape/validation for quiz questions authored inline during
+// course creation, rather than duplicating this class.
+export class UpsertOptionDto {
   @IsOptional()
   @IsUUID()
   id?: string;
@@ -25,7 +28,7 @@ class UpsertOptionDto {
   isCorrect: boolean;
 }
 
-class UpsertQuestionDto {
+export class UpsertQuestionDto {
   @IsOptional()
   @IsUUID()
   id?: string;
