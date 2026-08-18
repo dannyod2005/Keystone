@@ -62,6 +62,9 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const [activeModule, setActiveModule] = useState(initialActiveModule);
   const [completedCount, setCompletedCount] = useState(progressDerivedModule);
   const [saving, setSaving] = useState(false);
+  // #282 — surfaces a save failure instead of the old silent
+  // console.error; see handleMarkComplete below.
+  const [markCompleteError, setMarkCompleteError] = useState(null);
 
   // #106 — star-rating prompt on the "Course complete" card. hoverRating
   // is just for the visual preview as the pointer moves over the stars;
@@ -266,20 +269,36 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
       )
     : null;
 
+  // #282 — previously advanced activeModule/completedCount (and, via
+  // #229's course-completion notification trigger, the badge/notification
+  // side effects that ride on the server's status transition) *before*
+  // onSaveProgress had actually succeeded, and a failure only ever hit
+  // console.error. That meant a learner could see "complete" on screen —
+  // and reload later to find it silently reverted, no error shown, no
+  // notification ever created, because the save never happened. Now the
+  // save has to succeed before any of that state moves, and a failure
+  // (including the pre-existing !enrollment/!onSaveProgress guard, which
+  // used to advance the UI without saving at all) shows a real message
+  // instead of failing invisibly.
   async function handleMarkComplete() {
     if (quizBlocksCompletion) return; // defense in depth — the button is already disabled for this
 
     const nextActiveModule = isLastModule ? modules.length : activeModule + 1;
-    setActiveModule(nextActiveModule);
-    setCompletedCount(nextActiveModule);
 
-    if (!enrollment || !onSaveProgress) return;
+    if (!enrollment || !onSaveProgress) {
+      setMarkCompleteError("Couldn't save your progress right now — please try again in a moment.");
+      return;
+    }
 
+    setMarkCompleteError(null);
     setSaving(true);
     try {
       await onSaveProgress(enrollment.id, nextActiveModule);
+      setActiveModule(nextActiveModule);
+      setCompletedCount(nextActiveModule);
     } catch (err) {
       console.error("Failed to save progress:", err.message);
+      setMarkCompleteError("Couldn't save your progress. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -843,9 +862,14 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
           )}
           </div>
 
+          {markCompleteError && (
+            <div style={{ fontSize: 12.5, color: "var(--coral)", marginTop: 20 }}>
+              {markCompleteError}
+            </div>
+          )}
           <button
             className="ks-btn ks-btn-gold"
-            style={{ marginTop: 20, opacity: (saving || quizBlocksCompletion) ? 0.7 : 1 }}
+            style={{ marginTop: markCompleteError ? 10 : 20, opacity: (saving || quizBlocksCompletion) ? 0.7 : 1 }}
             disabled={saving || quizBlocksCompletion}
             title={quizBlocksCompletion ? "Submit this module's quiz to continue" : undefined}
             onClick={handleMarkComplete}
