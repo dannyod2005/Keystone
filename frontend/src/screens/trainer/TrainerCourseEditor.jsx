@@ -191,11 +191,18 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
   // One-time pass on mount so an existing course's already-filled-in video
   // URLs get an estimate without the trainer needing to retype them.
   useEffect(() => {
+    // Captured once, at mount — but since durationTimersRef.current is
+    // never reassigned to a new object (only ever mutated in place via
+    // durationTimersRef.current[key] = ...), `timers` still points at the
+    // same, live object at cleanup time, with every timer scheduled in
+    // between included. Satisfies react-hooks/exhaustive-deps' "ref may
+    // have changed by cleanup time" warning without changing behavior.
+    const timers = durationTimersRef.current;
     draft.modules.forEach((m) => {
       if (m.videoUrl && m.videoUrl.trim()) scheduleDurationLookup(quizKey(m), m.videoUrl);
     });
     return () => {
-      Object.values(durationTimersRef.current).forEach(clearTimeout);
+      Object.values(timers).forEach(clearTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
