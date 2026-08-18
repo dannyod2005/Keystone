@@ -392,6 +392,27 @@ function KeystonePrototype() {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  // #292 — fire-and-forget refresh after an action that can create a new
+  // notification server-side (course completion, most concretely) — same
+  // "silently leave state stale on failure rather than surface it"
+  // reasoning as refetchActivitySummary below. Unlike the on-login effect
+  // above, a failure here does NOT reset notifications to [] — that reset
+  // only makes sense for a fresh mount with no known state yet; wiping an
+  // already-populated bell because one follow-up refetch hiccuped would
+  // be worse than just leaving it stale until the next natural refetch.
+  async function refetchNotifications() {
+    if (!session) return;
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/notifications`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      setNotifications(await res.json());
+    } catch (err) {
+      console.error("Failed to refresh notifications:", err.message);
+    }
+  }
+
   // #230 — this learner's saved-without-enrolling courses, for the
   // Catalogue card toggle and the Dashboard's Saved section. Same
   // on-login-change fetch/reset shape as badges/notifications above.
@@ -902,6 +923,12 @@ function KeystonePrototype() {
       ),
     );
     refetchActivitySummary();
+    // #292 — a save can be the one that pushes this enrollment to
+    // 'complete' server-side, which creates a course_completed
+    // notification (and possibly a badge_earned one) as a side effect.
+    // Refetching here is what makes that show up in the bell right away
+    // instead of only after the next login/reload.
+    refetchNotifications();
   }
 
   // #106 — same pattern as saveProgress: PATCH the enrollment, merge the
