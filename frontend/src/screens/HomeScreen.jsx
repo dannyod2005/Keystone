@@ -211,6 +211,15 @@ export function HomeScreen({
                   <ChevronRight size={15} color="var(--slate-light)" />
                 </div>
               ))
+            ) : complete.length > 0 ? (
+              // #290 — distinct from the "never started anything" case
+              // below: this learner has completed courses (visible in the
+              // stat row just above this card), so "you haven't started a
+              // course yet" would be actively wrong, not just unhelpful.
+              <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "10px 8px" }}>
+                Nothing in progress right now —{" "}
+                <span onClick={() => onGo("catalogue")} style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>browse the catalogue</span> to start something new.
+              </div>
             ) : (
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "10px 8px" }}>
                 You haven't started a course yet —{" "}
