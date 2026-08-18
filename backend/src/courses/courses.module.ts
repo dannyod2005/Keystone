@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CoursesController } from './courses.controller';
 import { CoursesService } from './courses.service';
 import { CourseAnalyticsService } from './course-analytics.service';
+import { VideoDurationService } from './video-duration.service';
 import { Course } from './entities/course.entity';
 import { CourseModule } from './entities/course-module.entity';
 import { CourseCredit } from './entities/course-credit.entity';
@@ -50,6 +51,7 @@ import { EnrollmentsModule } from '../enrollments/enrollments.module';
   providers: [
     CoursesService,
     CourseAnalyticsService,
+    VideoDurationService,
     RequireTrainerGuard,
     RequireCourseOwnerGuard,
   ],

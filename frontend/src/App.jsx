@@ -1430,6 +1430,22 @@ function KeystonePrototype() {
     return res.json();
   }
 
+  // #275 — course editor calls this per module as the trainer edits its
+  // video URL, to show a computed time estimate instead of requiring a
+  // manual guess. Never throws: an unsupported/unrecognized source, a
+  // missing server-side API key, and a network error are all represented
+  // the same way ({ supported: false }) by the backend, so the caller
+  // always has a value to fall back to rather than a rejected promise to
+  // catch.
+  async function fetchVideoDuration(url) {
+    const res = await fetch(
+      `${process.env.REACT_APP_API_URL}/courses/video-duration?url=${encodeURIComponent(url)}`,
+      { headers: { Authorization: `Bearer ${session.access_token}` } },
+    );
+    if (!res.ok) return { supported: false, seconds: null };
+    return res.json();
+  }
+
   function handleAuthSubmit(session) {
     setAuthMode(null);
     if (pendingCourse) {
@@ -1714,6 +1730,7 @@ function KeystonePrototype() {
                     onSaveQuiz={saveQuiz}
                     onFetchProvider={fetchMyProvider}
                     onFetchProfile={fetchMyProfile}
+                    onFetchVideoDuration={fetchVideoDuration}
                     onCreateProvider={createProvider}
                     onJoinProvider={joinProvider}
                     onRegenerateInviteCode={regenerateInviteCode}

@@ -21,6 +21,26 @@ function quizKey(m) {
   return m.id ?? m.localKey;
 }
 
+// #275 — rough, deliberately simple per-question time allowance added on
+// top of a module's real video length to produce a suggested module/course
+// time. Not meant to be precise (see the issue: "a rough per-question time
+// multiplier") — just a better starting default than a blank/guessed hours
+// figure. Easy to retune later without touching the rest of the estimate
+// logic.
+const SECONDS_PER_QUESTION = 45;
+
+// Debounce so a lookup isn't fired on every keystroke while a trainer is
+// still typing/pasting a video URL.
+const VIDEO_DURATION_DEBOUNCE_MS = 700;
+
+function formatMinutes(totalMinutes) {
+  const rounded = Math.max(1, Math.round(totalMinutes));
+  if (rounded < 60) return `${rounded}m`;
+  const h = Math.floor(rounded / 60);
+  const m = rounded % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
 function emptyCourseDraft() {
   return {
     title: "", provider: "", category: TRAINER_CATEGORIES[0], level: TRAINER_LEVELS[0],
@@ -72,7 +92,7 @@ function normalizeLoadedQuestion(q) {
   return { ...q, type, acceptableAnswers: [""] };
 }
 
-export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz, onFetchProvider, onFetchProfile }) {
+export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz, onFetchProvider, onFetchProfile, onFetchVideoDuration }) {
 
   const [quizState, setQuizState] = useState({}); // { [moduleId]: { expanded, loading, loaded, questions, saving, error } }
 
@@ -136,11 +156,93 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
 
   function set(field, v) { setDraft((d) => ({ ...d, [field]: v })); }
 
+  // #275 — { [quizKey(m)]: { status: "loading"|"done", forUrl, supported, seconds } }.
+  // Keyed the same way as quizState (real id once one exists, else the
+  // module's localKey) so a lookup started for a brand-new module keeps
+  // working after the course (and that module) is saved and re-keys by id
+  // on the next load. `forUrl` guards against a slow, now-stale response
+  // overwriting state after the trainer has since changed the field again.
+  const [videoDurations, setVideoDurations] = useState({});
+  const durationTimersRef = useRef({});
+
+  function scheduleDurationLookup(key, url) {
+    clearTimeout(durationTimersRef.current[key]);
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setVideoDurations((prev) => ({ ...prev, [key]: null }));
+      return;
+    }
+    setVideoDurations((prev) => ({ ...prev, [key]: { status: "loading", forUrl: trimmed } }));
+    durationTimersRef.current[key] = setTimeout(async () => {
+      let result;
+      try {
+        result = await onFetchVideoDuration(trimmed);
+      } catch {
+        result = { supported: false, seconds: null };
+      }
+      setVideoDurations((prev) =>
+        prev[key]?.forUrl === trimmed
+          ? { ...prev, [key]: { status: "done", forUrl: trimmed, ...result } }
+          : prev, // a newer edit has already superseded this lookup
+      );
+    }, VIDEO_DURATION_DEBOUNCE_MS);
+  }
+
+  // One-time pass on mount so an existing course's already-filled-in video
+  // URLs get an estimate without the trainer needing to retype them.
+  useEffect(() => {
+    // Captured once, at mount — but since durationTimersRef.current is
+    // never reassigned to a new object (only ever mutated in place via
+    // durationTimersRef.current[key] = ...), `timers` still points at the
+    // same, live object at cleanup time, with every timer scheduled in
+    // between included. Satisfies react-hooks/exhaustive-deps' "ref may
+    // have changed by cleanup time" warning without changing behavior.
+    const timers = durationTimersRef.current;
+    draft.modules.forEach((m) => {
+      if (m.videoUrl && m.videoUrl.trim()) scheduleDurationLookup(quizKey(m), m.videoUrl);
+    });
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // #275 — video length (when resolved) plus a flat per-question allowance
+  // for whatever quiz questions are currently loaded/authored for this
+  // module in quizState. For an existing course's module whose "Manage
+  // quiz" panel hasn't been opened this session, that count is 0 — an
+  // known, acceptable gap for a first pass (see the module comment on
+  // SECONDS_PER_QUESTION): the estimate simply improves once the trainer
+  // expands it, same as it does for a freshly authored one.
+  function moduleEstimate(m) {
+    const dur = videoDurations[quizKey(m)];
+    const videoSeconds = dur?.status === "done" && dur.supported ? dur.seconds : 0;
+    const questionCount = (quizState[quizKey(m)]?.questions ?? []).filter(
+      (q) => q.question.trim().length > 0,
+    ).length;
+    const quizSeconds = questionCount * SECONDS_PER_QUESTION;
+    return {
+      totalMinutes: (videoSeconds + quizSeconds) / 60,
+      hasVideoEstimate: videoSeconds > 0,
+      videoLookupStatus: dur?.status ?? null,
+      videoSupported: dur?.status === "done" ? dur.supported : null,
+      questionCount,
+    };
+  }
+
+  const moduleEstimates = draft.modules.map(moduleEstimate);
+  const totalEstimatedMinutes = moduleEstimates.reduce((sum, e) => sum + e.totalMinutes, 0);
+  const suggestedHours = totalEstimatedMinutes > 0 ? Math.max(1, Math.round(totalEstimatedMinutes / 60)) : 0;
+
   function setModule(i, field, v) {
     setDraft((d) => ({
       ...d,
       modules: d.modules.map((m, x) => (x === i ? { ...m, [field]: v } : m)),
     }));
+    if (field === "videoUrl") {
+      const m = draft.modules[i];
+      if (m) scheduleDurationLookup(quizKey(m), v);
+    }
   }
   function addModule() {
     setDraft((d) => ({ ...d, modules: [...d.modules, { title: "", videoUrl: "", localKey: newLocalKey() }] }));
@@ -549,6 +651,21 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
           <div style={field}>
             <label style={label}>Hours</label>
             <input style={rowInput} type="number" min={0} value={draft.hours} onChange={(e) => set("hours", e.target.value)} />
+            {/* #275 — additive suggestion, not a replacement: derived from
+                each module's video length + quiz question count below, but
+                the number field above stays manually editable either way
+                (e.g. for modules whose video source isn't YouTube). */}
+            {suggestedHours > 0 && Number(draft.hours) !== suggestedHours && (
+              <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 5 }}>
+                Estimated from modules: ~{suggestedHours}h ({formatMinutes(totalEstimatedMinutes)}).{" "}
+                <span
+                  onClick={() => set("hours", suggestedHours)}
+                  style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}
+                >
+                  Use estimate
+                </span>
+              </div>
+            )}
           </div>
           <div style={field}>
             <label style={label}>Accent color</label>
@@ -600,6 +717,7 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
         </div>
         {draft.modules.map((m, i) => {
           const qState = quizState[quizKey(m)];
+          const estimate = moduleEstimates[i];
           return (
             <div key={m.id ?? m.localKey ?? `new-${i}`} style={{ marginBottom: 10 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
@@ -608,6 +726,21 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                   <input style={{ ...rowInput, marginBottom: 6 }} value={m.title} onChange={(e) => setModule(i, "title", e.target.value)} placeholder="Module title" />
                   <input style={rowInput} value={m.videoUrl || ""} onChange={(e) => setModule(i, "videoUrl", e.target.value)}
                     placeholder="Video embed URL (e.g. https://www.youtube.com/embed/...)" />
+                  {/* #275 — computed time estimate for this module: video
+                      length (YouTube only, for now) plus a flat allowance
+                      per quiz question. Purely informational/additive — it
+                      only ever feeds the course-level "Use estimate"
+                      suggestion above, never overwrites anything here. */}
+                  {estimate.videoLookupStatus === "loading" && (
+                    <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 4 }}>Checking video length…</div>
+                  )}
+                  {estimate.videoLookupStatus === "done" && (
+                    <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 4 }}>
+                      {estimate.videoSupported
+                        ? `Estimated module time: ~${formatMinutes(estimate.totalMinutes)}${estimate.questionCount > 0 ? ` (video + ${estimate.questionCount} quiz Q${estimate.questionCount === 1 ? "" : "s"})` : " (video)"}`
+                        : "Video length unavailable for this source — enter course hours manually below."}
+                    </div>
+                  )}
                 </div>
                 {/* #258 — real button (was a bare clickable icon). */}
                 <button
