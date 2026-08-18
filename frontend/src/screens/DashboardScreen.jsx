@@ -7,7 +7,7 @@ import { getDisplayName, getFirstName } from "../lib/userDisplay";
 
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, pointsThisWeek: 0, dailyGoalPoints: 300, goalHitDays: 0, week: [] };
 
-export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, onUnenrol, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, calendarWeekOffset = 0, onPrevWeek, onNextWeek, leaderboardOptIn = false, onOpenLeaderboard }) {
+export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, onUnenrol, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, error = false, onRetry, calendarWeekOffset = 0, onPrevWeek, onNextWeek, leaderboardOptIn = false, onOpenLeaderboard }) {
   const firstName = getFirstName(getDisplayName(user));
   // #255 — course pending unenrol confirmation ({ enrollmentId, title,
   // isComplete }), or null. Same three-state shape (pending item + error +
@@ -118,6 +118,20 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
           {loading ? (
             <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
               Loading your learning…
+            </div>
+          ) : error ? (
+            // #289 — courses/enrolled failing (or just timing out — see
+            // fetchWithTimeout in App.jsx) used to leave this stuck on the
+            // "Loading…" branch above forever, since neither loading flag
+            // ever resolved. Now that they always resolve, a real failure
+            // lands here instead: same card shape, but with an explicit
+            // "something went wrong" message and a retry button rather
+            // than silently showing nothing or requiring a full reload.
+            <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
+              <div style={{ marginBottom: 14 }}>Couldn't load your learning — please try again.</div>
+              <button type="button" className="ks-btn ks-btn-gold" onClick={onRetry} style={{ cursor: "pointer" }}>
+                Try again
+              </button>
             </div>
           ) : (
           <>
