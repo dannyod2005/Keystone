@@ -51,14 +51,22 @@ export function AppTopbar({ title, onMenuClick, notifications = [], unreadCount 
     <div className="sticky top-0 z-20 md:static md:z-auto" style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 32px", borderBottom: "1px solid var(--line)", background: "var(--paper-2)" }}>
       {/* #258 — real button, same reasoning as AppSidebar's own close
           button right above it: a bare icon with onClick is invisible to
-          both keyboard and screen-reader users. */}
+          both keyboard and screen-reader users.
+          #283 — display used to live in the inline `style`, which (having
+          higher specificity than any non-!important class) always beat
+          the md:hidden below regardless of screen width, leaving this
+          visible on desktop too. Moving it into the className alongside
+          md:hidden keeps both display rules as Tailwind utilities, so
+          Tailwind's own mobile-first cascade order (md:hidden compiles
+          after the base utilities) decides which wins instead of the
+          inline style unconditionally overriding it. */}
       {onMenuClick && (
         <button
           type="button"
           aria-label="Open menu"
           onClick={onMenuClick}
-          className="cursor-pointer md:hidden"
-          style={{ background: "none", border: "none", padding: 0, display: "inline-flex", lineHeight: 0 }}
+          className="cursor-pointer inline-flex md:hidden"
+          style={{ background: "none", border: "none", padding: 0, lineHeight: 0 }}
         >
           <Menu size={22} color="var(--ink)" />
         </button>
