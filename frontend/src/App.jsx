@@ -1215,6 +1215,11 @@ function KeystonePrototype() {
 
     const result = await res.json();
     refetchActivitySummary();
+    // #291 — a perfect score can earn the perfect_quiz_score badge
+    // server-side, which creates a notification as a side effect. Same
+    // reasoning as saveProgress's refetch below: without this, the bell
+    // stays stale until some unrelated later refetch happens to fire.
+    refetchNotifications();
     return result;
   }
 
@@ -1261,6 +1266,11 @@ function KeystonePrototype() {
 
     const result = await res.json();
     refetchActivitySummary();
+    // #291 — a post/reply can create a notification server-side: the
+    // first-ever-post badge, or (for replies specifically) notifying the
+    // parent post's author. Same reasoning as submitQuiz/saveProgress —
+    // without this the bell doesn't update until an unrelated refetch.
+    refetchNotifications();
     return result;
   }
 
