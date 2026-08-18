@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Repository } from 'typeorm';
+import { EntityManager, In, IsNull, Repository } from 'typeorm';
 import { Course } from './entities/course.entity';
 import { CourseModule } from './entities/course-module.entity';
 import { CourseCredit } from './entities/course-credit.entity';
@@ -8,6 +12,9 @@ import { CourseFaq } from './entities/course-faq.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
+import { QuizQuestion } from '../quiz/entities/quiz-question.entity';
+import { QuizOption } from '../quiz/entities/quiz-option.entity';
+import { UpsertQuestionDto } from '../quiz/dto/upsert-quiz.dto';
 
 @Injectable()
 export class CoursesService {
@@ -74,34 +81,128 @@ export class CoursesService {
     // at creation time, not because anyone asked for it in the request.
     const owner = await this.profilesRepo.findOne({ where: { id: ownerId } });
 
-    const course = this.coursesRepo.create({
-      title: dto.title,
-      provider: dto.provider,
-      category: dto.category,
-      level: dto.level,
-      hours: dto.hours,
-      color: dto.color,
-      blurb: dto.blurb ?? null,
-      skills: dto.skills ?? [],
-      ownerId,
-      providerId: owner?.providerId ?? null,
-      modules: dto.modules.map((m, i) => ({
-        position: i,
-        title: m.title,
-        videoUrl: m.videoUrl ?? null,
-      })),
-      credits: (dto.credits ?? []).map((c, i) => ({
-        position: i,
-        line: c.line,
-      })),
-      faqs: (dto.faqs ?? []).map((f, i) => ({
-        position: i,
-        question: f.question,
-        answer: f.answer,
-      })),
-    });
+    // #274 — validate every inline quiz question up front, before
+    // touching the database at all, same fail-fast principle as
+    // ModulesService.upsertQuiz's equivalent check for the edit-mode
+    // quiz endpoint.
+    for (const m of dto.modules) {
+      for (const q of m.quizQuestions ?? []) {
+        this.validateQuizQuestion(q);
+      }
+    }
 
-    return this.coursesRepo.save(course);
+    // #274 — the whole create is one transaction: course, modules, and
+    // any inline quiz questions/options are all inserted together, so a
+    // trainer authoring quizzes in the "New course" flow (before any
+    // module has a real id) can never end up with a course that saved
+    // but left some quiz content out, or vice versa.
+    return this.coursesRepo.manager.transaction(async (manager) => {
+      const course = manager.create(Course, {
+        title: dto.title,
+        provider: dto.provider,
+        category: dto.category,
+        level: dto.level,
+        hours: dto.hours,
+        color: dto.color,
+        blurb: dto.blurb ?? null,
+        skills: dto.skills ?? [],
+        ownerId,
+        providerId: owner?.providerId ?? null,
+        modules: dto.modules.map((m, i) => ({
+          position: i,
+          title: m.title,
+          videoUrl: m.videoUrl ?? null,
+        })),
+        credits: (dto.credits ?? []).map((c, i) => ({
+          position: i,
+          line: c.line,
+        })),
+        faqs: (dto.faqs ?? []).map((f, i) => ({
+          position: i,
+          question: f.question,
+          answer: f.answer,
+        })),
+      });
+
+      const saved = await manager.save(Course, course);
+
+      // #274 — saved.modules is cascade-inserted from the same
+      // dto.modules.map(...) array above, in the same order, so each
+      // dto.modules[i] pairs positionally with the now-persisted
+      // saved.modules[i] — that's the real module row/id a trainer's
+      // inline quiz questions attach to.
+      for (const [i, m] of dto.modules.entries()) {
+        const questions = m.quizQuestions ?? [];
+        if (questions.length === 0) continue;
+
+        const moduleEntity = saved.modules[i];
+        await this.createQuizQuestions(manager, moduleEntity, questions);
+      }
+
+      return saved;
+    });
+  }
+
+  // #274 — same validation ModulesService.upsertQuiz applies to
+  // edit-mode quiz saves: an mcq question needs exactly one option
+  // marked correct, a short_answer question needs at least one
+  // acceptable answer.
+  private validateQuizQuestion(q: UpsertQuestionDto): void {
+    const type = q.type ?? 'mcq';
+    if (type === 'mcq') {
+      const correctCount = (q.options ?? []).filter((o) => o.isCorrect).length;
+      if (correctCount !== 1) {
+        throw new BadRequestException(
+          `Question "${q.question}" must have exactly one correct option (found ${correctCount})`,
+        );
+      }
+    } else if (!q.acceptableAnswers || q.acceptableAnswers.length === 0) {
+      throw new BadRequestException(
+        `Question "${q.question}" needs at least one acceptable answer`,
+      );
+    }
+  }
+
+  // #274 — pure create path (no existing rows to merge/delete-by-id the
+  // way ModulesService.upsertQuiz has to for an edit): every module here
+  // is brand new, so every question and option is simply inserted.
+  private async createQuizQuestions(
+    manager: EntityManager,
+    moduleEntity: CourseModule,
+    questions: UpsertQuestionDto[],
+  ): Promise<void> {
+    for (const [qIndex, q] of questions.entries()) {
+      const type = q.type ?? 'mcq';
+      const questionEntity = await manager.save(
+        QuizQuestion,
+        manager.create(QuizQuestion, {
+          module: moduleEntity,
+          question: q.question,
+          position: qIndex,
+          type,
+        }),
+      );
+
+      const optionRows =
+        type === 'mcq'
+          ? (q.options ?? []).map((o, oIndex) => ({
+              optionText: o.optionText,
+              isCorrect: o.isCorrect,
+              position: oIndex,
+            }))
+          : (q.acceptableAnswers ?? []).map((text, oIndex) => ({
+              optionText: text,
+              isCorrect: true,
+              position: oIndex,
+            }));
+
+      await manager.save(
+        QuizOption,
+        optionRows.map((o) =>
+          manager.create(QuizOption, { ...o, question: questionEntity }),
+        ),
+      );
+    }
   }
 
   async update(id: string, dto: UpdateCourseDto): Promise<Course> {
