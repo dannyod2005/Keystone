@@ -36,7 +36,15 @@ export function LearningPathDetailModal({ path, onClose, onEnrol, onGoToDashboar
             </div>
             <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 24, margin: 0 }}>{visiblePath.title}</h2>
           </div>
-          <X size={20} color="var(--slate)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={onClose} />
+          {/* #258 — real button (was a bare clickable icon). */}
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0, flexShrink: 0 }}
+          >
+            <X size={20} color="var(--slate)" />
+          </button>
         </div>
 
         <div style={{ padding: "20px 28px" }}>

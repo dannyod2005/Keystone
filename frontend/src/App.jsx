@@ -478,8 +478,22 @@ function KeystonePrototype() {
     }
   }
 
+  // #257 — click-through target now depends on type: forum_reply still
+  // deep-links straight to the forum tab of the module it's about;
+  // badge_earned has no course/module of its own, so it goes to
+  // Dashboard's badges card instead; course_completed goes to the course
+  // itself rather than the forum tab specifically, since there's no
+  // module in play.
   function handleOpenNotification(notification) {
     if (!notification.read) markNotificationRead(notification.id);
+    if (notification.type === "badge_earned") {
+      navigate("/dashboard");
+      return;
+    }
+    if (notification.type === "course_completed") {
+      navigate(`/learning/${notification.courseId}`);
+      return;
+    }
     navigate(`/learning/${notification.courseId}?module=${notification.moduleId}&tab=forum`);
   }
 
@@ -1371,6 +1385,22 @@ function KeystonePrototype() {
     return res.json();
   }
 
+  // #259 — the cross-course rollup that powers Trainer Studio's stats
+  // panel. Same trainer-only gating as fetchCourseAnalytics above, but not
+  // course-owner-gated (there's no single course id to check ownership
+  // against) — the backend scopes the counts to whatever this caller owns
+  // or shares via their own provider.
+  async function fetchTrainerOverview() {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/courses/trainer-overview`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
   async function fetchQuizForEdit(moduleId) {
     const res = await fetch(`${process.env.REACT_APP_API_URL}/modules/${moduleId}/quiz/edit`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
@@ -1397,6 +1427,22 @@ function KeystonePrototype() {
       throw new Error(message);
     }
 
+    return res.json();
+  }
+
+  // #275 — course editor calls this per module as the trainer edits its
+  // video URL, to show a computed time estimate instead of requiring a
+  // manual guess. Never throws: an unsupported/unrecognized source, a
+  // missing server-side API key, and a network error are all represented
+  // the same way ({ supported: false }) by the backend, so the caller
+  // always has a value to fall back to rather than a rejected promise to
+  // catch.
+  async function fetchVideoDuration(url) {
+    const res = await fetch(
+      `${process.env.REACT_APP_API_URL}/courses/video-duration?url=${encodeURIComponent(url)}`,
+      { headers: { Authorization: `Bearer ${session.access_token}` } },
+    );
+    if (!res.ok) return { supported: false, seconds: null };
     return res.json();
   }
 
@@ -1684,6 +1730,7 @@ function KeystonePrototype() {
                     onSaveQuiz={saveQuiz}
                     onFetchProvider={fetchMyProvider}
                     onFetchProfile={fetchMyProfile}
+                    onFetchVideoDuration={fetchVideoDuration}
                     onCreateProvider={createProvider}
                     onJoinProvider={joinProvider}
                     onRegenerateInviteCode={regenerateInviteCode}
@@ -1693,6 +1740,7 @@ function KeystonePrototype() {
                     onSavePath={savePath}
                     onDeletePath={deletePath}
                     onFetchCourseAnalytics={fetchCourseAnalytics}
+                    onFetchOverview={fetchTrainerOverview}
                   />
                 </AppShell>
               </RequireTrainer>

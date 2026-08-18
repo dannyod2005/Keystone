@@ -7,18 +7,25 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { CoursesService } from './courses.service';
 import { CourseAnalyticsService } from './course-analytics.service';
+import {
+  VideoDurationService,
+  VideoDurationLookup,
+} from './video-duration.service';
 import { ModulesService } from '../modules/modules.service';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { Course } from './entities/course.entity';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { CourseAnalyticsDto } from './dto/course-analytics.dto';
+import { TrainerOverviewDto } from './dto/trainer-overview.dto';
+import { VideoDurationQueryDto } from './dto/video-duration-query.dto';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 import { CourseReviewDto } from '../enrollments/dto/course-review.dto';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
@@ -34,6 +41,7 @@ export class CoursesController {
   constructor(
     private readonly coursesService: CoursesService,
     private readonly courseAnalyticsService: CourseAnalyticsService,
+    private readonly videoDurationService: VideoDurationService,
     private readonly modulesService: ModulesService,
     private readonly enrollmentsService: EnrollmentsService,
   ) {}
@@ -41,6 +49,32 @@ export class CoursesController {
   @Get()
   findAll(): Promise<Course[]> {
     return this.coursesService.findAll();
+  }
+
+  // #259 — a static segment, must be registered before the `:id` route
+  // below or Nest would match "trainer-overview" as a course id instead.
+  // Trainer + owner-of-something only: this exposes a headcount that's
+  // arguably fine either way, but there's no learner-facing reason to hit
+  // it, so it's gated the same as the per-course analytics route.
+  @Get('trainer-overview')
+  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
+  getTrainerOverview(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<TrainerOverviewDto> {
+    return this.courseAnalyticsService.getOverviewForOwner(req.user.id);
+  }
+
+  // #275 — a static segment, same reasoning as trainer-overview above:
+  // must be registered before the `:id` route or Nest would try to
+  // match "video-duration" as a course id. Trainer-only: this is a
+  // course-authoring helper for the create/edit form, not something a
+  // learner-facing view has any reason to call.
+  @Get('video-duration')
+  @UseGuards(SupabaseAuthGuard, RequireTrainerGuard)
+  getVideoDuration(
+    @Query() query: VideoDurationQueryDto,
+  ): Promise<VideoDurationLookup> {
+    return this.videoDurationService.lookup(query.url);
   }
 
   @Get(':id')

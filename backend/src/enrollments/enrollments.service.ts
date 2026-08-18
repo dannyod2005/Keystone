@@ -28,7 +28,17 @@ import {
 } from '../activity/activity.service';
 import { ModulesService } from '../modules/modules.service';
 import { BadgesService } from '../badges/badges.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
+
+// #260 — the shape computeCourseGrade below returns, extracted so the
+// grade/pass-tier calculation can be unit-tested directly without going
+// through generateCertificate's PDF rendering (real font files, pdf-lib
+// document creation, etc.) — see enrollments.service.spec.ts.
+export interface CourseGrade {
+  courseGradePct: number | null;
+  passed: boolean;
+}
 
 // #241/#254 — a course grade at/above this earns the "Passed"
 // certificate tier instead of the standard "Completed" one.
@@ -44,6 +54,36 @@ import { ModuleQuizResultDto } from '../quiz/dto/module-quiz-result.dto';
 // change the other.
 export const PASS_THRESHOLD_PCT = 70;
 
+// #260 — extracted from generateCertificate as a pure, standalone function
+// so it has direct unit-test coverage (see enrollments.service.spec.ts)
+// instead of only being reachable through the whole PDF-generation flow.
+// No behavior change: generateCertificate below calls this exact logic,
+// byte-for-byte what it inlined before this issue.
+//
+// #241 — same pooled, question-weighted course grade as #240's frontend
+// course grade and CourseAnalyticsService's per-learner quiz average: sum
+// correct answers over sum question counts across every taken-and-quizzed
+// module. null (not 0%) when this course has no taken-and-quizzed modules
+// — including a course with no quiz content anywhere — so it can never
+// accidentally clear the pass bar below.
+export function computeCourseGrade(
+  moduleResults: ModuleQuizResultDto[],
+): CourseGrade {
+  const gradedModules = moduleResults.filter((m) => m.hasQuiz && m.taken);
+  const courseGradePct =
+    gradedModules.length > 0
+      ? Math.round(
+          (gradedModules.reduce((sum, m) => sum + (m.score ?? 0), 0) /
+            gradedModules.reduce((sum, m) => sum + m.total, 0)) *
+            100,
+        )
+      : null;
+  const passed =
+    courseGradePct !== null && courseGradePct >= PASS_THRESHOLD_PCT;
+
+  return { courseGradePct, passed };
+}
+
 @Injectable()
 export class EnrollmentsService {
   constructor(
@@ -56,6 +96,7 @@ export class EnrollmentsService {
     private readonly activityService: ActivityService,
     private readonly modulesService: ModulesService,
     private readonly badgesService: BadgesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(userId: string, dto: CreateEnrollmentDto): Promise<Enrollment> {
@@ -237,6 +278,18 @@ export class EnrollmentsService {
       await this.badgesService.evaluateCourseCompletion(
         userId,
         completedCourseCount,
+      );
+
+      // #257 — same in-progress -> complete transition guard as the badge
+      // check just above, so this fires exactly once per course, not on
+      // every subsequent no-op re-save of an already-complete enrollment.
+      // saved.user/saved.course are the same already-loaded relations the
+      // rest of this method uses (see the findOne above and the comment
+      // on the toResponseDto call at the end of this method) — no extra
+      // query needed to notify.
+      await this.notificationsService.createForCourseCompletion(
+        saved.user,
+        saved.course,
       );
     }
 
@@ -426,31 +479,16 @@ export class EnrollmentsService {
       day: 'numeric',
     });
 
-    // #241 — same pooled, question-weighted course grade as #240's
-    // frontend course grade and CourseAnalyticsService's per-learner
-    // quiz average: sum correct answers over sum question counts across
-    // every taken-and-quizzed module. Reuses
-    // ModulesService.getQuizResultsForCourse (already injected here for
-    // #205's quiz-completion check) rather than a third calculation of
-    // the same thing. null (not 0%) when this course has no
-    // taken-and-quizzed modules — including a course with no quiz
-    // content anywhere — so it can never accidentally clear the pass
-    // bar below.
+    // #241/#260 — reuses ModulesService.getQuizResultsForCourse (already
+    // injected here for #205's quiz-completion check) rather than a third
+    // calculation of the same thing; the pooled grade/pass-tier math
+    // itself lives in computeCourseGrade above, where it's directly
+    // unit-tested.
     const moduleResults = await this.modulesService.getQuizResultsForCourse(
       userId,
       enrollment.course.id,
     );
-    const gradedModules = moduleResults.filter((m) => m.hasQuiz && m.taken);
-    const courseGradePct =
-      gradedModules.length > 0
-        ? Math.round(
-            (gradedModules.reduce((sum, m) => sum + (m.score ?? 0), 0) /
-              gradedModules.reduce((sum, m) => sum + m.total, 0)) *
-              100,
-          )
-        : null;
-    const passed =
-      courseGradePct !== null && courseGradePct >= PASS_THRESHOLD_PCT;
+    const { courseGradePct, passed } = computeCourseGrade(moduleResults);
 
     const pdfDoc = await PDFDocument.create();
 

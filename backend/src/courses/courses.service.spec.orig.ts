@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { In, Repository } from 'typeorm';
 import { CoursesService } from './courses.service';
 import { Course } from './entities/course.entity';
@@ -10,27 +10,14 @@ import { CourseFaq } from './entities/course-faq.entity';
 import { Profile } from '../profiles/entities/profile.entity';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
-import { QuizQuestion } from '../quiz/entities/quiz-question.entity';
-import { QuizOption } from '../quiz/entities/quiz-option.entity';
 
 describe('CoursesService', () => {
   let service: CoursesService;
   let repo: Repository<Course>;
 
-  // #274 — default implementations mirror what TypeORM's real
-  // EntityManager.create/save do closely enough for these tests:
-  // create() just returns the fields object as-is, save() resolves with
-  // whatever entity it was given (mutated in place, same reference) —
-  // simpler than special-casing a return value per call site/test, and
-  // it's what lets create()'s `saved.modules[i]` (used to attach inline
-  // quiz questions to the right module) resolve to a real object instead
-  // of undefined.
   const mockManager = {
     delete: jest.fn(),
-    create: jest.fn((_entityClass: unknown, fields: unknown) => fields),
-    save: jest.fn((_entityClass: unknown, entity: unknown) =>
-      Promise.resolve(entity),
-    ),
+    save: jest.fn(),
   };
 
   const mockRepo = {
@@ -101,14 +88,7 @@ describe('CoursesService', () => {
   });
 
   describe('create', () => {
-    beforeEach(() => {
-      mockProfilesRepo.findOne.mockResolvedValue({
-        id: 'owner-1',
-        providerId: null,
-      });
-    });
-
-    it('builds a course with positioned modules/credits/faqs and saves it inside a transaction', async () => {
+    it('builds a course with positioned modules/credits/faqs and saves it', async () => {
       const dto: CreateCourseDto = {
         title: 'New Course',
         provider: 'Provider',
@@ -121,11 +101,17 @@ describe('CoursesService', () => {
         faqs: [{ question: 'Q1', answer: 'A1' }],
       };
 
+      const builtCourse = { title: dto.title } as Course;
+      mockRepo.create.mockReturnValue(builtCourse);
+      mockRepo.save.mockResolvedValue({ ...builtCourse, id: 'new-id' });
+      mockProfilesRepo.findOne.mockResolvedValue({
+        id: 'owner-1',
+        providerId: null,
+      });
+
       await service.create(dto, 'owner-1');
 
-      expect(repo.manager.transaction).toHaveBeenCalledTimes(1);
-      expect(mockManager.create).toHaveBeenCalledWith(
-        Course,
+      expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'New Course',
           ownerId: 'owner-1',
@@ -138,10 +124,7 @@ describe('CoursesService', () => {
           faqs: [{ position: 0, question: 'Q1', answer: 'A1' }],
         }),
       );
-      expect(mockManager.save).toHaveBeenCalledWith(
-        Course,
-        expect.objectContaining({ title: 'New Course' }),
-      );
+      expect(repo.save).toHaveBeenCalledWith(builtCourse);
     });
 
     it("stamps the course with the owner's providerId when they belong to one", async () => {
@@ -155,6 +138,9 @@ describe('CoursesService', () => {
         modules: [{ title: 'Module One' }],
       };
 
+      const builtCourse = { title: dto.title } as Course;
+      mockRepo.create.mockReturnValue(builtCourse);
+      mockRepo.save.mockResolvedValue({ ...builtCourse, id: 'new-id' });
       mockProfilesRepo.findOne.mockResolvedValue({
         id: 'owner-2',
         providerId: 'provider-1',
@@ -162,160 +148,12 @@ describe('CoursesService', () => {
 
       await service.create(dto, 'owner-2');
 
-      expect(mockManager.create).toHaveBeenCalledWith(
-        Course,
+      expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           ownerId: 'owner-2',
           providerId: 'provider-1',
         }),
       );
-    });
-
-    // #274
-    describe('inline quiz questions', () => {
-      it('creates quiz questions and options against the real, post-save module row', async () => {
-        const dto: CreateCourseDto = {
-          title: 'Course With Quiz',
-          provider: 'Provider',
-          category: 'Technical',
-          level: 'Beginner',
-          hours: 5,
-          color: 'gold',
-          modules: [
-            {
-              title: 'Module One',
-              quizQuestions: [
-                {
-                  question: 'What is 2+2?',
-                  type: 'mcq',
-                  options: [
-                    { optionText: '4', isCorrect: true },
-                    { optionText: '5', isCorrect: false },
-                  ],
-                },
-                {
-                  question: 'Capital of France?',
-                  type: 'short_answer',
-                  acceptableAnswers: ['Paris', 'paris'],
-                },
-              ],
-            },
-          ],
-        };
-
-        await service.create(dto, 'owner-1');
-
-        expect(mockManager.create).toHaveBeenCalledWith(
-          QuizQuestion,
-          expect.objectContaining({
-            question: 'What is 2+2?',
-            type: 'mcq',
-            position: 0,
-            module: expect.objectContaining({ title: 'Module One' }),
-          }),
-        );
-        expect(mockManager.save).toHaveBeenCalledWith(
-          QuizOption,
-          expect.arrayContaining([
-            expect.objectContaining({ optionText: '4', isCorrect: true }),
-            expect.objectContaining({ optionText: '5', isCorrect: false }),
-          ]),
-        );
-
-        expect(mockManager.create).toHaveBeenCalledWith(
-          QuizQuestion,
-          expect.objectContaining({
-            question: 'Capital of France?',
-            type: 'short_answer',
-            position: 1,
-          }),
-        );
-        expect(mockManager.save).toHaveBeenCalledWith(
-          QuizOption,
-          expect.arrayContaining([
-            expect.objectContaining({ optionText: 'Paris', isCorrect: true }),
-            expect.objectContaining({ optionText: 'paris', isCorrect: true }),
-          ]),
-        );
-      });
-
-      it('does not touch quiz tables for a module with no quizQuestions', async () => {
-        const dto: CreateCourseDto = {
-          title: 'Plain Course',
-          provider: 'Provider',
-          category: 'Technical',
-          level: 'Beginner',
-          hours: 5,
-          color: 'gold',
-          modules: [{ title: 'Module One' }],
-        };
-
-        await service.create(dto, 'owner-1');
-
-        expect(mockManager.create).not.toHaveBeenCalledWith(
-          QuizQuestion,
-          expect.anything(),
-        );
-      });
-
-      it('throws BadRequestException, before writing anything, when an mcq question lacks exactly one correct option', async () => {
-        const dto: CreateCourseDto = {
-          title: 'Bad Quiz Course',
-          provider: 'Provider',
-          category: 'Technical',
-          level: 'Beginner',
-          hours: 5,
-          color: 'gold',
-          modules: [
-            {
-              title: 'Module One',
-              quizQuestions: [
-                {
-                  question: 'No correct answer marked',
-                  type: 'mcq',
-                  options: [
-                    { optionText: 'A', isCorrect: false },
-                    { optionText: 'B', isCorrect: false },
-                  ],
-                },
-              ],
-            },
-          ],
-        };
-
-        await expect(service.create(dto, 'owner-1')).rejects.toThrow(
-          BadRequestException,
-        );
-        expect(repo.manager.transaction).not.toHaveBeenCalled();
-      });
-
-      it('throws BadRequestException when a short_answer question has no acceptable answers', async () => {
-        const dto: CreateCourseDto = {
-          title: 'Bad Quiz Course',
-          provider: 'Provider',
-          category: 'Technical',
-          level: 'Beginner',
-          hours: 5,
-          color: 'gold',
-          modules: [
-            {
-              title: 'Module One',
-              quizQuestions: [
-                {
-                  question: 'No acceptable answers',
-                  type: 'short_answer',
-                  acceptableAnswers: [],
-                },
-              ],
-            },
-          ],
-        };
-
-        await expect(service.create(dto, 'owner-1')).rejects.toThrow(
-          BadRequestException,
-        );
-        expect(repo.manager.transaction).not.toHaveBeenCalled();
-      });
     });
   });
 

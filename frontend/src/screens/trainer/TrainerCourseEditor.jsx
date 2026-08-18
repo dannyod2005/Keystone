@@ -5,13 +5,49 @@ const TRAINER_CATEGORIES = ["Technical", "Business", "Leadership"];
 const TRAINER_LEVELS = ["Beginner", "Intermediate", "Advanced"];
 const TRAINER_COLORS = ["ink", "gold", "success", "coral"];
 
+// #274 — a brand-new module has no real id until the course itself is
+// first saved, but the quiz editor needs *some* stable key to keep its
+// per-module state (expanded/questions/etc.) indexed by across
+// re-renders and add/remove of other modules. A client-only localKey
+// fills that role until a real id exists; quizKey() below picks whichever
+// one applies. Never sent to the backend — only id/title/videoUrl/
+// quizQuestions are picked out of a module when building the save
+// payload (see handleSave).
+function newLocalKey() {
+  return `local-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+}
+
+function quizKey(m) {
+  return m.id ?? m.localKey;
+}
+
+// #275 — rough, deliberately simple per-question time allowance added on
+// top of a module's real video length to produce a suggested module/course
+// time. Not meant to be precise (see the issue: "a rough per-question time
+// multiplier") — just a better starting default than a blank/guessed hours
+// figure. Easy to retune later without touching the rest of the estimate
+// logic.
+const SECONDS_PER_QUESTION = 45;
+
+// Debounce so a lookup isn't fired on every keystroke while a trainer is
+// still typing/pasting a video URL.
+const VIDEO_DURATION_DEBOUNCE_MS = 700;
+
+function formatMinutes(totalMinutes) {
+  const rounded = Math.max(1, Math.round(totalMinutes));
+  if (rounded < 60) return `${rounded}m`;
+  const h = Math.floor(rounded / 60);
+  const m = rounded % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
 function emptyCourseDraft() {
   return {
     title: "", provider: "", category: TRAINER_CATEGORIES[0], level: TRAINER_LEVELS[0],
     hours: 4, color: TRAINER_COLORS[0],
     blurb: "",
     skills: [],
-    modules: [{ title: "", videoUrl: "" }],
+    modules: [{ title: "", videoUrl: "", localKey: newLocalKey() }],
     credits: [{ line: "" }],
     faqs: [{ question: "", answer: "" }],
   };
@@ -56,7 +92,7 @@ function normalizeLoadedQuestion(q) {
   return { ...q, type, acceptableAnswers: [""] };
 }
 
-export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz, onFetchProvider, onFetchProfile }) {
+export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz, onFetchProvider, onFetchProfile, onFetchVideoDuration }) {
 
   const [quizState, setQuizState] = useState({}); // { [moduleId]: { expanded, loading, loaded, questions, saving, error } }
 
@@ -120,14 +156,96 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
 
   function set(field, v) { setDraft((d) => ({ ...d, [field]: v })); }
 
+  // #275 — { [quizKey(m)]: { status: "loading"|"done", forUrl, supported, seconds } }.
+  // Keyed the same way as quizState (real id once one exists, else the
+  // module's localKey) so a lookup started for a brand-new module keeps
+  // working after the course (and that module) is saved and re-keys by id
+  // on the next load. `forUrl` guards against a slow, now-stale response
+  // overwriting state after the trainer has since changed the field again.
+  const [videoDurations, setVideoDurations] = useState({});
+  const durationTimersRef = useRef({});
+
+  function scheduleDurationLookup(key, url) {
+    clearTimeout(durationTimersRef.current[key]);
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setVideoDurations((prev) => ({ ...prev, [key]: null }));
+      return;
+    }
+    setVideoDurations((prev) => ({ ...prev, [key]: { status: "loading", forUrl: trimmed } }));
+    durationTimersRef.current[key] = setTimeout(async () => {
+      let result;
+      try {
+        result = await onFetchVideoDuration(trimmed);
+      } catch {
+        result = { supported: false, seconds: null };
+      }
+      setVideoDurations((prev) =>
+        prev[key]?.forUrl === trimmed
+          ? { ...prev, [key]: { status: "done", forUrl: trimmed, ...result } }
+          : prev, // a newer edit has already superseded this lookup
+      );
+    }, VIDEO_DURATION_DEBOUNCE_MS);
+  }
+
+  // One-time pass on mount so an existing course's already-filled-in video
+  // URLs get an estimate without the trainer needing to retype them.
+  useEffect(() => {
+    // Captured once, at mount — but since durationTimersRef.current is
+    // never reassigned to a new object (only ever mutated in place via
+    // durationTimersRef.current[key] = ...), `timers` still points at the
+    // same, live object at cleanup time, with every timer scheduled in
+    // between included. Satisfies react-hooks/exhaustive-deps' "ref may
+    // have changed by cleanup time" warning without changing behavior.
+    const timers = durationTimersRef.current;
+    draft.modules.forEach((m) => {
+      if (m.videoUrl && m.videoUrl.trim()) scheduleDurationLookup(quizKey(m), m.videoUrl);
+    });
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // #275 — video length (when resolved) plus a flat per-question allowance
+  // for whatever quiz questions are currently loaded/authored for this
+  // module in quizState. For an existing course's module whose "Manage
+  // quiz" panel hasn't been opened this session, that count is 0 — an
+  // known, acceptable gap for a first pass (see the module comment on
+  // SECONDS_PER_QUESTION): the estimate simply improves once the trainer
+  // expands it, same as it does for a freshly authored one.
+  function moduleEstimate(m) {
+    const dur = videoDurations[quizKey(m)];
+    const videoSeconds = dur?.status === "done" && dur.supported ? dur.seconds : 0;
+    const questionCount = (quizState[quizKey(m)]?.questions ?? []).filter(
+      (q) => q.question.trim().length > 0,
+    ).length;
+    const quizSeconds = questionCount * SECONDS_PER_QUESTION;
+    return {
+      totalMinutes: (videoSeconds + quizSeconds) / 60,
+      hasVideoEstimate: videoSeconds > 0,
+      videoLookupStatus: dur?.status ?? null,
+      videoSupported: dur?.status === "done" ? dur.supported : null,
+      questionCount,
+    };
+  }
+
+  const moduleEstimates = draft.modules.map(moduleEstimate);
+  const totalEstimatedMinutes = moduleEstimates.reduce((sum, e) => sum + e.totalMinutes, 0);
+  const suggestedHours = totalEstimatedMinutes > 0 ? Math.max(1, Math.round(totalEstimatedMinutes / 60)) : 0;
+
   function setModule(i, field, v) {
     setDraft((d) => ({
       ...d,
       modules: d.modules.map((m, x) => (x === i ? { ...m, [field]: v } : m)),
     }));
+    if (field === "videoUrl") {
+      const m = draft.modules[i];
+      if (m) scheduleDurationLookup(quizKey(m), v);
+    }
   }
   function addModule() {
-    setDraft((d) => ({ ...d, modules: [...d.modules, { title: "", videoUrl: "" }] }));
+    setDraft((d) => ({ ...d, modules: [...d.modules, { title: "", videoUrl: "", localKey: newLocalKey() }] }));
   }
   function removeModule(i) {
     setDraft((d) => ({ ...d, modules: d.modules.filter((_, x) => x !== i) }));
@@ -174,28 +292,49 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
     }
   }
 
-  /* ---------- Quiz management ---------- */
+  /* ---------- Quiz management ----------
+   * quizState is keyed by quizKey(m) — a module's real id once it has
+   * one (always true in edit mode), or its client-only localKey while
+   * authoring a brand-new course (#274). The two cases only diverge in
+   * toggleQuiz (whether there's anything to fetch) and handleSaveQuiz
+   * (whether there's a real module to PUT to yet) below; every other
+   * question/option mutator here is agnostic to which kind of key it's
+   * called with.
+   */
 
-  async function toggleQuiz(moduleId) {
-    const current = quizState[moduleId];
+  async function toggleQuiz(m) {
+    const key = quizKey(m);
+    const current = quizState[key];
     if (current?.expanded) {
-      setQuizState((prev) => ({ ...prev, [moduleId]: { ...prev[moduleId], expanded: false } }));
+      setQuizState((prev) => ({ ...prev, [key]: { ...prev[key], expanded: false } }));
       return;
     }
 
     setQuizState((prev) => ({
       ...prev,
-      [moduleId]: { ...prev[moduleId], expanded: true, loading: !prev[moduleId]?.loaded },
+      [key]: { ...prev[key], expanded: true, loading: !prev[key]?.loaded && !!m.id },
     }));
 
-    if (current?.loaded) return; // already fetched once, just re-showing
+    if (current?.loaded) return; // already fetched/initialized once, just re-showing
 
-    try {
-      const questions = await onFetchQuizForEdit(moduleId);
+    // #274 — a module with no real id yet (new-course flow, not saved)
+    // has no quiz to fetch from the server — it's authored fresh, right
+    // here, and carried along in quizState until the course itself is
+    // saved (see handleSave).
+    if (!m.id) {
       setQuizState((prev) => ({
         ...prev,
-        [moduleId]: {
-          ...prev[moduleId],
+        [key]: { ...prev[key], loading: false, loaded: true, questions: [emptyQuestion()], error: null },
+      }));
+      return;
+    }
+
+    try {
+      const questions = await onFetchQuizForEdit(m.id);
+      setQuizState((prev) => ({
+        ...prev,
+        [key]: {
+          ...prev[key],
           loading: false,
           loaded: true,
           questions: questions.length > 0 ? questions.map(normalizeLoadedQuestion) : [emptyQuestion()],
@@ -205,7 +344,7 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
     } catch (err) {
       setQuizState((prev) => ({
         ...prev,
-        [moduleId]: { ...prev[moduleId], loading: false, error: err.message },
+        [key]: { ...prev[key], loading: false, error: err.message },
       }));
     }
   }
@@ -309,11 +448,25 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
     return null;
   }
 
-  async function handleSaveQuiz(moduleId) {
-    const questions = quizState[moduleId]?.questions ?? [];
+  async function handleSaveQuiz(m) {
+    const key = quizKey(m);
+    const questions = quizState[key]?.questions ?? [];
     const validationError = quizValidationError(questions);
     if (validationError) {
-      setQuizState((prev) => ({ ...prev, [moduleId]: { ...prev[moduleId], error: validationError } }));
+      setQuizState((prev) => ({ ...prev, [key]: { ...prev[key], error: validationError } }));
+      return;
+    }
+
+    // #274 — a module with no real id yet (new-course flow) has nothing
+    // to PUT to: there's no dedicated quiz endpoint to call until the
+    // module exists. Just validate and mark it saved-locally; the actual
+    // persistence happens atomically with the rest of the course in
+    // handleSave, which reads straight out of quizState.
+    if (!m.id) {
+      setQuizState((prev) => ({
+        ...prev,
+        [key]: { ...prev[key], error: null, savedLocally: true },
+      }));
       return;
     }
 
@@ -336,31 +489,31 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
 
     // Claim this as the latest request for this module, synchronously —
     // any earlier in-flight request for the same module is now stale.
-    const mySequence = (saveSequenceRef.current[moduleId] ?? 0) + 1;
-    saveSequenceRef.current[moduleId] = mySequence;
+    const mySequence = (saveSequenceRef.current[key] ?? 0) + 1;
+    saveSequenceRef.current[key] = mySequence;
 
-    setQuizState((prev) => ({ ...prev, [moduleId]: { ...prev[moduleId], saving: true, error: null } }));
+    setQuizState((prev) => ({ ...prev, [key]: { ...prev[key], saving: true, error: null } }));
     try {
-      const saved = await onSaveQuiz(moduleId, payload);
+      const saved = await onSaveQuiz(m.id, payload);
 
       // If a newer request has started since this one began, this
       // response is stale — discard it rather than overwrite fresher
       // (or in-flight) state.
-      if (saveSequenceRef.current[moduleId] !== mySequence) return;
+      if (saveSequenceRef.current[key] !== mySequence) return;
 
       setQuizState((prev) => ({
         ...prev,
-        [moduleId]: {
-          ...prev[moduleId],
+        [key]: {
+          ...prev[key],
           saving: false,
           questions: saved.length > 0 ? saved.map(normalizeLoadedQuestion) : [emptyQuestion()],
         },
       }));
     } catch (err) {
-      if (saveSequenceRef.current[moduleId] !== mySequence) return;
+      if (saveSequenceRef.current[key] !== mySequence) return;
       setQuizState((prev) => ({
         ...prev,
-        [moduleId]: { ...prev[moduleId], saving: false, error: err.message },
+        [key]: { ...prev[key], saving: false, error: err.message },
       }));
     }
   }
@@ -375,6 +528,25 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
   async function handleSave() {
     if (!canSave) return;
 
+    // #274 — inline quiz questions authored before the course's first
+    // save (new-course flow only; an existing course's quiz continues to
+    // go through the dedicated PUT .../quiz endpoint, untouched here).
+    // Validate every module's buffered questions up front so a bad quiz
+    // blocks the whole save with a clear message, rather than the
+    // backend's own validation rejecting the request after the fact.
+    if (!course) {
+      for (const m of draft.modules) {
+        if (m.title.trim().length === 0) continue;
+        const qs = (quizState[quizKey(m)]?.questions ?? []).filter((q) => q.question.trim().length > 0);
+        if (qs.length === 0) continue;
+        const validationError = quizValidationError(qs);
+        if (validationError) {
+          setSaveError(`"${m.title}" quiz: ${validationError}`);
+          return;
+        }
+      }
+    }
+
     const payload = {
       title: draft.title,
       provider: draft.provider,
@@ -386,11 +558,27 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       skills: draft.skills,
       modules: draft.modules
         .filter((m) => m.title.trim().length > 0)
-        .map((m) => ({
-          ...(m.id ? { id: m.id } : {}),
-          title: m.title,
-          videoUrl: m.videoUrl || null,
-        })),
+        .map((m) => {
+          const qs = !course
+            ? (quizState[quizKey(m)]?.questions ?? []).filter((q) => q.question.trim().length > 0)
+            : [];
+          return {
+            ...(m.id ? { id: m.id } : {}),
+            title: m.title,
+            videoUrl: m.videoUrl || null,
+            ...(qs.length > 0
+              ? {
+                  quizQuestions: qs.map((q) => ({
+                    question: q.question,
+                    type: q.type,
+                    ...(q.type === "short_answer"
+                      ? { acceptableAnswers: q.acceptableAnswers.map((a) => a.trim()).filter((a) => a.length > 0) }
+                      : { options: q.options.map((o) => ({ optionText: o.optionText, isCorrect: o.isCorrect })) }),
+                  })),
+                }
+              : {}),
+          };
+        }),
       credits: draft.credits
         .filter((c) => c.line.trim().length > 0)
         .map((c) => ({ ...(c.id ? { id: c.id } : {}), line: c.line })),
@@ -463,6 +651,21 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
           <div style={field}>
             <label style={label}>Hours</label>
             <input style={rowInput} type="number" min={0} value={draft.hours} onChange={(e) => set("hours", e.target.value)} />
+            {/* #275 — additive suggestion, not a replacement: derived from
+                each module's video length + quiz question count below, but
+                the number field above stays manually editable either way
+                (e.g. for modules whose video source isn't YouTube). */}
+            {suggestedHours > 0 && Number(draft.hours) !== suggestedHours && (
+              <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 5 }}>
+                Estimated from modules: ~{suggestedHours}h ({formatMinutes(totalEstimatedMinutes)}).{" "}
+                <span
+                  onClick={() => set("hours", suggestedHours)}
+                  style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}
+                >
+                  Use estimate
+                </span>
+              </div>
+            )}
           </div>
           <div style={field}>
             <label style={label}>Accent color</label>
@@ -484,7 +687,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                 style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper-2)", border: "1px solid var(--line)", borderRadius: 999, padding: "4px 10px" }}
               >
                 {s}
-                <X size={12} style={{ cursor: "pointer" }} onClick={() => removeSkill(i)} />
+                {/* #258 — real button (was a bare clickable icon). */}
+                <button
+                  type="button"
+                  aria-label={`Remove skill ${s}`}
+                  onClick={() => removeSkill(i)}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+                >
+                  <X size={12} />
+                </button>
               </span>
             ))}
           </div>
@@ -505,130 +716,177 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
           <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Modules &amp; video</span>
         </div>
         {draft.modules.map((m, i) => {
-          const qState = m.id ? quizState[m.id] : null;
+          const qState = quizState[quizKey(m)];
+          const estimate = moduleEstimates[i];
           return (
-            <div key={m.id ?? `new-${i}`} style={{ marginBottom: 10 }}>
+            <div key={m.id ?? m.localKey ?? `new-${i}`} style={{ marginBottom: 10 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--slate-light)", width: 20, marginTop: 9 }}>{String(i + 1).padStart(2, "0")}</span>
                 <div style={{ flex: 1 }}>
                   <input style={{ ...rowInput, marginBottom: 6 }} value={m.title} onChange={(e) => setModule(i, "title", e.target.value)} placeholder="Module title" />
                   <input style={rowInput} value={m.videoUrl || ""} onChange={(e) => setModule(i, "videoUrl", e.target.value)}
                     placeholder="Video embed URL (e.g. https://www.youtube.com/embed/...)" />
-                </div>
-                <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 10 }} onClick={() => removeModule(i)} />
-              </div>
-
-              {m.id ? (
-                <div style={{ marginLeft: 28, marginTop: 6 }}>
-                  <span
-                    onClick={() => toggleQuiz(m.id)}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" }}
-                  >
-                    <HelpCircle size={13} />
-                    Manage quiz
-                    {qState?.expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                  </span>
-
-                  {qState?.expanded && (
-                    <div className="ks-card" style={{ padding: 14, marginTop: 8, background: "var(--paper)" }}>
-                      {qState.loading ? (
-                        <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>Loading quiz…</div>
-                      ) : (
-                        <>
-                          {(qState.questions ?? []).map((q, qIndex) => (
-                            <div key={q.id ?? `newq-${qIndex}`} style={{ marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid var(--line)" }}>
-                              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
-                                <input
-                                  style={rowInput}
-                                  value={q.question}
-                                  onChange={(e) => setQuestionText(m.id, qIndex, e.target.value)}
-                                  placeholder={`Question ${qIndex + 1}`}
-                                />
-                                <select
-                                  style={{ ...rowInput, width: "auto", flexShrink: 0 }}
-                                  value={q.type}
-                                  onChange={(e) => setQuestionType(m.id, qIndex, e.target.value)}
-                                  title="Question type"
-                                >
-                                  <option value="mcq">Multiple choice</option>
-                                  <option value="short_answer">Short answer</option>
-                                </select>
-                                <Trash2 size={15} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 9, flexShrink: 0 }} onClick={() => removeQuestion(m.id, qIndex)} />
-                              </div>
-                              {q.type === "short_answer" ? (
-                                <>
-                                  {q.acceptableAnswers.map((a, aIndex) => (
-                                    <div key={aIndex} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, marginLeft: 12 }}>
-                                      <input
-                                        style={{ ...rowInput, flex: 1 }}
-                                        value={a}
-                                        onChange={(e) => setAcceptableAnswer(m.id, qIndex, aIndex, e.target.value)}
-                                        placeholder={`Acceptable answer ${aIndex + 1}`}
-                                      />
-                                      <Trash2 size={14} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeAcceptableAnswer(m.id, qIndex, aIndex)} />
-                                    </div>
-                                  ))}
-                                  <span
-                                    onClick={() => addAcceptableAnswer(m.id, qIndex)}
-                                    style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer", marginLeft: 12 }}
-                                  >
-                                    + Add acceptable answer
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  {q.options.map((o, oIndex) => (
-                                    <div key={o.id ?? `newo-${oIndex}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, marginLeft: 12 }}>
-                                      <input
-                                        type="radio"
-                                        name={`correct-${m.id}-${qIndex}`}
-                                        checked={o.isCorrect}
-                                        onChange={() => setCorrectOption(m.id, qIndex, oIndex)}
-                                        title="Mark as correct answer"
-                                      />
-                                      <input
-                                        style={{ ...rowInput, flex: 1 }}
-                                        value={o.optionText}
-                                        onChange={(e) => setOptionText(m.id, qIndex, oIndex, e.target.value)}
-                                        placeholder={`Option ${oIndex + 1}`}
-                                      />
-                                      <Trash2 size={14} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeOption(m.id, qIndex, oIndex)} />
-                                    </div>
-                                  ))}
-                                  <span
-                                    onClick={() => addOption(m.id, qIndex)}
-                                    style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer", marginLeft: 12 }}
-                                  >
-                                    + Add option
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          ))}
-
-                          <button className="ks-btn ks-btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px", marginRight: 8 }} onClick={() => addQuestion(m.id)}>
-                            <Plus size={12} /> Add question
-                          </button>
-                          <button
-                            className="ks-btn ks-btn-gold"
-                            style={{ fontSize: 12.5, padding: "6px 12px", opacity: qState.saving ? 0.7 : 1 }}
-                            disabled={qState.saving}
-                            onClick={() => handleSaveQuiz(m.id)}
-                          >
-                            {qState.saving ? "Saving…" : "Save quiz"}
-                          </button>
-
-                          {qState.error && <div style={{ fontSize: 12, color: "var(--coral)", marginTop: 8 }}>{qState.error}</div>}
-                        </>
-                      )}
+                  {/* #275 — computed time estimate for this module: video
+                      length (YouTube only, for now) plus a flat allowance
+                      per quiz question. Purely informational/additive — it
+                      only ever feeds the course-level "Use estimate"
+                      suggestion above, never overwrites anything here. */}
+                  {estimate.videoLookupStatus === "loading" && (
+                    <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 4 }}>Checking video length…</div>
+                  )}
+                  {estimate.videoLookupStatus === "done" && (
+                    <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 4 }}>
+                      {estimate.videoSupported
+                        ? `Estimated module time: ~${formatMinutes(estimate.totalMinutes)}${estimate.questionCount > 0 ? ` (video + ${estimate.questionCount} quiz Q${estimate.questionCount === 1 ? "" : "s"})` : " (video)"}`
+                        : "Video length unavailable for this source — enter course hours manually below."}
                     </div>
                   )}
                 </div>
-              ) : (
-                <div style={{ marginLeft: 28, marginTop: 4, fontSize: 11.5, color: "var(--slate-light)" }}>
-                  Save the course first to add quiz questions to this module.
-                </div>
-              )}
+                {/* #258 — real button (was a bare clickable icon). */}
+                <button
+                  type="button"
+                  aria-label={`Remove module ${m.title || i + 1}`}
+                  onClick={() => removeModule(i)}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", marginTop: 10, display: "inline-flex", lineHeight: 0 }}
+                >
+                  <Trash2 size={16} color="var(--slate-light)" />
+                </button>
+              </div>
+
+              <div style={{ marginLeft: 28, marginTop: 6 }}>
+                <span
+                  onClick={() => toggleQuiz(m)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" }}
+                >
+                  <HelpCircle size={13} />
+                  Manage quiz
+                  {qState?.expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </span>
+
+                {qState?.expanded && (
+                  <div className="ks-card" style={{ padding: 14, marginTop: 8, background: "var(--paper)" }}>
+                    {qState.loading ? (
+                      <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>Loading quiz…</div>
+                    ) : (
+                      <>
+                        {(qState.questions ?? []).map((q, qIndex) => (
+                          <div key={q.id ?? `newq-${qIndex}`} style={{ marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid var(--line)" }}>
+                            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
+                              <input
+                                style={rowInput}
+                                value={q.question}
+                                onChange={(e) => setQuestionText(quizKey(m), qIndex, e.target.value)}
+                                placeholder={`Question ${qIndex + 1}`}
+                              />
+                              <select
+                                style={{ ...rowInput, width: "auto", flexShrink: 0 }}
+                                value={q.type}
+                                onChange={(e) => setQuestionType(quizKey(m), qIndex, e.target.value)}
+                                title="Question type"
+                              >
+                                <option value="mcq">Multiple choice</option>
+                                <option value="short_answer">Short answer</option>
+                              </select>
+                              {/* #258 — real button (was a bare clickable icon). */}
+                              <button
+                                type="button"
+                                aria-label={`Remove question ${qIndex + 1}`}
+                                onClick={() => removeQuestion(quizKey(m), qIndex)}
+                                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", marginTop: 9, flexShrink: 0, display: "inline-flex", lineHeight: 0 }}
+                              >
+                                <Trash2 size={15} color="var(--slate-light)" />
+                              </button>
+                            </div>
+                            {q.type === "short_answer" ? (
+                              <>
+                                {q.acceptableAnswers.map((a, aIndex) => (
+                                  <div key={aIndex} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, marginLeft: 12 }}>
+                                    <input
+                                      style={{ ...rowInput, flex: 1 }}
+                                      value={a}
+                                      onChange={(e) => setAcceptableAnswer(quizKey(m), qIndex, aIndex, e.target.value)}
+                                      placeholder={`Acceptable answer ${aIndex + 1}`}
+                                    />
+                                    {/* #258 — real button (was a bare clickable icon). */}
+                                    <button
+                                      type="button"
+                                      aria-label={`Remove acceptable answer ${aIndex + 1}`}
+                                      onClick={() => removeAcceptableAnswer(quizKey(m), qIndex, aIndex)}
+                                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, display: "inline-flex", lineHeight: 0 }}
+                                    >
+                                      <Trash2 size={14} color="var(--slate-light)" />
+                                    </button>
+                                  </div>
+                                ))}
+                                <span
+                                  onClick={() => addAcceptableAnswer(quizKey(m), qIndex)}
+                                  style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer", marginLeft: 12 }}
+                                >
+                                  + Add acceptable answer
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                {q.options.map((o, oIndex) => (
+                                  <div key={o.id ?? `newo-${oIndex}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, marginLeft: 12 }}>
+                                    <input
+                                      type="radio"
+                                      name={`correct-${quizKey(m)}-${qIndex}`}
+                                      checked={o.isCorrect}
+                                      onChange={() => setCorrectOption(quizKey(m), qIndex, oIndex)}
+                                      title="Mark as correct answer"
+                                    />
+                                    <input
+                                      style={{ ...rowInput, flex: 1 }}
+                                      value={o.optionText}
+                                      onChange={(e) => setOptionText(quizKey(m), qIndex, oIndex, e.target.value)}
+                                      placeholder={`Option ${oIndex + 1}`}
+                                    />
+                                    {/* #258 — real button (was a bare clickable icon). */}
+                                    <button
+                                      type="button"
+                                      aria-label={`Remove option ${oIndex + 1}`}
+                                      onClick={() => removeOption(quizKey(m), qIndex, oIndex)}
+                                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, display: "inline-flex", lineHeight: 0 }}
+                                    >
+                                      <Trash2 size={14} color="var(--slate-light)" />
+                                    </button>
+                                  </div>
+                                ))}
+                                <span
+                                  onClick={() => addOption(quizKey(m), qIndex)}
+                                  style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer", marginLeft: 12 }}
+                                >
+                                  + Add option
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        ))}
+
+                        <button className="ks-btn ks-btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px", marginRight: 8 }} onClick={() => addQuestion(quizKey(m))}>
+                          <Plus size={12} /> Add question
+                        </button>
+                        <button
+                          className="ks-btn ks-btn-gold"
+                          style={{ fontSize: 12.5, padding: "6px 12px", opacity: qState.saving ? 0.7 : 1 }}
+                          disabled={qState.saving}
+                          onClick={() => handleSaveQuiz(m)}
+                        >
+                          {qState.saving ? "Saving…" : m.id ? "Save quiz" : "Use quiz"}
+                        </button>
+
+                        {qState.error && <div style={{ fontSize: 12, color: "var(--coral)", marginTop: 8 }}>{qState.error}</div>}
+                        {!m.id && qState.savedLocally && !qState.error && (
+                          <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>
+                            Looks good — this quiz will be created together with the course when you save.
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
@@ -643,7 +901,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
               <input style={{ ...rowInput, marginBottom: 6 }} value={f.question} onChange={(e) => setFaq(i, "question", e.target.value)} placeholder="Question" />
               <input style={rowInput} value={f.answer} onChange={(e) => setFaq(i, "answer", e.target.value)} placeholder="Answer" />
             </div>
-            <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", marginTop: 10 }} onClick={() => removeFaq(i)} />
+            {/* #258 — real button (was a bare clickable icon). */}
+            <button
+              type="button"
+              aria-label={`Remove FAQ item ${i + 1}`}
+              onClick={() => removeFaq(i)}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", marginTop: 10, display: "inline-flex", lineHeight: 0 }}
+            >
+              <Trash2 size={16} color="var(--slate-light)" />
+            </button>
           </div>
         ))}
         <button className="ks-btn ks-btn-ghost" style={{ fontSize: 13, padding: "7px 12px" }} onClick={addFaq}><Plus size={13} /> Add FAQ item</button>
@@ -657,7 +923,15 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
         {draft.credits.map((c, i) => (
           <div key={c.id ?? `new-${i}`} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
             <input style={rowInput} value={c.line} onChange={(e) => setCredit(i, e.target.value)} placeholder="e.g. Curriculum & instruction: ..." />
-            <Trash2 size={16} color="var(--slate-light)" style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => removeCredit(i)} />
+            {/* #258 — real button (was a bare clickable icon). */}
+            <button
+              type="button"
+              aria-label={`Remove credit line ${i + 1}`}
+              onClick={() => removeCredit(i)}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, display: "inline-flex", lineHeight: 0 }}
+            >
+              <Trash2 size={16} color="var(--slate-light)" />
+            </button>
           </div>
         ))}
         <button className="ks-btn ks-btn-ghost" style={{ fontSize: 13, padding: "7px 12px" }} onClick={addCredit}><Plus size={13} /> Add credit line</button>

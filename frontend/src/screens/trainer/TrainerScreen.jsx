@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Pencil, Plus, Search, Trash2, X, BarChart3 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, X, BarChart3, BookOpen, Users, Milestone, UsersRound } from "lucide-react";
 
 import { CategoryDot } from "../../components/common/Primitives";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
@@ -15,6 +15,7 @@ export function TrainerScreen({
   onSaveQuiz,
   onFetchProvider,
   onFetchProfile,
+  onFetchVideoDuration,
   onCreateProvider,
   onJoinProvider,
   onRegenerateInviteCode,
@@ -24,6 +25,7 @@ export function TrainerScreen({
   onSavePath,
   onDeletePath,
   onFetchCourseAnalytics,
+  onFetchOverview,
 }) {
   const [editingId, setEditingId] = useState(null); // null = list view, "__new" = creating, else course id
   const [deletingCourse, setDeletingCourse] = useState(null); // course pending delete confirmation, or null
@@ -71,6 +73,28 @@ export function TrainerScreen({
     onFetchProfile().then((profile) => {
       if (!cancelled) setMyProfile(profile);
     });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // #259 — the stats-panel data for the "trainer home" overview. Same
+  // fetch-once-on-mount, cancelled-flag shape as myProfile above; failure
+  // just leaves the panel hidden (see the `overview &&` guard below) rather
+  // than blocking the rest of the screen, since Trainer Studio's actual
+  // CRUD tools underneath don't depend on it at all.
+  const [overview, setOverview] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    onFetchOverview()
+      .then((data) => {
+        if (!cancelled) setOverview(data);
+      })
+      .catch(() => {
+        // Silently leave `overview` null — see comment above.
+      });
     return () => {
       cancelled = true;
     };
@@ -178,6 +202,7 @@ export function TrainerScreen({
         onSaveQuiz={onSaveQuiz}
         onFetchProvider={onFetchProvider}
         onFetchProfile={onFetchProfile}
+        onFetchVideoDuration={onFetchVideoDuration}
       />
     );
   }
@@ -223,6 +248,30 @@ export function TrainerScreen({
               : "Create or join a provider to share course edit access with your team."}
         </div>
       </div>
+
+      {/* #259 — trainer-home stats row, same "flex row of stat cards"
+          convention as DashboardScreen's In progress/Completed/Certificates
+          row. Hidden until the overview has loaded (see the effect above);
+          no loading placeholder here since the tab content below it is
+          usable immediately regardless. */}
+      {overview && (
+        <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
+          {[
+            { label: "Courses", value: overview.totalCourses, icon: BookOpen, tint: "var(--gold-tint)", fg: "var(--gold-dark)" },
+            { label: "Students", value: overview.totalStudents, icon: Users, tint: "var(--success-tint)", fg: "var(--success)" },
+            { label: "Learning paths", value: overview.totalPaths, icon: Milestone, tint: "var(--coral-tint)", fg: "var(--coral)" },
+            { label: "Team", value: overview.teamSize, icon: UsersRound, tint: "var(--gold-tint)", fg: "var(--gold-dark)" },
+          ].map((s) => (
+            <div key={s.label} className="ks-card" style={{ flex: 1, minWidth: 140, padding: 16 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: s.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+                <s.icon size={15} color={s.fg} />
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 500 }}>{s.value}</div>
+              <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 20 }}>
         <div className={`ks-tab ${tab === "courses" ? "active" : ""}`} onClick={() => setTab("courses")}>Courses</div>
@@ -367,7 +416,16 @@ export function TrainerScreen({
           <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete course?</div>
-              <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !deleting && setDeletingCourse(null)} />
+              {/* #258 — real button (was a bare clickable icon). */}
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={deleting}
+                onClick={() => setDeletingCourse(null)}
+                style={{ background: "none", border: "none", padding: 0, cursor: deleting ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <X size={18} color="var(--slate)" />
+              </button>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
               This removes <strong>{deletingCourse.title || "(untitled course)"}</strong> from the catalogue. Learners already enrolled keep their progress and access — this can't be undone from the catalogue side, so double-check before continuing.
@@ -399,7 +457,16 @@ export function TrainerScreen({
           <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete learning path?</div>
-              <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !deletingPathBusy && setDeletingPath(null)} />
+              {/* #258 — real button (was a bare clickable icon). */}
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={deletingPathBusy}
+                onClick={() => setDeletingPath(null)}
+                style={{ background: "none", border: "none", padding: 0, cursor: deletingPathBusy ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <X size={18} color="var(--slate)" />
+              </button>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
               This removes <strong>{deletingPath.title || "(untitled path)"}</strong> from the catalogue. Learners already enrolled keep their course progress and access — this can't be undone from the catalogue side, so double-check before continuing.

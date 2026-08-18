@@ -242,18 +242,30 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                 {/* #183 — pages the day grid to an adjacent 7-day week;
                     "next" stops at the real current week — there's
                     nothing to look ahead to yet. */}
-                <ChevronLeft
-                  size={14}
-                  color="var(--slate-light)"
-                  style={{ cursor: "pointer" }}
+                {/* #258 — real buttons (were bare clickable icons). Next-
+                    week now uses native `disabled` at the current week
+                    rather than just an undefined onClick + styled-to-look-
+                    disabled color/cursor — a real disabled button is
+                    correctly skipped in tab order and announced as
+                    disabled by screen readers, which the old div/icon
+                    version had no way to convey at all. */}
+                <button
+                  type="button"
+                  aria-label="Previous week"
                   onClick={onPrevWeek}
-                />
-                <ChevronRight
-                  size={14}
-                  color={calendarWeekOffset >= 0 ? "var(--line)" : "var(--slate-light)"}
-                  style={{ cursor: calendarWeekOffset >= 0 ? "not-allowed" : "pointer" }}
-                  onClick={calendarWeekOffset >= 0 ? undefined : onNextWeek}
-                />
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+                >
+                  <ChevronLeft size={14} color="var(--slate-light)" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next week"
+                  disabled={calendarWeekOffset >= 0}
+                  onClick={onNextWeek}
+                  style={{ background: "none", border: "none", padding: 0, cursor: calendarWeekOffset >= 0 ? "not-allowed" : "pointer", display: "inline-flex", lineHeight: 0 }}
+                >
+                  <ChevronRight size={14} color={calendarWeekOffset >= 0 ? "var(--line)" : "var(--slate-light)"} />
+                </button>
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, textAlign: "center" }}>
@@ -395,14 +407,18 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{c.title}</div>
                       <div style={{ fontSize: 11.5, color: "var(--slate-light)" }}>{c.provider}</div>
                     </div>
+                    {/* #258 — real button (was a bare clickable icon);
+                        every course in this list is already saved, so the
+                        action here is always "remove." */}
                     {onToggleBookmark && (
-                      <Bookmark
-                        size={15}
-                        color="var(--gold-dark)"
-                        fill="var(--gold-dark)"
-                        style={{ cursor: "pointer", flexShrink: 0 }}
+                      <button
+                        type="button"
+                        aria-label="Remove bookmark"
                         onClick={() => onToggleBookmark(c, true)}
-                      />
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0, flexShrink: 0 }}
+                      >
+                        <Bookmark size={15} color="var(--gold-dark)" fill="var(--gold-dark)" />
+                      </button>
                     )}
                   </div>
                 ))}
@@ -431,7 +447,16 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
           <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Unenroll from this course?</div>
-              <X size={18} color="var(--slate)" style={{ cursor: "pointer" }} onClick={() => !unenrolling && setUnenrollingCourse(null)} />
+              {/* #258 — real button (was a bare clickable icon). */}
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={unenrolling}
+                onClick={() => setUnenrollingCourse(null)}
+                style={{ background: "none", border: "none", padding: 0, cursor: unenrolling ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <X size={18} color="var(--slate)" />
+              </button>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
               You'll be removed from <strong>{unenrollingCourse.title}</strong> and your progress will reset if you enrol again.

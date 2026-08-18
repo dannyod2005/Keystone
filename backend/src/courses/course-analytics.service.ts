@@ -5,8 +5,11 @@ import { Course } from './entities/course.entity';
 import { Enrollment } from '../enrollments/entities/enrollment.entity';
 import { QuizQuestion } from '../quiz/entities/quiz-question.entity';
 import { QuizSubmission } from '../quiz/entities/quiz-submission.entity';
+import { Profile } from '../profiles/entities/profile.entity';
+import { LearningPath } from '../learning-paths/entities/learning-path.entity';
 import { CourseAnalyticsDto } from './dto/course-analytics.dto';
 import { LearnerAnalyticsRowDto } from './dto/learner-analytics-row.dto';
+import { TrainerOverviewDto } from './dto/trainer-overview.dto';
 import { POINTS_PER_MINUTE } from '../activity/activity.service';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -37,6 +40,10 @@ export class CourseAnalyticsService {
     private readonly quizQuestionsRepo: Repository<QuizQuestion>,
     @InjectRepository(QuizSubmission)
     private readonly quizSubmissionsRepo: Repository<QuizSubmission>,
+    @InjectRepository(Profile)
+    private readonly profilesRepo: Repository<Profile>,
+    @InjectRepository(LearningPath)
+    private readonly learningPathsRepo: Repository<LearningPath>,
   ) {}
 
   async getAnalyticsForCourse(courseId: string): Promise<CourseAnalyticsDto> {
@@ -165,6 +172,75 @@ export class CourseAnalyticsService {
       averageQuizScorePct,
       learners,
     };
+  }
+
+  // #259 — the "trainer home" rollup: how many courses/paths/students this
+  // trainer touches, and how big their team is, at a glance. Deliberately
+  // shallow compared to getAnalyticsForCourse above — no per-learner
+  // detail, just counts — since that per-course depth is a click away via
+  // the Analytics view this powers a summary above, not a replacement for.
+  async getOverviewForOwner(userId: string): Promise<TrainerOverviewDto> {
+    const profile = await this.profilesRepo.findOne({ where: { id: userId } });
+
+    const [ownedCourses, ownedPaths] = await Promise.all([
+      this.findOwnedOrShared(this.coursesRepo, userId, profile?.providerId ?? null),
+      this.findOwnedOrShared(
+        this.learningPathsRepo,
+        userId,
+        profile?.providerId ?? null,
+      ),
+    ]);
+
+    const courseIds = ownedCourses.map((c) => c.id);
+    // Same "skip the query on an empty id list" guard as
+    // getAnalyticsForCourse's questionIds check above — In([]) is a
+    // needless round trip that always returns nothing.
+    const enrollments =
+      courseIds.length > 0
+        ? await this.enrollmentsRepo.find({
+            where: { course: { id: In(courseIds) } },
+            relations: { user: true },
+          })
+        : [];
+    const totalStudents = new Set(enrollments.map((e) => e.user.id)).size;
+
+    // A trainer with no provider is still a "team" of one (themselves);
+    // one with a provider counts every member, owner included — matches
+    // ProvidersService.getMine's member list, which always includes the
+    // owner alongside everyone else who joined via invite code.
+    const teamSize = profile?.providerId
+      ? await this.profilesRepo.count({
+          where: { providerId: profile.providerId },
+        })
+      : 1;
+
+    return {
+      totalCourses: ownedCourses.length,
+      totalPaths: ownedPaths.length,
+      totalStudents,
+      teamSize,
+    };
+  }
+
+  // #259 — mirrors TrainerScreen's client-side canEditCourse/canEditPath
+  // exactly (own ownerId, or shared providerId), just run against the
+  // whole not-deleted table server-side instead of a page's already-loaded
+  // list. Two queries + a Map-dedupe rather than a single OR'd
+  // QueryBuilder call — simpler to read, and cheap at this table size.
+  private async findOwnedOrShared<T extends { id: string; deletedAt: Date | null }>(
+    repo: Repository<T>,
+    userId: string,
+    providerId: string | null,
+  ): Promise<T[]> {
+    const owned = await repo.find({
+      where: { ownerId: userId, deletedAt: IsNull() } as any,
+    });
+    const shared = providerId
+      ? await repo.find({ where: { providerId, deletedAt: IsNull() } as any })
+      : [];
+    const byId = new Map<string, T>();
+    for (const item of [...owned, ...shared]) byId.set(item.id, item);
+    return [...byId.values()];
   }
 
   // #227/#246 — "expected pace" derived from the same daily-goal concept

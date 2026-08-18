@@ -57,7 +57,18 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
             <KeystoneMark variant="dark" size={20} />
             <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, color: "var(--paper)" }}>Keystone</span>
           </div>
-          <X size={18} color="var(--paper)" className="cursor-pointer md:hidden" onClick={onCloseMobile} />
+          {/* #258 — real button (not a bare clickable icon) so this is
+              keyboard-reachable and announces as "Close menu" to screen
+              readers, same reasoning as the nav buttons below (#219). */}
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={onCloseMobile}
+            className="cursor-pointer md:hidden"
+            style={{ background: "none", border: "none", padding: 0, display: "inline-flex", lineHeight: 0 }}
+          >
+            <X size={18} color="var(--paper)" />
+          </button>
         </div>
         {items.map((it) => {
           const Icon = it.icon;
