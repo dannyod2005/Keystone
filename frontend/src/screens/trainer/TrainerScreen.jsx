@@ -15,6 +15,7 @@ export function TrainerScreen({
   onSaveQuiz,
   onFetchProvider,
   onFetchProfile,
+  onFetchVideoDuration,
   onCreateProvider,
   onJoinProvider,
   onRegenerateInviteCode,
@@ -201,6 +202,7 @@ export function TrainerScreen({
         onSaveQuiz={onSaveQuiz}
         onFetchProvider={onFetchProvider}
         onFetchProfile={onFetchProfile}
+        onFetchVideoDuration={onFetchVideoDuration}
       />
     );
   }
