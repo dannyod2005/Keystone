@@ -59,13 +59,21 @@ export function AppSidebar({ screen, onGo, role, onLogout, user, goal = null, mo
           </div>
           {/* #258 — real button (not a bare clickable icon) so this is
               keyboard-reachable and announces as "Close menu" to screen
-              readers, same reasoning as the nav buttons below (#219). */}
+              readers, same reasoning as the nav buttons below (#219).
+              #283 — display used to live in the inline `style`, which
+              always beat the md:hidden below regardless of screen width
+              (inline styles outrank non-!important classes), leaving this
+              visible and clickable on desktop too, even though the
+              sidebar itself is permanently open there via md:translate-x-0
+              below — so clicking it looked like it "did nothing." Moving
+              display into the className fixes the same specificity issue
+              as AppTopbar's hamburger button. */}
           <button
             type="button"
             aria-label="Close menu"
             onClick={onCloseMobile}
-            className="cursor-pointer md:hidden"
-            style={{ background: "none", border: "none", padding: 0, display: "inline-flex", lineHeight: 0 }}
+            className="cursor-pointer inline-flex md:hidden"
+            style={{ background: "none", border: "none", padding: 0, lineHeight: 0 }}
           >
             <X size={18} color="var(--paper)" />
           </button>
