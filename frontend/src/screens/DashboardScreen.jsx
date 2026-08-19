@@ -9,11 +9,15 @@ import { getDisplayName, getFirstName } from "../lib/userDisplay";
 // SettingsScreen's DAILY_GOAL_PRESETS comment for why).
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, pointsThisWeek: 0, dailyGoalPoints: 1500, goalHitDays: 0, week: [] };
 
-export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, onUnenrol, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, error = false, onRetry, calendarWeekOffset = 0, onPrevWeek, onNextWeek, leaderboardOptIn = false, onOpenLeaderboard }) {
+export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, onUnenrol, onRetake, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, error = false, onRetry, calendarWeekOffset = 0, onPrevWeek, onNextWeek, leaderboardOptIn = false, onOpenLeaderboard }) {
   const firstName = getFirstName(getDisplayName(user));
   // #255 — course pending unenrol confirmation ({ enrollmentId, title,
   // isComplete }), or null. Same three-state shape (pending item + error +
   // busy flag) as TrainerScreen's deletingCourse/deleteError/deleting.
+  // #300 — also doubles as the pending-retake state for a completed
+  // course: isComplete effectively means "this is a retake, not a plain
+  // unenrol" now, since the Completed section below no longer offers a
+  // separate plain-unenrol action (see handleConfirmUnenroll).
   const [unenrollingCourse, setUnenrollingCourse] = useState(null);
   const [unenrollError, setUnenrollError] = useState(null);
   const [unenrolling, setUnenrolling] = useState(false);
@@ -68,14 +72,23 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
     }
   }
 
+  // #300 — branches on isComplete: a completed course's confirm dialog
+  // calls onRetake (unenrol + re-enrol as one action, see
+  // EnrollmentsService.retake) instead of onUnenrol, since the Completed
+  // section's button is "Retake" now, not "Unenroll" — see the modal
+  // copy below for why that's not just a label swap.
   async function handleConfirmUnenroll() {
     setUnenrolling(true);
     setUnenrollError(null);
     try {
-      await onUnenrol(unenrollingCourse.enrollmentId);
+      if (unenrollingCourse.isComplete) {
+        await onRetake(unenrollingCourse.enrollmentId);
+      } else {
+        await onUnenrol(unenrollingCourse.enrollmentId);
+      }
       setUnenrollingCourse(null);
     } catch (err) {
-      setUnenrollError(err.message || "Failed to unenrol.");
+      setUnenrollError(err.message || (unenrollingCourse.isComplete ? "Failed to retake." : "Failed to unenrol."));
     } finally {
       setUnenrolling(false);
     }
@@ -234,13 +247,20 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                   <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>Completed {e.lastAccessed} · certificate issued</div>
                 </div>
                 <button className="ks-btn ks-btn-ghost" onClick={() => handleViewCertificate(e.id)}>View certificate</button>
-                {onUnenrol && (
+                {/* #300 — was "Unenroll": a finished course's most likely
+                    next action is doing it again, not leaving it, and
+                    "unenroll" read oddly for something already completed.
+                    Still routes through the same confirm modal (isComplete:
+                    true) and still coral — resetting progress and losing
+                    certificate access until it's completed again are real
+                    consequences worth a confirm, same as before. */}
+                {onRetake && (
                   <button
                     className="ks-btn ks-btn-ghost"
                     style={{ color: "var(--coral)" }}
                     onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: true }); setUnenrollError(null); }}
                   >
-                    Unenroll
+                    Retake
                   </button>
                 )}
               </div>
@@ -444,16 +464,15 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
         </div>
       </div>
 
-      {/* #255 — same modal shape as TrainerScreen's delete-course
+      {/* #255/#300 — same modal shape as TrainerScreen's delete-course
           confirmation (backdrop click/X/Cancel all close it, guarded by
           !unenrolling so a click mid-request can't dismiss and lose the
-          error). Completed courses get an extra line warning about
-          certificate access specifically, since that's the one thing a
-          learner loses here that isn't obvious from "unenroll" alone —
-          their quiz answers and notes for the course are left in place
-          (see EnrollmentsService.remove) and resurface if they re-enrol,
-          but the certificate is only ever generated from a live
-          enrollment row. */}
+          error). isComplete now means "this is a retake", not just
+          "warn about the certificate" — title/body/button all branch on
+          it below. The retake copy is explicit that quiz answers/notes
+          carry over, since EnrollmentsService.retake (like remove()
+          before it) deliberately doesn't wipe them — a learner who wants
+          a clean slate has to redo each module's quiz individually. */}
       {unenrollingCourse && (
         <div
           onClick={() => !unenrolling && setUnenrollingCourse(null)}
@@ -462,7 +481,9 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
         >
           <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Unenroll from this course?</div>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>
+                {unenrollingCourse.isComplete ? "Retake this course?" : "Unenroll from this course?"}
+              </div>
               {/* #258 — real button (was a bare clickable icon). */}
               <button
                 type="button"
@@ -475,8 +496,11 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
               </button>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
-              You'll be removed from <strong>{unenrollingCourse.title}</strong> and your progress will reset if you enrol again.
-              {unenrollingCourse.isComplete && " You'll also lose access to this course's certificate."}
+              {unenrollingCourse.isComplete ? (
+                <>Your progress on <strong>{unenrollingCourse.title}</strong> will reset to start it again. Your existing quiz answers and notes stay in place unless you retake each quiz individually, and you'll lose access to the current certificate until you complete the course again.</>
+              ) : (
+                <>You'll be removed from <strong>{unenrollingCourse.title}</strong> and your progress will reset if you enrol again.</>
+              )}
             </div>
             {unenrollError && (
               <div style={{ fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>{unenrollError}</div>
@@ -489,7 +513,9 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                 disabled={unenrolling}
                 onClick={handleConfirmUnenroll}
               >
-                {unenrolling ? "Unenrolling…" : "Unenroll"}
+                {unenrollingCourse.isComplete
+                  ? (unenrolling ? "Retaking…" : "Retake")
+                  : (unenrolling ? "Unenrolling…" : "Unenroll")}
               </button>
             </div>
           </div>

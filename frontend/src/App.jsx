@@ -1173,6 +1173,30 @@ function KeystonePrototype() {
     setTimeout(() => setToast(null), 2600);
   }
 
+  // #300 — "Retake" on a completed course: hits the combined
+  // POST /enrollments/:id/retake endpoint (see EnrollmentsService.retake)
+  // rather than doing the DELETE-then-POST as two separate calls from
+  // here, so there's no window where a network drop between them could
+  // leave the learner unenrolled with nothing. Same refetch shape as
+  // unenrolCourse above — a retaken course can also be part of an
+  // enrolled learning path, whose derived progress needs the same fresh
+  // read.
+  async function retakeCourse(enrollmentId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}/retake`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    await Promise.all([refetchEnrollments(), refetchPathEnrollments()]);
+    setToast("Course reset — ready to retake");
+    setTimeout(() => setToast(null), 2600);
+  }
+
   // #207 — the other half of the sessionStorage mirror set in handleEnrol:
   // picks up a pending enrollment that survived a Google OAuth redirect
   // (which clears pendingCourse along with all other in-memory state,
@@ -1706,6 +1730,7 @@ function KeystonePrototype() {
                   courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
                   onUnenrol={unenrolCourse}
+                  onRetake={retakeCourse}
                   user={user}
                   goal={learnerGoal}
                   activitySummary={activitySummary}
