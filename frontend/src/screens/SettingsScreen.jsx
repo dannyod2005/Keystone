@@ -4,8 +4,15 @@ import { User, Lock, Eye, EyeOff, Trophy } from "lucide-react";
 import { PageHeader } from "../components/common/Primitives";
 import { getDisplayName } from "../lib/userDisplay";
 
-// #255 — same presets as the old Dashboard inline editor these replace.
-const DAILY_GOAL_PRESETS = [150, 300, 450, 600, 900];
+// #296 — the original 150/300/450/600/900 presets (and the 300 default
+// below) were calibrated on the old flat per-action point values
+// (view/quiz/note/post, all 30-50 pts). They never accounted for
+// module-completion points, which scale with course.hours and average
+// ~1,350-1,578 pts per module across the real course catalog — so
+// finishing a single module cleared every preset, including the top one,
+// on 38 of 40 courses. Rescaled around that real average: well below it,
+// up through roughly it, topping out just under 2x it.
+const DAILY_GOAL_PRESETS = [500, 1000, 1500, 2200, 3000];
 
 /* ---------- Screen: Account settings ---------- */
 
@@ -18,7 +25,7 @@ export function SettingsScreen({
   user,
   onUpdateName,
   onChangePassword,
-  activitySummary = { dailyGoalPoints: 300 },
+  activitySummary = { dailyGoalPoints: 1500 }, // #296 — matches the new signup default
   onUpdateDailyGoal,
   leaderboardOptIn = false,
   onUpdateLeaderboardOptIn,

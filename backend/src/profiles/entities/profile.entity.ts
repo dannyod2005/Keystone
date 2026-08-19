@@ -24,8 +24,13 @@ export class Profile {
 
   // #246 — was a raw minutes count; now points (see ActivityService's
   // POINTS_PER_MINUTE), rescaled by the same factor in the
-  // RenameProfilesDailyGoalMinToPoints migration.
-  @Column({ name: 'daily_goal_points', type: 'int', default: 300 })
+  // RenameProfilesDailyGoalMinToPoints migration. #296 — 1500, not 300:
+  // see ActivityService.DEFAULT_DAILY_GOAL_POINTS's comment for why. This
+  // is metadata only (TypeORM migration-generation reads it, real inserts
+  // don't rely on it) — the actual signup default is set by the
+  // handle_new_user trigger and the column's real Postgres DEFAULT, both
+  // updated in the RecalibrateDailyGoalDefault migration.
+  @Column({ name: 'daily_goal_points', type: 'int', default: 1500 })
   dailyGoalPoints: number;
 
   // #137 — single, optional provider membership. Plain nullable scalar FK

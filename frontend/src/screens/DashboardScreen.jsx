@@ -5,7 +5,9 @@ import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
 /* ---------- Screen: Dashboard ---------- */
 
-const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, pointsThisWeek: 0, dailyGoalPoints: 300, goalHitDays: 0, week: [] };
+// #296 — 1500, not 300: matches the recalibrated signup default (see
+// SettingsScreen's DAILY_GOAL_PRESETS comment for why).
+const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, pointsThisWeek: 0, dailyGoalPoints: 1500, goalHitDays: 0, week: [] };
 
 export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, onUnenrol, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, error = false, onRetry, calendarWeekOffset = 0, onPrevWeek, onNextWeek, leaderboardOptIn = false, onOpenLeaderboard }) {
   const firstName = getFirstName(getDisplayName(user));
