@@ -27,7 +27,18 @@ export class Course {
   @Column()
   level: string; // Beginner | Intermediate | Advanced
 
-  @Column({ type: 'int', default: 0 })
+  // #297 — was a whole-hour int; trainers authoring a short course (e.g. 5
+  // modules of ~20min video each) had no way to enter anything between 1h
+  // and 2h, so the estimate suggestion below always rounded away from the
+  // real figure. `real` (not `decimal`/`numeric`) deliberately: TypeORM
+  // returns decimal/numeric columns as strings to avoid float-precision
+  // loss on values that need it, but every consumer of this field
+  // (EnrollmentsService's points calc, CourseAnalyticsService's pace calc)
+  // does plain arithmetic on it and expects a JS number — `real` maps
+  // straight to one, and quarter-hour precision has no meaningful
+  // precision loss to guard against. See AllowFractionalCourseHours
+  // migration.
+  @Column({ type: 'real', default: 0 })
   hours: number;
 
   @Column({ type: 'decimal', nullable: true })
