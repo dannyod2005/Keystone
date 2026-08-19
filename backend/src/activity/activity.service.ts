@@ -157,12 +157,40 @@ export class ActivityService {
   // base points by its quiz score, if any, before calling this) — this
   // method's own job is unchanged: purely distributing whatever amount
   // it's given across the right days, not deciding what that amount is.
+  //
+  // #312 — a module's completion is paid out at most once per (user,
+  // module), ever, regardless of how many times the caller thinks it's
+  // "newly completed." updateProgress works out "newly completed" from
+  // the *current* enrollment row's progress, which EnrollmentsService's
+  // retake() resets to 0 on every retake — without this guard, a learner
+  // could retake a finished course (quiz submissions/notes deliberately
+  // carry over, so nothing blocks instantly re-clicking Mark Complete on
+  // every module) and get paid again in full, unbounded, since
+  // activity_events has no DB-level uniqueness on (user, module). The
+  // check lives here rather than in the caller so it protects every
+  // caller of logModuleCompletion, not just this one code path.
   async logModuleCompletion(
     userId: string,
     moduleId: string,
     totalPoints: number,
   ): Promise<void> {
     if (!totalPoints || totalPoints <= 0) return;
+
+    try {
+      const alreadyPaid = await this.activityRepo.findOne({
+        where: {
+          user: { id: userId },
+          module: { id: moduleId },
+          source: 'module_complete',
+        },
+      });
+      if (alreadyPaid) return;
+    } catch (err) {
+      this.logger.error(
+        `Failed to check existing module_complete activity (userId=${userId}, moduleId=${moduleId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
 
     const viewedDayKeys = await this.getViewedDayKeys(userId, moduleId);
     const todayKey = toDateKey(new Date());
