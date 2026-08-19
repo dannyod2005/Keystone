@@ -58,12 +58,20 @@ export function HomeScreen({
   // (or shown at all for a learner/trainer with no goal set) — a
   // logged-out-style "what's out there" strip, minus anything already
   // surfaced above or already enrolled in.
+  // #308 — sorts by createdAt descending, not rating: this section is
+  // titled "New on Keystone" (trending-arrow icon), but was reusing
+  // "Recommended for you"'s rating sort, which has nothing to do with
+  // recency. In practice that meant an old, highly-rated course sat here
+  // indefinitely while genuinely new courses (no ratings yet) never
+  // surfaced. createdAt is already present on every course object here —
+  // CoursesController.findAll() returns the raw entity, no DTO
+  // stripping — so no backend change needed.
   const trending = !loggedIn
     ? []
     : courses
         .filter((c) => !enrolledIds.includes(c.id) && !recommendedIds.has(c.id))
         .slice()
-        .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, TRENDING_LIMIT);
 
   // #247 — same skills-from-completed-courses derivation as Dashboard's
