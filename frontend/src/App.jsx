@@ -256,7 +256,7 @@ function KeystonePrototype() {
   const [activitySummary, setActivitySummary] = useState({
     streak: 0,
     pointsThisWeek: 0,
-    dailyGoalPoints: 300,
+    dailyGoalPoints: 1500, // #296 — matches the recalibrated signup default
     goalHitDays: 0,
     week: [],
   });
@@ -562,7 +562,7 @@ function KeystonePrototype() {
       setActivitySummary({
         streak: 0,
         pointsThisWeek: 0,
-        dailyGoalPoints: 300,
+        dailyGoalPoints: 1500, // #296 — matches the recalibrated signup default
         goalHitDays: 0,
         week: [],
       });

@@ -21,11 +21,15 @@ export const POINTS_PER_MINUTE = 10;
 // column's DB default, but this keeps goalHit/buildWeek from doing math
 // against undefined if it ever does). The real, per-learner value now
 // comes from profile.dailyGoalPoints, set at signup and editable from
-// the dashboard. #246 — 300, not 30: the pre-existing 30-minute default
-// converted through POINTS_PER_MINUTE during the daily-goal migration,
-// so a learner who never touched their goal sees the same relative
-// target as before, just in the new unit.
-const DEFAULT_DAILY_GOAL_POINTS = 30 * POINTS_PER_MINUTE;
+// the dashboard. #296 — 1500, not 300: module-completion points (scaling
+// with course.hours) average ~1,350-1,578 pts per module, dwarfing the
+// old 300 default — see SettingsScreen's DAILY_GOAL_PRESETS comment for
+// the full recalibration. Must stay in sync with the handle_new_user
+// trigger's hardcoded default (see the RecalibrateDailyGoalDefault
+// migration) and profile.entity.ts's @Column default — this constant is
+// only ever a fallback for an already-existing row, never what a new
+// signup actually gets (that's the trigger's job).
+const DEFAULT_DAILY_GOAL_POINTS = 150 * POINTS_PER_MINUTE;
 
 // How far back to pull events when walking the streak. Bounded so the
 // query stays cheap; generous enough that no realistic streak in this
