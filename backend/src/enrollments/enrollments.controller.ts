@@ -58,6 +58,20 @@ export class EnrollmentsController {
     return this.enrollmentsService.remove(req.user.id, id);
   }
 
+  // #300 — see EnrollmentsService.retake: unenrol + re-enrol as one
+  // atomic action, so the Dashboard's "Retake" button (Completed section)
+  // doesn't need two separate round-trips with a failure window between
+  // them. POST, not PATCH: this replaces the enrollment row (new id),
+  // it doesn't partially update the existing one.
+  @Post(':id/retake')
+  @UseGuards(SupabaseAuthGuard)
+  retake(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Enrollment> {
+    return this.enrollmentsService.retake(req.user.id, id);
+  }
+
   @Patch(':id')
   @UseGuards(SupabaseAuthGuard)
   updateProgress(

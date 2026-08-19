@@ -164,6 +164,56 @@ export class EnrollmentsService {
     await this.enrollmentsRepo.remove(enrollment);
   }
 
+  // #300 — "Retake" on a completed course, from the Dashboard's Completed
+  // section: unenrol + immediately re-enrol in one atomic step, rather
+  // than exposing this as two separate frontend calls with a failure
+  // window between them. Can't do create-then-remove instead to close
+  // that window a different way — Enrollment's (user, course) unique
+  // constraint means a fresh row can only be inserted once the old one is
+  // actually gone. Wrapped in a transaction so a mid-request failure
+  // can't leave the learner with neither an old nor a new enrollment.
+  //
+  // Deliberately reuses remove()'s exact ownership check and create()'s
+  // exact deleted-course guard rather than skipping either just because
+  // this is a compound operation — see those two methods' comments for
+  // why each exists. What this does NOT do: touch the learner's quiz
+  // submissions or notes for this course (same as remove() always
+  // hasn't — see that method's comment) — a retake resets progress/
+  // status, not quiz history. The frontend confirm copy is explicit
+  // about that.
+  async retake(userId: string, enrollmentId: string): Promise<Enrollment> {
+    const enrollment = await this.enrollmentsRepo.findOne({
+      where: { id: enrollmentId },
+      relations: { user: true, course: true },
+    });
+
+    if (!enrollment) {
+      throw new NotFoundException(
+        `Enrollment with id "${enrollmentId}" not found`,
+      );
+    }
+
+    if (enrollment.user.id !== userId) {
+      throw new ForbiddenException('This enrollment does not belong to you');
+    }
+
+    // Same guard as create(): a course pulled from the catalogue since
+    // this enrollment was made shouldn't be retake-able, even though the
+    // about-to-be-removed enrollment still references it.
+    if (enrollment.course.deletedAt) {
+      throw new NotFoundException(
+        `Course with id "${enrollment.course.id}" not found`,
+      );
+    }
+
+    const { user, course } = enrollment;
+
+    return this.enrollmentsRepo.manager.transaction(async (manager) => {
+      await manager.remove(enrollment);
+      return manager.save(manager.create(Enrollment, { user, course }));
+    });
+  }
+
   async findAllForUser(userId: string): Promise<EnrollmentResponseDto[]> {
     const enrollments = await this.enrollmentsRepo.find({
       where: { user: { id: userId } },
