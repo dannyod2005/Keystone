@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, BookMarked, Plus, Trash2, Save, Video, ChevronDown, ChevronUp, HelpCircle, X } from "lucide-react";
 
 const TRAINER_CATEGORIES = ["Technical", "Business", "Leadership"];
@@ -104,6 +105,12 @@ function normalizeLoadedQuestion(q) {
 export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz, onFetchProvider, onFetchProfile, onFetchVideoDuration }) {
 
   const [quizState, setQuizState] = useState({}); // { [moduleId]: { expanded, loading, loaded, questions, saving, error } }
+
+  // #316 — index of a module pending remove-confirmation, or null. Only
+  // ever set for a module that already has a persisted `id` (i.e. one
+  // that exists in the DB right now, not one only added client-side
+  // during this editing session) — see requestRemoveModule below.
+  const [removingModuleIndex, setRemovingModuleIndex] = useState(null);
 
   // Tracks the latest save request's sequence number per module, so an
   // older, slower response can never overwrite state with stale data
@@ -270,6 +277,26 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
   }
   function removeModule(i) {
     setDraft((d) => ({ ...d, modules: d.modules.filter((_, x) => x !== i) }));
+  }
+
+  // #316 — a module with a real `id` already exists in the DB and, once
+  // this course is saved, removing it cascades to delete every enrolled
+  // learner's notes, forum posts, and quiz submissions for it (see
+  // CoursesService.update's deleteOrphaned). A module with no `id` yet
+  // only exists in this draft — nothing to lose, so it's removed
+  // immediately with no prompt, same as before this fix.
+  function requestRemoveModule(i) {
+    const m = draft.modules[i];
+    if (m?.id) {
+      setRemovingModuleIndex(i);
+    } else {
+      removeModule(i);
+    }
+  }
+
+  function confirmRemoveModule() {
+    if (removingModuleIndex !== null) removeModule(removingModuleIndex);
+    setRemovingModuleIndex(null);
   }
 
   function setFaq(i, field, v) {
@@ -783,7 +810,7 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                 <button
                   type="button"
                   aria-label={`Remove module ${m.title || i + 1}`}
-                  onClick={() => removeModule(i)}
+                  onClick={() => requestRemoveModule(i)}
                   style={{ background: "none", border: "none", padding: 0, cursor: "pointer", marginTop: 10, display: "inline-flex", lineHeight: 0 }}
                 >
                   <Trash2 size={16} color="var(--slate-light)" />
@@ -982,6 +1009,50 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       </div>
       {!canSave && <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>Add a title and at least one module to save.</div>}
       {saveError && <div style={{ fontSize: 12.5, color: "var(--coral)", marginTop: 8 }}>{saveError}</div>}
+
+      {/* #316 — portaled to document.body, same fix/reasoning as #301's
+          modals: this whole screen is nested inside a `ks-page-enter`
+          root div, whose keyframe leaves a lingering transform after it
+          finishes animating in, which creates a containing block for
+          `position: fixed` descendants and would otherwise size this
+          backdrop to the page content's box instead of the viewport. */}
+      {removingModuleIndex !== null && createPortal(
+        <div
+          onClick={() => setRemovingModuleIndex(null)}
+          className="ks-modal-backdrop"
+          style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Remove this module?</div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setRemovingModuleIndex(null)}
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <X size={18} color="var(--slate)" />
+              </button>
+            </div>
+            <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
+              This module already has learners enrolled in the course. Once you save, removing{" "}
+              <strong>{draft.modules[removingModuleIndex]?.title || "this module"}</strong> permanently deletes every
+              enrolled learner's notes, forum posts, and quiz submissions for it — not just your own. This can't be undone.
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button className="ks-btn ks-btn-ghost" onClick={() => setRemovingModuleIndex(null)}>Cancel</button>
+              <button
+                className="ks-btn"
+                style={{ background: "var(--coral)", color: "#fff" }}
+                onClick={confirmRemoveModule}
+              >
+                Remove module
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
