@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Medal, Bookmark, Trophy, X } from "lucide-react";
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
@@ -464,7 +465,7 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
         </div>
       </div>
 
-      {/* #255/#300 — same modal shape as TrainerScreen's delete-course
+      {/* #255/#300/#301 — same modal shape as TrainerScreen's delete-course
           confirmation (backdrop click/X/Cancel all close it, guarded by
           !unenrolling so a click mid-request can't dismiss and lose the
           error). isComplete now means "this is a retake", not just
@@ -472,8 +473,18 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
           it below. The retake copy is explicit that quiz answers/notes
           carry over, since EnrollmentsService.retake (like remove()
           before it) deliberately doesn't wipe them — a learner who wants
-          a clean slate has to redo each module's quiz individually. */}
-      {unenrollingCourse && (
+          a clean slate has to redo each module's quiz individually.
+          #301 — portaled to document.body: this screen's root div carries
+          ks-page-enter for the page-load animation, which leaves a
+          `transform` applied via animation-fill-mode: both even after the
+          animation finishes. Any ancestor with a transform becomes a new
+          containing block for a `position: fixed` descendant, so without
+          the portal this backdrop was sized to that (narrower, shorter)
+          root div instead of the real viewport — it only ever dimmed part
+          of the screen instead of covering it. Rendering outside that
+          subtree entirely is the durable fix, not a one-off tweak to this
+          animation. */}
+      {unenrollingCourse && createPortal(
         <div
           onClick={() => !unenrolling && setUnenrollingCourse(null)}
           className="ks-modal-backdrop"
@@ -519,7 +530,8 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

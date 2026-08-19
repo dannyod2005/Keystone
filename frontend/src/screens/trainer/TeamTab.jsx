@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Check, Copy, RefreshCw, LogOut, X, Crown } from "lucide-react";
 
 const field = { marginBottom: 16 };
@@ -244,7 +245,18 @@ export function TeamTab({ onFetchProvider, onCreateProvider, onJoinProvider, onR
         </div>
       </div>
 
-      {confirmingLeave && (
+      {/* #301 — portaled to document.body: TeamTab is rendered inside
+          TrainerScreen's ks-page-enter-animated root, whose entrance
+          animation leaves a `transform` applied via
+          animation-fill-mode: both even after it finishes. Any ancestor
+          with a transform becomes a new containing block for a
+          `position: fixed` descendant, so without the portal this
+          backdrop was sized to that (narrower, shorter) root div instead
+          of the real viewport — it only ever dimmed part of the screen
+          instead of covering it. Same fix applied to TrainerScreen's two
+          delete-confirm modals and DashboardScreen's Unenroll/Retake
+          modal. */}
+      {confirmingLeave && createPortal(
         <div
           onClick={() => !leaving && setConfirmingLeave(false)}
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
@@ -279,7 +291,8 @@ export function TeamTab({ onFetchProvider, onCreateProvider, onJoinProvider, onR
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

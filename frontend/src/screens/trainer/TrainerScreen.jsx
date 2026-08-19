@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Pencil, Plus, Search, Trash2, X, BarChart3, BookOpen, Users, Milestone, UsersRound } from "lucide-react";
 
 import { CategoryDot } from "../../components/common/Primitives";
@@ -407,7 +408,18 @@ export function TrainerScreen({
       )}
       </div>
 
-      {deletingCourse && (
+      {/* #301 — portaled to document.body: this screen's root div carries
+          ks-page-enter for the page-load animation, which leaves a
+          `transform` applied via animation-fill-mode: both even after the
+          animation finishes. Any ancestor with a transform becomes a new
+          containing block for a `position: fixed` descendant, so without
+          the portal this backdrop was sized to that (narrower, shorter)
+          root div instead of the real viewport — it only ever dimmed part
+          of the screen instead of covering it. Same fix applied to
+          deletingPath's modal below and DashboardScreen's Unenroll/Retake
+          modal, all of which had the exact same problem for the exact
+          same reason. */}
+      {deletingCourse && createPortal(
         <div
           onClick={() => !deleting && setDeletingCourse(null)}
           className="ks-modal-backdrop"
@@ -445,10 +457,11 @@ export function TrainerScreen({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {deletingPath && (
+      {deletingPath && createPortal(
         <div
           onClick={() => !deletingPathBusy && setDeletingPath(null)}
           className="ks-modal-backdrop"
@@ -486,7 +499,8 @@ export function TrainerScreen({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
