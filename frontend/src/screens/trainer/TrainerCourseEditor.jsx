@@ -33,6 +33,15 @@ const SECONDS_PER_QUESTION = 45;
 // still typing/pasting a video URL.
 const VIDEO_DURATION_DEBOUNCE_MS = 700;
 
+// #297 — the Hours field and its auto-suggestion used to only work in
+// whole-hour steps, so a genuinely ~1h40m course could only ever suggest
+// (and store) 2h. 15 minutes, not 10: as a fraction of an hour it's a
+// clean 0.25, matching the courses.hours column's `real` type and
+// avoiding the repeating decimal 10-minute steps would produce
+// (1/6 = 0.1666...). See AllowFractionalCourseHours migration for the
+// backend side of this.
+const HOURS_STEP = 0.25;
+
 function formatMinutes(totalMinutes) {
   const rounded = Math.max(1, Math.round(totalMinutes));
   if (rounded < 60) return `${rounded}m`;
@@ -232,7 +241,19 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
 
   const moduleEstimates = draft.modules.map(moduleEstimate);
   const totalEstimatedMinutes = moduleEstimates.reduce((sum, e) => sum + e.totalMinutes, 0);
-  const suggestedHours = totalEstimatedMinutes > 0 ? Math.max(1, Math.round(totalEstimatedMinutes / 60)) : 0;
+  // #297 — rounds to the nearest 15-minute (HOURS_STEP) increment instead
+  // of the nearest whole hour, so the suggestion (and the value "Use
+  // estimate" writes into the Hours field) reflects the real module
+  // total rather than always rounding it away.
+  const suggestedHours =
+    totalEstimatedMinutes > 0
+      ? Math.max(HOURS_STEP, Math.round(totalEstimatedMinutes / 60 / HOURS_STEP) * HOURS_STEP)
+      : 0;
+  // Floating point (e.g. 0.1 + 0.2 !== 0.3) means a value round-tripped
+  // through the estimate/step math can miss an exact match by a sliver —
+  // compare to less than half a minute's worth of an hour instead of
+  // strict equality.
+  const hoursMatchesEstimate = suggestedHours > 0 && Math.abs(Number(draft.hours) - suggestedHours) < 0.01;
 
   function setModule(i, field, v) {
     setDraft((d) => ({
@@ -552,7 +573,12 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       provider: draft.provider,
       category: draft.category,
       level: draft.level,
-      hours: Number(draft.hours) || 0,
+      // #297 — rounded to 2dp before send: hours is no longer always a
+      // whole number, and repeated step math (or a trainer typing a long
+      // decimal by hand) can otherwise produce float noise like
+      // 1.2500000000000002, which the backend's maxDecimalPlaces: 2
+      // validation would reject.
+      hours: Math.round((Number(draft.hours) || 0) * 100) / 100,
       color: draft.color,
       blurb: draft.blurb || undefined,
       skills: draft.skills,
@@ -650,21 +676,32 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
           </div>
           <div style={field}>
             <label style={label}>Hours</label>
-            <input style={rowInput} type="number" min={0} value={draft.hours} onChange={(e) => set("hours", e.target.value)} />
+            <input style={rowInput} type="number" min={0} step={HOURS_STEP} value={draft.hours} onChange={(e) => set("hours", e.target.value)} />
             {/* #275 — additive suggestion, not a replacement: derived from
                 each module's video length + quiz question count below, but
                 the number field above stays manually editable either way
-                (e.g. for modules whose video source isn't YouTube). */}
-            {suggestedHours > 0 && Number(draft.hours) !== suggestedHours && (
-              <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 5 }}>
-                Estimated from modules: ~{suggestedHours}h ({formatMinutes(totalEstimatedMinutes)}).{" "}
-                <span
-                  onClick={() => set("hours", suggestedHours)}
-                  style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}
-                >
-                  Use estimate
-                </span>
-              </div>
+                (e.g. for modules whose video source isn't YouTube).
+                #297 — this row used to disappear entirely once Hours
+                matched the estimate, which reads as the feature glitching
+                off (especially right after clicking "Use estimate" itself)
+                rather than as confirmation it worked. It now stays put and
+                switches to a green in-sync message instead. */}
+            {suggestedHours > 0 && (
+              hoursMatchesEstimate ? (
+                <div style={{ fontSize: 11.5, color: "var(--success)", fontWeight: 600, marginTop: 5 }}>
+                  ✓ Matching Keystone's estimated time (~{formatMinutes(suggestedHours * 60)}).
+                </div>
+              ) : (
+                <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 5 }}>
+                  Estimated from modules: ~{formatMinutes(suggestedHours * 60)} ({formatMinutes(totalEstimatedMinutes)} exact).{" "}
+                  <span
+                    onClick={() => set("hours", suggestedHours)}
+                    style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}
+                  >
+                    Use estimate
+                  </span>
+                </div>
+              )
             )}
           </div>
           <div style={field}>

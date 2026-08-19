@@ -3,7 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsIn,
-  IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Min,
@@ -33,7 +33,14 @@ export class CreateCourseDto {
   @IsIn(LEVELS)
   level: string;
 
-  @IsInt()
+  // #297 — was @IsInt(); the Trainer Studio editor now offers 15-minute
+  // (0.25h) increments so a short course isn't forced to round up to a
+  // full hour. maxDecimalPlaces: 2 is a loose backstop against float
+  // noise (e.g. 1.2500000000000002 from repeated /4 * 4 arithmetic) —
+  // not an attempt to enforce the quarter-hour step server-side, which
+  // stays a frontend UX nicety a trainer could still bypass by typing a
+  // value directly.
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   hours: number;
 
