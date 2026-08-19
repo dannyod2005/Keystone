@@ -143,6 +143,46 @@ export class ActivityService {
     });
   }
 
+  // #314 — same day-scoped dedup as logModuleView above, applied to note
+  // saves. ModulesService.saveNote used to only be called on blur (one
+  // call per note-editing session), so a flat unconditional award was
+  // fine. #293's debounced autosave calls it on every ~1.2s typing pause
+  // instead, which without this guard meant every pause during normal
+  // note-taking minted a fresh award — several minutes of writing could
+  // rack up dozens of them for one note. `points` is passed in rather
+  // than a local constant (matching logEvent's own convention) since
+  // NOTE_SAVE_POINTS is owned by ModulesService, the only caller.
+  async logNoteSave(
+    userId: string,
+    moduleId: string,
+    points: number,
+  ): Promise<void> {
+    const now = new Date();
+    const dayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const dayEnd = addDaysUTC(dayStart, 1);
+
+    try {
+      const existing = await this.activityRepo.findOne({
+        where: {
+          user: { id: userId },
+          module: { id: moduleId },
+          source: 'note_save',
+          occurredAt: Between(dayStart, dayEnd),
+        },
+      });
+      if (existing) return;
+    } catch (err) {
+      this.logger.error(
+        `Failed to check existing note_save activity (userId=${userId}, moduleId=${moduleId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+
+    await this.logEvent(userId, 'note_save', points, { moduleId });
+  }
+
   // #124 — the actual fix for the issue: instead of logging a module's
   // whole estimated `totalPoints` on the single day it's marked complete,
   // split it across every distinct day the module was viewed (per
