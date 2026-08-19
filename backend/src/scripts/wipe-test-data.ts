@@ -35,6 +35,15 @@ import { AppDataSource } from '../data-source';
 // catches anything this list misses via FK, but the list is kept
 // explicit and complete so the printed dry-run counts are accurate
 // for every table, not just the ones CASCADE happens to reach.
+//
+// #310 — this list had gone stale: user_badges (#225), learning_paths /
+// learning_path_courses / learning_path_enrollments (#224), notifications
+// (#229), and bookmarks (#230) were all missing. CASCADE meant the actual
+// deletion was never affected — each has an FK back to a table already
+// listed here, so TRUNCATE still emptied them — but the dry-run preview
+// silently under-reported scope, which defeats the point of a
+// review-before-you-confirm safety check. Keep this list in sync with
+// src/migrations whenever a new table is added.
 const TABLES_TO_WIPE = [
   'profiles',
   'providers',
@@ -49,6 +58,12 @@ const TABLES_TO_WIPE = [
   'module_notes',
   'forum_posts',
   'activity_events',
+  'user_badges',
+  'learning_paths',
+  'learning_path_courses',
+  'learning_path_enrollments',
+  'notifications',
+  'bookmarks',
 ];
 
 interface AuthUserSummary {
