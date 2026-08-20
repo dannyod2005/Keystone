@@ -67,6 +67,23 @@ function normalizeCourse(c) {
   return { ...c, rating: c.rating == null ? null : Number(c.rating) };
 }
 
+// #289 — plain fetch() has no timeout: if a connection hangs (e.g. the
+// backend dev server restarting mid-request, or any other half-open
+// socket that never gets a response) the returned Promise just never
+// settles, so .then/.catch/.finally never run and a loading flag gated
+// on this fetch stays true forever — no error, just an infinite spinner
+// that nothing but a full page reload can clear. This wraps fetch with
+// an AbortController so a hung request eventually rejects like a normal
+// failure instead of hanging indefinitely, which is what actually lets
+// the .catch/.finally below do their job.
+function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+    clearTimeout(timeoutId),
+  );
+}
+
 /* ---------- Layout shell (sidebar + topbar) for logged-in app routes ---------- */
 function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notifications, unreadCount, onOpenNotification }) {
   const location = useLocation();
@@ -209,6 +226,18 @@ function KeystonePrototype() {
   const [courses, setCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [enrolledLoading, setEnrolledLoading] = useState(true);
+  // #289 — courses/enrolled are the two fetches DashboardScreen's "My
+  // learning" loading state is gated on (loading={coursesLoading ||
+  // enrolledLoading}); errors on either previously left it stuck showing
+  // "Loading your learning…" forever with no way back except a full page
+  // reload. dashboardRetryTick is a shared "try again" trigger: bumping
+  // it re-runs both effects below without needing separate retry state
+  // per fetch, since the fix (a hung request, or a real failure) is the
+  // same either way — just re-request both.
+  const [coursesError, setCoursesError] = useState(false);
+  const [enrolledError, setEnrolledError] = useState(false);
+  const [dashboardRetryTick, setDashboardRetryTick] = useState(0);
+  const retryDashboard = () => setDashboardRetryTick((n) => n + 1);
   // #224 — learning paths follow the exact same public-list/private-
   // enrollment split as courses/enrolled above: `learningPaths` is the
   // public GET /learning-paths list (no auth), `pathEnrollments` is this
@@ -227,7 +256,7 @@ function KeystonePrototype() {
   const [activitySummary, setActivitySummary] = useState({
     streak: 0,
     pointsThisWeek: 0,
-    dailyGoalPoints: 300,
+    dailyGoalPoints: 1500, // #296 — matches the recalibrated signup default
     goalHitDays: 0,
     week: [],
   });
@@ -253,15 +282,19 @@ function KeystonePrototype() {
   const [leaderboardOptIn, setLeaderboardOptIn] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_URL}/courses`)
+    setCoursesError(false);
+    fetchWithTimeout(`${process.env.REACT_APP_API_URL}/courses`)
       .then((res) => {
         if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         return res.json();
       })
       .then((data) => setCourses(data.map(normalizeCourse)))
-      .catch((err) => console.error("Failed to load courses:", err.message))
+      .catch((err) => {
+        console.error("Failed to load courses:", err.message);
+        setCoursesError(true);
+      })
       .finally(() => setCoursesLoading(false));
-  }, []);
+  }, [dashboardRetryTick]);
   // Fetch the logged-in user's real enrollments (#19), replacing the old
   // ENROLLED_DEFAULT mock. Re-runs whenever login state changes; clears
   // back to [] on logout rather than leaving stale data from a previous
@@ -270,11 +303,13 @@ function KeystonePrototype() {
     if (!loggedIn || !session) {
       setEnrolled([]);
       setEnrolledLoading(false);
+      setEnrolledError(false);
       return;
     }
 
     setEnrolledLoading(true);
-    fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
+    setEnrolledError(false);
+    fetchWithTimeout(`${process.env.REACT_APP_API_URL}/enrollments`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
       .then((res) => {
@@ -297,9 +332,10 @@ function KeystonePrototype() {
       .catch((err) => {
         console.error("Failed to load enrollments:", err.message);
         setEnrolled([]);
+        setEnrolledError(true);
       })
       .finally(() => setEnrolledLoading(false));
-  }, [loggedIn, session]);
+  }, [loggedIn, session, dashboardRetryTick]);
 
   // #224 — public list of learning paths, same fetch-on-mount shape as
   // courses above.
@@ -391,6 +427,27 @@ function KeystonePrototype() {
   }, [loggedIn, session]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // #292 — fire-and-forget refresh after an action that can create a new
+  // notification server-side (course completion, most concretely) — same
+  // "silently leave state stale on failure rather than surface it"
+  // reasoning as refetchActivitySummary below. Unlike the on-login effect
+  // above, a failure here does NOT reset notifications to [] — that reset
+  // only makes sense for a fresh mount with no known state yet; wiping an
+  // already-populated bell because one follow-up refetch hiccuped would
+  // be worse than just leaving it stale until the next natural refetch.
+  async function refetchNotifications() {
+    if (!session) return;
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/notifications`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      setNotifications(await res.json());
+    } catch (err) {
+      console.error("Failed to refresh notifications:", err.message);
+    }
+  }
 
   // #230 — this learner's saved-without-enrolling courses, for the
   // Catalogue card toggle and the Dashboard's Saved section. Same
@@ -505,7 +562,7 @@ function KeystonePrototype() {
       setActivitySummary({
         streak: 0,
         pointsThisWeek: 0,
-        dailyGoalPoints: 300,
+        dailyGoalPoints: 1500, // #296 — matches the recalibrated signup default
         goalHitDays: 0,
         week: [],
       });
@@ -902,6 +959,12 @@ function KeystonePrototype() {
       ),
     );
     refetchActivitySummary();
+    // #292 — a save can be the one that pushes this enrollment to
+    // 'complete' server-side, which creates a course_completed
+    // notification (and possibly a badge_earned one) as a side effect.
+    // Refetching here is what makes that show up in the bell right away
+    // instead of only after the next login/reload.
+    refetchNotifications();
   }
 
   // #106 — same pattern as saveProgress: PATCH the enrollment, merge the
@@ -1110,6 +1173,30 @@ function KeystonePrototype() {
     setTimeout(() => setToast(null), 2600);
   }
 
+  // #300 — "Retake" on a completed course: hits the combined
+  // POST /enrollments/:id/retake endpoint (see EnrollmentsService.retake)
+  // rather than doing the DELETE-then-POST as two separate calls from
+  // here, so there's no window where a network drop between them could
+  // leave the learner unenrolled with nothing. Same refetch shape as
+  // unenrolCourse above — a retaken course can also be part of an
+  // enrolled learning path, whose derived progress needs the same fresh
+  // read.
+  async function retakeCourse(enrollmentId) {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments/${enrollmentId}/retake`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Request failed: ${res.status}`);
+    }
+
+    await Promise.all([refetchEnrollments(), refetchPathEnrollments()]);
+    setToast("Course reset — ready to retake");
+    setTimeout(() => setToast(null), 2600);
+  }
+
   // #207 — the other half of the sessionStorage mirror set in handleEnrol:
   // picks up a pending enrollment that survived a Google OAuth redirect
   // (which clears pendingCourse along with all other in-memory state,
@@ -1152,6 +1239,11 @@ function KeystonePrototype() {
 
     const result = await res.json();
     refetchActivitySummary();
+    // #291 — a perfect score can earn the perfect_quiz_score badge
+    // server-side, which creates a notification as a side effect. Same
+    // reasoning as saveProgress's refetch below: without this, the bell
+    // stays stale until some unrelated later refetch happens to fire.
+    refetchNotifications();
     return result;
   }
 
@@ -1198,6 +1290,11 @@ function KeystonePrototype() {
 
     const result = await res.json();
     refetchActivitySummary();
+    // #291 — a post/reply can create a notification server-side: the
+    // first-ever-post badge, or (for replies specifically) notifying the
+    // parent post's author. Same reasoning as submitQuiz/saveProgress —
+    // without this the bell doesn't update until an unrelated refetch.
+    refetchNotifications();
     return result;
   }
 
@@ -1633,10 +1730,13 @@ function KeystonePrototype() {
                   courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
                   onUnenrol={unenrolCourse}
+                  onRetake={retakeCourse}
                   user={user}
                   goal={learnerGoal}
                   activitySummary={activitySummary}
                   loading={coursesLoading || enrolledLoading}
+                  error={coursesError || enrolledError}
+                  onRetry={retryDashboard}
                   calendarWeekOffset={calendarWeekOffset}
                   onPrevWeek={() => setCalendarWeekOffset((n) => n - 1)}
                   onNextWeek={() => setCalendarWeekOffset((n) => n + 1)}

@@ -58,12 +58,20 @@ export function HomeScreen({
   // (or shown at all for a learner/trainer with no goal set) — a
   // logged-out-style "what's out there" strip, minus anything already
   // surfaced above or already enrolled in.
+  // #308 — sorts by createdAt descending, not rating: this section is
+  // titled "New on Keystone" (trending-arrow icon), but was reusing
+  // "Recommended for you"'s rating sort, which has nothing to do with
+  // recency. In practice that meant an old, highly-rated course sat here
+  // indefinitely while genuinely new courses (no ratings yet) never
+  // surfaced. createdAt is already present on every course object here —
+  // CoursesController.findAll() returns the raw entity, no DTO
+  // stripping — so no backend change needed.
   const trending = !loggedIn
     ? []
     : courses
         .filter((c) => !enrolledIds.includes(c.id) && !recommendedIds.has(c.id))
         .slice()
-        .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, TRENDING_LIMIT);
 
   // #247 — same skills-from-completed-courses derivation as Dashboard's
@@ -211,6 +219,15 @@ export function HomeScreen({
                   <ChevronRight size={15} color="var(--slate-light)" />
                 </div>
               ))
+            ) : complete.length > 0 ? (
+              // #290 — distinct from the "never started anything" case
+              // below: this learner has completed courses (visible in the
+              // stat row just above this card), so "you haven't started a
+              // course yet" would be actively wrong, not just unhelpful.
+              <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "10px 8px" }}>
+                Nothing in progress right now —{" "}
+                <span onClick={() => onGo("catalogue")} style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>browse the catalogue</span> to start something new.
+              </div>
             ) : (
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "10px 8px" }}>
                 You haven't started a course yet —{" "}

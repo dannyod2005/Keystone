@@ -470,7 +470,12 @@ export class ModulesService {
     }
 
     const saved = await this.notesRepo.save(note);
-    await this.activityService.logEvent(userId, 'note_save', NOTE_SAVE_POINTS);
+    // #314 — logNoteSave (not logEvent directly): debounced autosave
+    // (#293) calls this on every ~1.2s typing pause, so the points award
+    // needs the same once-per-(user, module)-per-day dedup logModuleView
+    // already uses, or normal note-taking mints a fresh award on every
+    // pause.
+    await this.activityService.logNoteSave(userId, moduleId, NOTE_SAVE_POINTS);
 
     return {
       content: saved.content,

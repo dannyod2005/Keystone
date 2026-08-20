@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star, AlertTriangle } from "lucide-react";
 
 // #240/#254 — a module's quiz score has to clear this to count as
@@ -17,6 +17,14 @@ import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star, AlertTriangle } f
 // the value is 70 (see LearningScreen.threshold.test.js). If you change
 // one, change the other.
 export const PASS_THRESHOLD_PCT = 70;
+
+// Notes previously only saved on blur (tab-switch or clicking away), which
+// left the "Not saved yet" label showing the whole time someone was still
+// typing — reads like the save is broken if you don't know to click away
+// first. This debounce mirrors TrainerCourseEditor's video-duration lookup
+// (VIDEO_DURATION_DEBOUNCE_MS): short enough that a natural typing pause
+// triggers a save, long enough not to fire a request on every keystroke.
+const NOTE_AUTOSAVE_DEBOUNCE_MS = 1200;
 
 export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack, initialModuleId = null, initialTab = null }) {
   // #229 — a notification click-through wants a specific tab (always
@@ -113,6 +121,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteSavedAt, setNoteSavedAt] = useState(null);
+  // Pending debounced-autosave timer — a single ref is enough since only
+  // one module's note editor is ever mounted/focused at a time (unlike
+  // TrainerCourseEditor's per-module durationTimersRef, which tracks many
+  // video-duration lookups in flight at once across a whole course).
+  const noteSaveTimerRef = useRef(null);
 
   // Forum state
   const [posts, setPosts] = useState([]);
@@ -137,6 +150,21 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   const [savingEdit, setSavingEdit] = useState(false);
 
   const currentModule = modules[activeModule];
+
+  // Pre-existing race, surfaced while testing the notes autosave above:
+  // clicking a different module blurs the textarea first, firing a save
+  // for the module being LEFT — but that save is async, and by the time
+  // it resolves, currentModule (read from a closure captured back when
+  // saveNote was called) still points at the old module even though the
+  // screen has already moved on. Without this ref, that late response's
+  // setNoteSavedAt/setNoteSaving calls land on whatever module is on
+  // screen *now*, showing a stale "Saved" time on a note that hasn't
+  // actually been saved yet. Kept as a ref (not state) purely so saveNote
+  // can read the true current value at resolution time — a value captured
+  // in a closure at call time is exactly the stale thing we're guarding
+  // against.
+  const currentModuleIdRef = useRef(currentModule?.id);
+  currentModuleIdRef.current = currentModule?.id;
 
   // #124 — one ping per module focus, so the backend has a per-day "this
   // module was open" marker to later split its completion points across
@@ -189,8 +217,23 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   useEffect(() => {
     if (!currentModule || !onFetchNote) return;
 
+    // Cancel any pending autosave from the module being left. Clicking a
+    // different module/sidebar link blurs the textarea first, which
+    // already saves via handleNoteBlur below — so a debounce timer still
+    // waiting at this point is redundant, and leaving it running risks
+    // its setNoteSaving/setNoteSavedAt calls landing after we've already
+    // reset that state for the newly-loading module.
+    clearTimeout(noteSaveTimerRef.current);
+
     setNoteContent("");
     setNoteSavedAt(null);
+    // handleNoteBlur's save for the module being left can still be
+    // in-flight at this point (blur fires before this effect's module-id
+    // change is processed) — reset unconditionally here so the new
+    // module never inherits a stray "Saving…" from it; saveNote's
+    // currentModuleIdRef guard then keeps that old save from flipping
+    // this back on once it resolves.
+    setNoteSaving(false);
     setNoteLoading(true);
 
     onFetchNote(currentModule.id)
@@ -204,6 +247,13 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     // intentionally omitted from the dependency array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentModule?.id]);
+
+  // Cancel any in-flight autosave timer if the whole screen unmounts
+  // (navigating back to My learning etc.) so it doesn't fire — and risk a
+  // "state update on an unmounted component" warning — after the fact.
+  useEffect(() => {
+    return () => clearTimeout(noteSaveTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!currentModule || !onFetchPosts) return;
@@ -377,18 +427,46 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     }
   }
 
-  async function handleNoteBlur() {
-    if (!currentModule || !onSaveNote) return;
+  async function saveNote(moduleId, content) {
+    if (!moduleId || !onSaveNote) return;
 
-    setNoteSaving(true);
+    // Only flip the "Saving…" indicator on if we're still looking at the
+    // module this save is for — see currentModuleIdRef's comment above.
+    if (moduleId === currentModuleIdRef.current) setNoteSaving(true);
     try {
-      const saved = await onSaveNote(currentModule.id, noteContent);
-      setNoteSavedAt(saved.updatedAt);
+      const saved = await onSaveNote(moduleId, content);
+      if (moduleId === currentModuleIdRef.current) setNoteSavedAt(saved.updatedAt);
     } catch (err) {
       console.error("Failed to save note:", err.message);
     } finally {
-      setNoteSaving(false);
+      if (moduleId === currentModuleIdRef.current) setNoteSaving(false);
     }
+  }
+
+  function handleNoteChange(e) {
+    const value = e.target.value;
+    setNoteContent(value);
+    if (!currentModule) return;
+
+    // Debounced autosave: reset the timer on every keystroke so it only
+    // actually fires NOTE_AUTOSAVE_DEBOUNCE_MS after typing pauses, not on
+    // every keystroke. moduleId/value are captured here (this render) and
+    // passed straight through rather than read back off state when the
+    // timer fires, so a fast module switch right after typing can't cause
+    // this to save the wrong module's content.
+    clearTimeout(noteSaveTimerRef.current);
+    const moduleId = currentModule.id;
+    noteSaveTimerRef.current = setTimeout(() => {
+      saveNote(moduleId, value);
+    }, NOTE_AUTOSAVE_DEBOUNCE_MS);
+  }
+
+  async function handleNoteBlur() {
+    // Leaving the field is a stronger signal than a typing pause — save
+    // immediately rather than waiting out whatever's left of the debounce.
+    clearTimeout(noteSaveTimerRef.current);
+    if (!currentModule) return;
+    await saveNote(currentModule.id, noteContent);
   }
 
   async function handleCreatePost(parentPostId = null) {
@@ -680,7 +758,7 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
             <div className="ks-card" style={{ padding: 16 }}>
               <textarea
                 value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
+                onChange={handleNoteChange}
                 onBlur={handleNoteBlur}
                 disabled={noteLoading}
                 placeholder="Jot down notes for this module — only visible to you."

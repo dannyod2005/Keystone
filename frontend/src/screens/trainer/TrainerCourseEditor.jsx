@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, BookMarked, Plus, Trash2, Save, Video, ChevronDown, ChevronUp, HelpCircle, X } from "lucide-react";
 
 const TRAINER_CATEGORIES = ["Technical", "Business", "Leadership"];
@@ -32,6 +33,15 @@ const SECONDS_PER_QUESTION = 45;
 // Debounce so a lookup isn't fired on every keystroke while a trainer is
 // still typing/pasting a video URL.
 const VIDEO_DURATION_DEBOUNCE_MS = 700;
+
+// #297 — the Hours field and its auto-suggestion used to only work in
+// whole-hour steps, so a genuinely ~1h40m course could only ever suggest
+// (and store) 2h. 15 minutes, not 10: as a fraction of an hour it's a
+// clean 0.25, matching the courses.hours column's `real` type and
+// avoiding the repeating decimal 10-minute steps would produce
+// (1/6 = 0.1666...). See AllowFractionalCourseHours migration for the
+// backend side of this.
+const HOURS_STEP = 0.25;
 
 function formatMinutes(totalMinutes) {
   const rounded = Math.max(1, Math.round(totalMinutes));
@@ -95,6 +105,12 @@ function normalizeLoadedQuestion(q) {
 export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEdit, onSaveQuiz, onFetchProvider, onFetchProfile, onFetchVideoDuration }) {
 
   const [quizState, setQuizState] = useState({}); // { [moduleId]: { expanded, loading, loaded, questions, saving, error } }
+
+  // #316 — index of a module pending remove-confirmation, or null. Only
+  // ever set for a module that already has a persisted `id` (i.e. one
+  // that exists in the DB right now, not one only added client-side
+  // during this editing session) — see requestRemoveModule below.
+  const [removingModuleIndex, setRemovingModuleIndex] = useState(null);
 
   // Tracks the latest save request's sequence number per module, so an
   // older, slower response can never overwrite state with stale data
@@ -232,7 +248,19 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
 
   const moduleEstimates = draft.modules.map(moduleEstimate);
   const totalEstimatedMinutes = moduleEstimates.reduce((sum, e) => sum + e.totalMinutes, 0);
-  const suggestedHours = totalEstimatedMinutes > 0 ? Math.max(1, Math.round(totalEstimatedMinutes / 60)) : 0;
+  // #297 — rounds to the nearest 15-minute (HOURS_STEP) increment instead
+  // of the nearest whole hour, so the suggestion (and the value "Use
+  // estimate" writes into the Hours field) reflects the real module
+  // total rather than always rounding it away.
+  const suggestedHours =
+    totalEstimatedMinutes > 0
+      ? Math.max(HOURS_STEP, Math.round(totalEstimatedMinutes / 60 / HOURS_STEP) * HOURS_STEP)
+      : 0;
+  // Floating point (e.g. 0.1 + 0.2 !== 0.3) means a value round-tripped
+  // through the estimate/step math can miss an exact match by a sliver —
+  // compare to less than half a minute's worth of an hour instead of
+  // strict equality.
+  const hoursMatchesEstimate = suggestedHours > 0 && Math.abs(Number(draft.hours) - suggestedHours) < 0.01;
 
   function setModule(i, field, v) {
     setDraft((d) => ({
@@ -249,6 +277,26 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
   }
   function removeModule(i) {
     setDraft((d) => ({ ...d, modules: d.modules.filter((_, x) => x !== i) }));
+  }
+
+  // #316 — a module with a real `id` already exists in the DB and, once
+  // this course is saved, removing it cascades to delete every enrolled
+  // learner's notes, forum posts, and quiz submissions for it (see
+  // CoursesService.update's deleteOrphaned). A module with no `id` yet
+  // only exists in this draft — nothing to lose, so it's removed
+  // immediately with no prompt, same as before this fix.
+  function requestRemoveModule(i) {
+    const m = draft.modules[i];
+    if (m?.id) {
+      setRemovingModuleIndex(i);
+    } else {
+      removeModule(i);
+    }
+  }
+
+  function confirmRemoveModule() {
+    if (removingModuleIndex !== null) removeModule(removingModuleIndex);
+    setRemovingModuleIndex(null);
   }
 
   function setFaq(i, field, v) {
@@ -552,7 +600,12 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       provider: draft.provider,
       category: draft.category,
       level: draft.level,
-      hours: Number(draft.hours) || 0,
+      // #297 — rounded to 2dp before send: hours is no longer always a
+      // whole number, and repeated step math (or a trainer typing a long
+      // decimal by hand) can otherwise produce float noise like
+      // 1.2500000000000002, which the backend's maxDecimalPlaces: 2
+      // validation would reject.
+      hours: Math.round((Number(draft.hours) || 0) * 100) / 100,
       color: draft.color,
       blurb: draft.blurb || undefined,
       skills: draft.skills,
@@ -650,21 +703,32 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
           </div>
           <div style={field}>
             <label style={label}>Hours</label>
-            <input style={rowInput} type="number" min={0} value={draft.hours} onChange={(e) => set("hours", e.target.value)} />
+            <input style={rowInput} type="number" min={0} step={HOURS_STEP} value={draft.hours} onChange={(e) => set("hours", e.target.value)} />
             {/* #275 — additive suggestion, not a replacement: derived from
                 each module's video length + quiz question count below, but
                 the number field above stays manually editable either way
-                (e.g. for modules whose video source isn't YouTube). */}
-            {suggestedHours > 0 && Number(draft.hours) !== suggestedHours && (
-              <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 5 }}>
-                Estimated from modules: ~{suggestedHours}h ({formatMinutes(totalEstimatedMinutes)}).{" "}
-                <span
-                  onClick={() => set("hours", suggestedHours)}
-                  style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}
-                >
-                  Use estimate
-                </span>
-              </div>
+                (e.g. for modules whose video source isn't YouTube).
+                #297 — this row used to disappear entirely once Hours
+                matched the estimate, which reads as the feature glitching
+                off (especially right after clicking "Use estimate" itself)
+                rather than as confirmation it worked. It now stays put and
+                switches to a green in-sync message instead. */}
+            {suggestedHours > 0 && (
+              hoursMatchesEstimate ? (
+                <div style={{ fontSize: 11.5, color: "var(--success)", fontWeight: 600, marginTop: 5 }}>
+                  ✓ Matching Keystone's estimated time (~{formatMinutes(suggestedHours * 60)}).
+                </div>
+              ) : (
+                <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 5 }}>
+                  Estimated from modules: ~{formatMinutes(suggestedHours * 60)} ({formatMinutes(totalEstimatedMinutes)} exact).{" "}
+                  <span
+                    onClick={() => set("hours", suggestedHours)}
+                    style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}
+                  >
+                    Use estimate
+                  </span>
+                </div>
+              )
             )}
           </div>
           <div style={field}>
@@ -746,7 +810,7 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
                 <button
                   type="button"
                   aria-label={`Remove module ${m.title || i + 1}`}
-                  onClick={() => removeModule(i)}
+                  onClick={() => requestRemoveModule(i)}
                   style={{ background: "none", border: "none", padding: 0, cursor: "pointer", marginTop: 10, display: "inline-flex", lineHeight: 0 }}
                 >
                   <Trash2 size={16} color="var(--slate-light)" />
@@ -945,6 +1009,50 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
       </div>
       {!canSave && <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>Add a title and at least one module to save.</div>}
       {saveError && <div style={{ fontSize: 12.5, color: "var(--coral)", marginTop: 8 }}>{saveError}</div>}
+
+      {/* #316 — portaled to document.body, same fix/reasoning as #301's
+          modals: this whole screen is nested inside a `ks-page-enter`
+          root div, whose keyframe leaves a lingering transform after it
+          finishes animating in, which creates a containing block for
+          `position: fixed` descendants and would otherwise size this
+          backdrop to the page content's box instead of the viewport. */}
+      {removingModuleIndex !== null && createPortal(
+        <div
+          onClick={() => setRemovingModuleIndex(null)}
+          className="ks-modal-backdrop"
+          style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Remove this module?</div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setRemovingModuleIndex(null)}
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <X size={18} color="var(--slate)" />
+              </button>
+            </div>
+            <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
+              This module already has learners enrolled in the course. Once you save, removing{" "}
+              <strong>{draft.modules[removingModuleIndex]?.title || "this module"}</strong> permanently deletes every
+              enrolled learner's notes, forum posts, and quiz submissions for it — not just your own. This can't be undone.
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button className="ks-btn ks-btn-ghost" onClick={() => setRemovingModuleIndex(null)}>Cancel</button>
+              <button
+                className="ks-btn"
+                style={{ background: "var(--coral)", color: "#fff" }}
+                onClick={confirmRemoveModule}
+              >
+                Remove module
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

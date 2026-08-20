@@ -27,7 +27,37 @@ export class Course {
   @Column()
   level: string; // Beginner | Intermediate | Advanced
 
-  @Column({ type: 'int', default: 0 })
+  // #297 — was a whole-hour int; trainers authoring a short course (e.g. 5
+  // modules of ~20min video each) had no way to enter anything between 1h
+  // and 2h, so the estimate suggestion below always rounded away from the
+  // real figure. `real` (not `decimal`/`numeric`) deliberately: TypeORM
+  // returns decimal/numeric columns as strings to avoid float-precision
+  // loss on values that need it, but every consumer of this field
+  // (EnrollmentsService's points calc, CourseAnalyticsService's pace calc)
+  // does plain arithmetic on it and expects a JS number — `real` maps
+  // straight to one. See AllowFractionalCourseHours migration.
+  //
+  // #306 — "no meaningful precision loss to guard against" above turned
+  // out wrong: `real` is single-precision float, and only exact binary
+  // fractions (quarter-hours: 0.25, 0.5, 0.75, ...) round-trip through it
+  // cleanly. A value like 8.1 or 4.33 — which nothing stops a trainer
+  // from typing directly into the Hours field, since the 0.25 step is a
+  // frontend nudge, not a hard constraint, and the backend only validates
+  // maxDecimalPlaces: 2 — comes back as 8.100000381469727 or
+  // 4.329999923706055, and was displayed exactly that way (Catalogue,
+  // Course Info, learning-path detail, Home, Trainer Studio's course
+  // list all render this field with no rounding). The transformer below
+  // rounds to 2dp on every read, fixing it at the one place every one of
+  // those display sites (and every points/pace-calc consumer) actually
+  // gets the value from — no frontend changes needed.
+  @Column({
+    type: 'real',
+    default: 0,
+    transformer: {
+      to: (value: number) => value,
+      from: (value: number) => Math.round(Number(value) * 100) / 100,
+    },
+  })
   hours: number;
 
   @Column({ type: 'decimal', nullable: true })

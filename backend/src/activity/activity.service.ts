@@ -21,11 +21,15 @@ export const POINTS_PER_MINUTE = 10;
 // column's DB default, but this keeps goalHit/buildWeek from doing math
 // against undefined if it ever does). The real, per-learner value now
 // comes from profile.dailyGoalPoints, set at signup and editable from
-// the dashboard. #246 — 300, not 30: the pre-existing 30-minute default
-// converted through POINTS_PER_MINUTE during the daily-goal migration,
-// so a learner who never touched their goal sees the same relative
-// target as before, just in the new unit.
-const DEFAULT_DAILY_GOAL_POINTS = 30 * POINTS_PER_MINUTE;
+// the dashboard. #296 — 1500, not 300: module-completion points (scaling
+// with course.hours) average ~1,350-1,578 pts per module, dwarfing the
+// old 300 default — see SettingsScreen's DAILY_GOAL_PRESETS comment for
+// the full recalibration. Must stay in sync with the handle_new_user
+// trigger's hardcoded default (see the RecalibrateDailyGoalDefault
+// migration) and profile.entity.ts's @Column default — this constant is
+// only ever a fallback for an already-existing row, never what a new
+// signup actually gets (that's the trigger's job).
+const DEFAULT_DAILY_GOAL_POINTS = 150 * POINTS_PER_MINUTE;
 
 // How far back to pull events when walking the streak. Bounded so the
 // query stays cheap; generous enough that no realistic streak in this
@@ -139,6 +143,46 @@ export class ActivityService {
     });
   }
 
+  // #314 — same day-scoped dedup as logModuleView above, applied to note
+  // saves. ModulesService.saveNote used to only be called on blur (one
+  // call per note-editing session), so a flat unconditional award was
+  // fine. #293's debounced autosave calls it on every ~1.2s typing pause
+  // instead, which without this guard meant every pause during normal
+  // note-taking minted a fresh award — several minutes of writing could
+  // rack up dozens of them for one note. `points` is passed in rather
+  // than a local constant (matching logEvent's own convention) since
+  // NOTE_SAVE_POINTS is owned by ModulesService, the only caller.
+  async logNoteSave(
+    userId: string,
+    moduleId: string,
+    points: number,
+  ): Promise<void> {
+    const now = new Date();
+    const dayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const dayEnd = addDaysUTC(dayStart, 1);
+
+    try {
+      const existing = await this.activityRepo.findOne({
+        where: {
+          user: { id: userId },
+          module: { id: moduleId },
+          source: 'note_save',
+          occurredAt: Between(dayStart, dayEnd),
+        },
+      });
+      if (existing) return;
+    } catch (err) {
+      this.logger.error(
+        `Failed to check existing note_save activity (userId=${userId}, moduleId=${moduleId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+
+    await this.logEvent(userId, 'note_save', points, { moduleId });
+  }
+
   // #124 — the actual fix for the issue: instead of logging a module's
   // whole estimated `totalPoints` on the single day it's marked complete,
   // split it across every distinct day the module was viewed (per
@@ -153,12 +197,40 @@ export class ActivityService {
   // base points by its quiz score, if any, before calling this) — this
   // method's own job is unchanged: purely distributing whatever amount
   // it's given across the right days, not deciding what that amount is.
+  //
+  // #312 — a module's completion is paid out at most once per (user,
+  // module), ever, regardless of how many times the caller thinks it's
+  // "newly completed." updateProgress works out "newly completed" from
+  // the *current* enrollment row's progress, which EnrollmentsService's
+  // retake() resets to 0 on every retake — without this guard, a learner
+  // could retake a finished course (quiz submissions/notes deliberately
+  // carry over, so nothing blocks instantly re-clicking Mark Complete on
+  // every module) and get paid again in full, unbounded, since
+  // activity_events has no DB-level uniqueness on (user, module). The
+  // check lives here rather than in the caller so it protects every
+  // caller of logModuleCompletion, not just this one code path.
   async logModuleCompletion(
     userId: string,
     moduleId: string,
     totalPoints: number,
   ): Promise<void> {
     if (!totalPoints || totalPoints <= 0) return;
+
+    try {
+      const alreadyPaid = await this.activityRepo.findOne({
+        where: {
+          user: { id: userId },
+          module: { id: moduleId },
+          source: 'module_complete',
+        },
+      });
+      if (alreadyPaid) return;
+    } catch (err) {
+      this.logger.error(
+        `Failed to check existing module_complete activity (userId=${userId}, moduleId=${moduleId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
 
     const viewedDayKeys = await this.getViewedDayKeys(userId, moduleId);
     const todayKey = toDateKey(new Date());
