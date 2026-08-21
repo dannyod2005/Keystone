@@ -66,10 +66,15 @@ export function CatalogueScreen({
   // nothing's actively filtered: search/filter fully overriding
   // personalization, rather than blending with it, is what the acceptance
   // criteria's "when no search/filter is active" means in practice.
+  //
+  // #324 — excludes anything already in enrolledIds (covers in-progress
+  // and completed alike, same array the "Enrolled" badge reads from):
+  // a learner with a lot of history in one goal category was seeing a
+  // "for you" strip that was mostly courses they'd already done.
   const recommended = (!goal || hasActiveFilter)
     ? []
     : courses
-        .filter((c) => c.category === goal)
+        .filter((c) => c.category === goal && !enrolledIds.includes(c.id))
         .slice()
         .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))
         .slice(0, RECOMMENDED_LIMIT);
