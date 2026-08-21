@@ -204,7 +204,15 @@ export function HomeScreen({
           </div>
         )}
         <div className="ks-card" style={{ padding: 22, position: "relative" }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>Continue where you left off</div>
+          {/* #323 — this heading used to always read "Continue where you
+              left off", even for logged-out guests. The body below already
+              swaps to a neutral "browse this course" list for guests (see
+              #108's comment a few lines down) rather than faking personal
+              progress, but the heading itself didn't follow — a guest who's
+              never continued anything still saw that exact phrase. */}
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>
+            {loggedIn ? "Continue where you left off" : "Popular right now"}
+          </div>
           {loggedIn ? (
             inProgress.length > 0 ? (
               inProgress.slice(0, 3).map((e) => (

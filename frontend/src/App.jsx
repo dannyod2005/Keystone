@@ -1044,10 +1044,17 @@ function KeystonePrototype() {
     setAuthMode(mode);
   }
 
-  async function refetchEnrollments() {
-    if (!session) return;
+  // #318 — sessionOverride, same reasoning as completeEnrol below: called
+  // synchronously from completeEnrol/completeEnrolPath right after a
+  // guest's signup/login resolves, in the same tick, before AuthContext's
+  // own `session` state has caught up. Without this, the enrollment POST
+  // (which does get the fresh session) succeeds, but this refetch silently
+  // no-ops on the stale null `session` — no error, just a dashboard that
+  // doesn't show the new enrollment until something else re-triggers it.
+  async function refetchEnrollments(sessionOverride = session) {
+    if (!sessionOverride) return;
     const res = await fetch(`${process.env.REACT_APP_API_URL}/enrollments`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${sessionOverride.access_token}` },
     });
     if (!res.ok) return;
     const data = await res.json();
@@ -1060,10 +1067,11 @@ function KeystonePrototype() {
     );
   }
 
-  async function refetchPathEnrollments() {
-    if (!session) return;
+  // #318 — sessionOverride, same reasoning as refetchEnrollments above.
+  async function refetchPathEnrollments(sessionOverride = session) {
+    if (!sessionOverride) return;
     const res = await fetch(`${process.env.REACT_APP_API_URL}/learning-path-enrollments`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${sessionOverride.access_token}` },
     });
     if (!res.ok) return;
     setPathEnrollments(await res.json());
@@ -1074,7 +1082,8 @@ function KeystonePrototype() {
   // server-side (see LearningPathEnrollmentsService), so both
   // pathEnrollments and enrolled need refetching afterward to pick up the
   // new state in one pass.
-  async function completeEnrolPath(path) {
+  // #318 — sessionOverride, same reasoning as completeEnrol above.
+  async function completeEnrolPath(path, sessionOverride = session) {
     const alreadyEnrolled = pathEnrollments.some((pe) => pe.pathId === path.id);
     if (alreadyEnrolled) {
       setSelectedPath(null);
@@ -1088,7 +1097,7 @@ function KeystonePrototype() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${sessionOverride.access_token}`,
         },
         body: JSON.stringify({ pathId: path.id }),
       });
@@ -1098,7 +1107,10 @@ function KeystonePrototype() {
         throw new Error(body?.message || `Request failed: ${res.status}`);
       }
 
-      await Promise.all([refetchPathEnrollments(), refetchEnrollments()]);
+      await Promise.all([
+        refetchPathEnrollments(sessionOverride),
+        refetchEnrollments(sessionOverride),
+      ]);
       setToast(`Enrolled in "${path.title}"`);
       setTimeout(() => setToast(null), 2600);
     } catch (err) {
@@ -1112,7 +1124,19 @@ function KeystonePrototype() {
     navigate("/dashboard");
   }
 
-  async function completeEnrol(course) {
+  // #318 — sessionOverride, not just the AuthContext `session`: called
+  // synchronously from handleAuthSubmit right after a guest's signup/login
+  // resolves, in the same tick — AuthContext's own `session` state is only
+  // updated via its onAuthStateChange listener's setSession call, which
+  // can't take effect until the next render, so it's still the pre-login
+  // (null) value at that exact moment. handleAuthSubmit already has the
+  // real, just-returned session in hand and passes it straight through
+  // here rather than letting this function fall back to that stale
+  // context value. Every other call site (already-logged-in Enrol clicks,
+  // #207's sessionStorage-recovery effect) omits the second argument and
+  // gets the default — those all run on a later render, once the context
+  // session is genuinely fresh.
+  async function completeEnrol(course, sessionOverride = session) {
     if (enrolledIds.includes(course.id)) {
       setSelectedCourse(null);
       navigate("/dashboard");
@@ -1125,7 +1149,7 @@ function KeystonePrototype() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${sessionOverride.access_token}`,
         },
         body: JSON.stringify({ courseId: course.id }),
       });
@@ -1135,7 +1159,7 @@ function KeystonePrototype() {
         throw new Error(body?.message || `Request failed: ${res.status}`);
       }
 
-      await refetchEnrollments();
+      await refetchEnrollments(sessionOverride);
       setToast(`Enrolled in "${course.title}"`);
       setTimeout(() => setToast(null), 2600);
     } catch (err) {
@@ -1546,7 +1570,15 @@ function KeystonePrototype() {
   function handleAuthSubmit(session) {
     setAuthMode(null);
     if (pendingCourse) {
-      completeEnrol(pendingCourse);
+      // #318 — pass this parameter (the session AuthModal just got back
+      // from Supabase) explicitly, rather than letting completeEnrol fall
+      // back to its default. This function runs synchronously, in the
+      // same tick as the signup/login response — AuthContext's own
+      // `session` state hasn't been updated by its onAuthStateChange
+      // listener yet at this exact point (that's a React state update,
+      // which needs a render to take effect), so completeEnrol's default
+      // parameter would still resolve to the pre-login (null) value here.
+      completeEnrol(pendingCourse, session);
       setPendingCourse(null);
       // #207 — this (synchronous email-signup) path resolves the pending
       // enrollment directly, so the sessionStorage mirror handleEnrol set
@@ -1560,8 +1592,15 @@ function KeystonePrototype() {
       // state) will lose a pending path enrol and just land on Catalogue
       // needing to click Enrol again. Documented, known gap rather than
       // silently attempted — scoped out to keep this feature's surface
-      // area contained; the synchronous email-signup path here works fine.
-      completeEnrolPath(pendingPath);
+      // area contained.
+      //
+      // #318 — passing `session` explicitly here for the same reason as
+      // the completeEnrol call above: this had the identical stale-session
+      // bug (the old comment here claiming "the synchronous email-signup
+      // path here works fine" was wrong — it hit the same failure as
+      // completeEnrol, just for path enrollment instead of course
+      // enrollment).
+      completeEnrolPath(pendingPath, session);
       setPendingPath(null);
     } else {
       navigate("/dashboard");
