@@ -640,9 +640,15 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   // same large-breakpoint width policy instead of its own one-off value.
   return (
     <div className="ks-page-enter ks-page-wide" style={{ padding: "22px 32px 40px" }}>
-      <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", cursor: "pointer", marginBottom: 14 }}>
+      {/* #360 — was <div onClick>: not a real link/button, unreachable by
+          keyboard. */}
+      <button
+        type="button"
+        onClick={onBack}
+        style={{ font: "inherit", display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", background: "none", border: "none", padding: 0, cursor: "pointer", marginBottom: 14 }}
+      >
         <ChevronLeft size={15} /> Back to My learning
-      </div>
+      </button>
 
       {!hasModules ? (
         <div className="ks-card" style={{ padding: 24, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
@@ -747,9 +753,22 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
             {currentModule.videoUrl ? currentModule.title : `12:40 · ${currentModule.title}`}
           </div>
 
-          <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 16 }}>
+          {/* #360 — was <div onClick>: not focusable, no role/selected
+              state. Real button, role="tab" + aria-selected inside a
+              role="tablist", same fix as Trainer Studio's tab switcher. */}
+          <div role="tablist" style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 16 }}>
             {["video", "notes", "quiz", "forum"].map((t) => (
-              <div key={t} className={`ks-tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)} style={{ textTransform: "capitalize" }}>{t}</div>
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={tab === t}
+                className={`ks-tab ${tab === t ? "active" : ""}`}
+                onClick={() => setTab(t)}
+                style={{ background: "none", border: "none", font: "inherit", textTransform: "capitalize" }}
+              >
+                {t}
+              </button>
             ))}
           </div>
 

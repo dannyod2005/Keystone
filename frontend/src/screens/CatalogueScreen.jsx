@@ -101,7 +101,22 @@ export function CatalogueScreen({
     // card renders exactly as it did before this feature.
     const isBookmarked = bookmarkedIds.includes(c.id);
     return (
-      <div key={c.id} className="ks-card" onClick={() => onOpenCourse(c)} style={{ padding: 18, cursor: "pointer", display: "flex", flexDirection: "column" }}>
+      <div key={c.id} className="ks-card" style={{ padding: 18, display: "flex", flexDirection: "column", position: "relative" }}>
+        {/* #360 — "stretched button": an invisible button covering the
+            whole card is the real Tab stop / Enter-Space target for
+            opening the course. Can't just make the whole card a <button>
+            because the bookmark toggle below is already its own real,
+            independently-focusable <button> — a button nested inside
+            another button is invalid HTML and screen readers handle it
+            inconsistently. zIndex keeps this under the bookmark button
+            (which gets its own zIndex bump below) so bookmarking still
+            works as its own independent click/Tab stop. */}
+        <button
+          type="button"
+          onClick={() => onOpenCourse(c)}
+          aria-label={`Open ${c.title}`}
+          style={{ position: "absolute", inset: 0, background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", zIndex: 1 }}
+        />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <CategoryDot color={c.color} />
@@ -111,19 +126,16 @@ export function CatalogueScreen({
             {isEnrolled && <span className="ks-badge" style={{ background: "var(--success-tint)", color: "var(--success)" }}>Enrolled</span>}
             {/* #258 — real button (was a bare clickable icon); aria-label
                 reflects current saved state, same reasoning as the
-                password-visibility toggles. */}
+                password-visibility toggles.
+                #360 — position/zIndex sit this above the card-cover button
+                above so it stays independently clickable/tabbable. */}
             {onToggleBookmark && (
               <button
                 type="button"
                 aria-label={isBookmarked ? "Remove bookmark" : "Save course"}
                 aria-pressed={isBookmarked}
-                onClick={(e) => {
-                  // Doesn't bubble to the card's own onClick — toggling a
-                  // bookmark should never also open the course detail modal.
-                  e.stopPropagation();
-                  onToggleBookmark(c, isBookmarked);
-                }}
-                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+                onClick={() => onToggleBookmark(c, isBookmarked)}
+                style={{ position: "relative", zIndex: 2, background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
               >
                 <Bookmark
                   size={16}
@@ -152,8 +164,12 @@ export function CatalogueScreen({
   // trainer wrote.
   function renderPathCard(p) {
     const isEnrolled = enrolledPathIds.includes(p.id);
+    // #360 — was <div onClick>: not focusable. No nested interactive
+    // elements in this card (unlike renderCourseCard's bookmark button),
+    // so a plain <button> wrapping the whole thing is enough — no need
+    // for the stretched-button trick.
     return (
-      <div key={p.id} className="ks-card" onClick={() => onOpenPath(p)} style={{ padding: 18, cursor: "pointer", display: "flex", flexDirection: "column" }}>
+      <button key={p.id} type="button" className="ks-card" onClick={() => onOpenPath(p)} style={{ padding: 18, display: "flex", flexDirection: "column", width: "100%", textAlign: "left", font: "inherit", cursor: "pointer" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Milestone size={13} color="var(--gold-dark)" />
@@ -163,7 +179,7 @@ export function CatalogueScreen({
         </div>
         <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
         <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, flex: 1 }}>{p.description}</div>
-      </div>
+      </button>
     );
   }
 
@@ -213,14 +229,17 @@ export function CatalogueScreen({
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+              {/* #360 — was <span onClick>: not focusable/keyboard-operable.
+                  Real button + aria-pressed, same fix as Trainer Studio's
+                  ownership filter. */}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {cats.map((c) => (
-                  <span key={c} onClick={() => setFilter(c)}
-                    style={{ fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
+                  <button key={c} type="button" onClick={() => setFilter(c)} aria-pressed={filter === c}
+                    style={{ font: "inherit", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
                       background: filter === c ? "var(--ink)" : "var(--paper-2)", color: filter === c ? "var(--paper)" : "var(--slate)",
                       border: "1px solid var(--line)" }}>
                     {c}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>

@@ -4,6 +4,7 @@ import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Meda
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 /* ---------- Screen: Dashboard ---------- */
 
 // #296 — 1500, not 300: matches the recalibrated signup default (see
@@ -22,6 +23,11 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
   const [unenrollingCourse, setUnenrollingCourse] = useState(null);
   const [unenrollError, setUnenrollError] = useState(null);
   const [unenrolling, setUnenrolling] = useState(false);
+
+  // #360 — no deferred-unmount here (unlike the standalone modal
+  // components): the modal is a simple `unenrollingCourse &&` conditional
+  // mount, so active ties directly to that same truthiness.
+  const unenrollDialogRef = useFocusTrap(!!unenrollingCourse);
 
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
@@ -358,13 +364,20 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                 as just the "View leaderboard" link, shown once opted in —
                 opting out is what makes a learner disappear from it, so
                 there's nothing useful to view before that. */}
+            {/* #360 — was <div onClick>: not a real link/button, unreachable
+                by keyboard. Same fix as the identical control already
+                converted in Settings (#349). */}
             {leaderboardOptIn && onOpenLeaderboard && (
               <>
                 <hr className="ks-hairline" style={{ margin: "16px 0" }} />
-                <div onClick={onOpenLeaderboard} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>
+                <button
+                  type="button"
+                  onClick={onOpenLeaderboard}
+                  style={{ font: "inherit", display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--gold-dark)", fontWeight: 600, background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                >
                   <Trophy size={13} color="var(--gold-dark)" />
                   View leaderboard →
-                </div>
+                </button>
               </>
             )}
           </div>
@@ -454,13 +467,19 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {savedCourses.map((c) => (
                   <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div
-                      style={{ flex: 1, cursor: "pointer" }}
+                    {/* #360 — was <div onClick>: not focusable. A sibling
+                        of the remove-bookmark button below, not a parent,
+                        so a plain <button> here doesn't create the
+                        nested-button problem the Catalogue card's cover
+                        button had to work around. */}
+                    <button
+                      type="button"
                       onClick={() => onOpenCourse(c)}
+                      style={{ flex: 1, textAlign: "left", font: "inherit", background: "none", border: "none", padding: 0, cursor: "pointer" }}
                     >
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{c.title}</div>
                       <div style={{ fontSize: 11.5, color: "var(--slate-light)" }}>{c.provider}</div>
-                    </div>
+                    </button>
                     {/* #258 — real button (was a bare clickable icon);
                         every course in this list is already saved, so the
                         action here is always "remove." */}
@@ -507,9 +526,18 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
           className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div
+            ref={unenrollDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            className="ks-card ks-modal-card"
+            style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ks-unenroll-modal-title"
+            tabIndex={-1}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>
+              <div id="ks-unenroll-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>
                 {unenrollingCourse.isComplete ? "Retake this course?" : "Unenroll from this course?"}
               </div>
               {/* #258 — real button (was a bare clickable icon). */}

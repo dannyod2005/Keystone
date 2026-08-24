@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Lock, Eye, EyeOff } from "lucide-react";
 
+import { useFocusTrap } from "../../hooks/useFocusTrap";
+
 // #187 — shown when AuthContext reports a PASSWORD_RECOVERY session: the
 // user followed the link from their reset email and is back on the app
 // with a temporary but real session already established. This is the
@@ -42,6 +44,11 @@ export function ResetPasswordModal({ open, onSubmit, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // #360 — active tied to `visible` (what actually controls whether
+  // this dialog's DOM node is mounted), same reasoning as
+  // CourseDetailModal's identical wiring.
+  const dialogRef = useFocusTrap(visible);
+
   if (!visible) return null;
 
   const pwValid = password.length >= 8;
@@ -71,8 +78,16 @@ export function ResetPasswordModal({ open, onSubmit, onClose }) {
 
   return (
     <div className={`ks-modal-backdrop ${closing ? "ks-modal-closing" : ""}`} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}>
-      <div className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`} style={{ width: "100%", maxWidth: 400, padding: "28px 28px 24px" }}>
-        <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20, marginBottom: 6 }}>
+      <div
+        ref={dialogRef}
+        className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`}
+        style={{ width: "100%", maxWidth: 400, padding: "28px 28px 24px" }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ks-reset-pw-modal-title"
+        tabIndex={-1}
+      >
+        <div id="ks-reset-pw-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20, marginBottom: 6 }}>
           Set a new password
         </div>
         <div style={{ fontSize: 13.5, color: "var(--slate)", marginBottom: 20 }}>
@@ -119,12 +134,15 @@ export function ResetPasswordModal({ open, onSubmit, onClose }) {
             {submitting ? "Please wait…" : "Set new password"}
           </button>
 
-          <div
-            onClick={submitting ? undefined : onClose}
-            style={{ textAlign: "center", fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", marginTop: 18, cursor: submitting ? "default" : "pointer" }}
+          {/* #360 — was <div onClick>: not a real link/button. */}
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={onClose}
+            style={{ display: "block", width: "100%", font: "inherit", textAlign: "center", fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", background: "none", border: "none", padding: 0, marginTop: 18, cursor: submitting ? "default" : "pointer" }}
           >
             Not now
-          </div>
+          </button>
         </form>
       </div>
     </div>

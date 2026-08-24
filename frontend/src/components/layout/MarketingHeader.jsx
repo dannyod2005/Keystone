@@ -5,14 +5,16 @@ export function MarketingHeader({ onGo, onAuth }) {
   return (
     <header style={{ borderBottom: "1px solid var(--line)", background: "var(--paper-2)", position: "sticky", top: 0, zIndex: 20 }}>
       <div style={{ maxWidth: 1160, margin: "0 auto", padding: "16px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        {/* #360 — was <div>/<span> with onClick: not real links/buttons,
+            unreachable by keyboard. */}
         <div style={{ display: "flex", alignItems: "center", gap: 34 }}>
-          <div onClick={() => onGo("home")} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <button type="button" onClick={() => onGo("home")} style={{ font: "inherit", display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
             <KeystoneMark variant="light" size={22} />
             <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 19 }}>Keystone</span>
-          </div>
+          </button>
           <nav style={{ display: "flex", gap: 24 }}>
-            <span onClick={() => onGo("home")} style={{ fontSize: 14, fontWeight: 500, cursor: "pointer", color: "var(--slate)" }}>Discover</span>
-            <span onClick={() => onGo("catalogue")} style={{ fontSize: 14, fontWeight: 500, cursor: "pointer", color: "var(--slate)" }}>Catalogue</span>
+            <button type="button" onClick={() => onGo("home")} style={{ font: "inherit", fontSize: 14, fontWeight: 500, color: "var(--slate)", background: "none", border: "none", padding: 0, cursor: "pointer" }}>Discover</button>
+            <button type="button" onClick={() => onGo("catalogue")} style={{ font: "inherit", fontSize: 14, fontWeight: 500, color: "var(--slate)", background: "none", border: "none", padding: 0, cursor: "pointer" }}>Catalogue</button>
           </nav>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
