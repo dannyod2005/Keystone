@@ -6,12 +6,9 @@ import { KeystoneMark } from "../common/Primitives";
 // wiring its own. Replaces the old logged-out-only "clickable
 // prototype for demo purposes" line that used to live in HomeScreen.
 //
-// #345 — Privacy & GDPR now has a real page (PrivacyScreen, /privacy),
-// so it's wired to onGo below. About Us still doesn't exist yet — that
-// link stays inert (muted text, no onClick/href) rather than pointing
-// at a route that doesn't exist and silently bouncing back to Home via
-// the app's catch-all redirect. Swap in a real onGo() call once it
-// ships.
+// #345/#346 — Privacy & GDPR and About us both now have real pages
+// (PrivacyScreen /privacy, AboutScreen /about), so both are wired to
+// onGo below instead of the inert placeholder spans they started as.
 export function Footer({ onGo }) {
   return (
     <footer style={{ borderTop: "1px solid var(--line)", marginTop: 40 }}>
@@ -44,9 +41,16 @@ export function Footer({ onGo }) {
           >
             Privacy &amp; GDPR
           </button>
-          <span title="Coming soon" style={{ fontSize: 12.5, color: "var(--slate-light)", cursor: "default" }}>
+          <button
+            type="button"
+            onClick={() => onGo && onGo("about")}
+            style={{
+              background: "none", border: "none", padding: 0, font: "inherit",
+              fontSize: 12.5, color: "var(--slate-light)", cursor: "pointer",
+            }}
+          >
             About us
-          </span>
+          </button>
         </div>
       </div>
     </footer>
