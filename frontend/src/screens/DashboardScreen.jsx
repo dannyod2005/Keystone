@@ -187,7 +187,14 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                         {c.modules.length} module{c.modules.length === 1 ? "" : "s"} · not started yet
                       </div>
                     </div>
-                    <button className="ks-btn ks-btn-primary" onClick={() => onStartLearning(c)}>Start</button>
+                    {/* #333 — was ks-btn-primary, identical weight to every
+                        other primary button in the app; gold accent + a
+                        touch more size/an arrow makes this the obvious next
+                        action on the page, matching how central starting/
+                        resuming a course is to the actual workflow here. */}
+                    <button className="ks-btn ks-btn-gold" style={{ padding: "11px 22px", fontSize: 15 }} onClick={() => onStartLearning(c)}>
+                      Start <ChevronRight size={16} />
+                    </button>
                     {onUnenrol && (
                       <button
                         className="ks-btn ks-btn-ghost"
@@ -224,7 +231,12 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                       <div style={{ height: "100%", width: `${e.progress * 100}%`, background: "var(--gold)" }} />
                     </div>
                   </div>
-                  <button className="ks-btn ks-btn-primary" onClick={() => onStartLearning(c)}>Resume</button>
+                  {/* #333 — same gold-accent treatment as the Start button
+                      above, so Resume reads as the primary action on this
+                      row instead of matching every other button. */}
+                  <button className="ks-btn ks-btn-gold" style={{ padding: "11px 22px", fontSize: 15 }} onClick={() => onStartLearning(c)}>
+                    Resume <ChevronRight size={16} />
+                  </button>
                   {onUnenrol && (
                     <button
                       className="ks-btn ks-btn-ghost"
