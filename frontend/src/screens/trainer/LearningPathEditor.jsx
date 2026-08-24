@@ -75,7 +75,10 @@ export function LearningPathEditor({ path, courses, onCancel, onSave }) {
   const rowInput = { fontFamily: "var(--font-body)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", fontSize: 13, width: "100%", background: "var(--paper-2)", outline: "none" };
 
   return (
-    <div className="ks-page-enter" style={{ padding: "28px 32px 60px", maxWidth: 760 }}>
+    // #336 — shared .ks-page-scaled primitive instead of a hardcoded
+    // maxWidth (also picks up margin:auto, which this page was missing —
+    // same centering gap #204/#212 fixed on Dashboard/Learning).
+    <div className="ks-page-enter ks-page-scaled" style={{ padding: "28px 32px 60px", "--ks-page-base": "760px" }}>
       <div onClick={onCancel} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", cursor: "pointer", marginBottom: 14 }}>
         <ChevronLeft size={15} /> Back to Trainer studio
       </div>

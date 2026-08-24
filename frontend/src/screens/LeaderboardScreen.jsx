@@ -34,7 +34,10 @@ export function LeaderboardScreen({ onFetchLeaderboard }) {
   }, []);
 
   return (
-    <div className="ks-page-enter" style={{ padding: "28px 32px 60px", maxWidth: 720, margin: "0 auto" }}>
+    // #336 — shared .ks-page-scaled primitive instead of a hardcoded
+    // maxWidth, so this page grows (modestly, from its own 720 base) at
+    // the same large breakpoint as the rest of the app.
+    <div className="ks-page-enter ks-page-scaled" style={{ padding: "28px 32px 60px", "--ks-page-base": "720px" }}>
       <PageHeader
         title="Leaderboard"
         subtitle="Ranked by learning points logged this week. Only learners who've opted in appear here."

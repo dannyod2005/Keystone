@@ -133,7 +133,10 @@ export function SettingsScreen({
   const savedText = { fontSize: 12, color: "var(--success)", marginTop: 6 };
 
   return (
-    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 640, margin: "0 auto" }}>
+    // #336 — shared .ks-page-scaled primitive instead of a hardcoded
+    // maxWidth, so this form grows (modestly, from its own 640 base) at
+    // the same large breakpoint as the rest of the app.
+    <div className="ks-page-enter ks-page-scaled" style={{ padding: "28px 32px", "--ks-page-base": "640px" }}>
       <PageHeader title="Account settings" />
 
       <div className="ks-card" style={{ padding: "20px 22px", marginBottom: 20 }}>
