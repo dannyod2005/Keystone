@@ -18,6 +18,7 @@ import { RoleOnboardingModal } from "./components/modals/RoleOnboardingModal";
 import { ResetPasswordModal } from "./components/modals/ResetPasswordModal";
 
 import { HomeScreen } from "./screens/HomeScreen";
+import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
 import { LeaderboardScreen } from "./screens/LeaderboardScreen";
@@ -36,6 +37,10 @@ function screenKeyFromPath(pathname) {
   if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/trainer")) return "trainer";
+  // #345 — not a sidebar nav item (reached via the footer, not primary
+  // nav), just needs its own key so the topbar title reads "Privacy &
+  // GDPR" instead of falling through to the "home"/"Discover" default.
+  if (pathname.startsWith("/privacy")) return "privacy";
   return "home";
 }
 
@@ -131,8 +136,10 @@ function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notif
         {children}
         {/* #337 — site-wide footer, rendered once here so every routed
             page picks it up automatically instead of each screen adding
-            its own. */}
-        <Footer />
+            its own. #345 — onGo reuses the same navigate-by-key function
+            passed to AppSidebar above, now that "Privacy & GDPR" has a
+            real page to link to. */}
+        <Footer onGo={go} />
       </div>
     </div>
   );
@@ -1690,6 +1697,7 @@ function KeystonePrototype() {
     screen === "leaderboard" ? "Leaderboard" :
     screen === "settings" ? "Account settings" :
     screen === "trainer" ? "Trainer studio" :
+    screen === "privacy" ? "Privacy & GDPR" :
     screen === "home" ? "Discover" : "";
 
   if (authLoading) {
@@ -1757,6 +1765,19 @@ function KeystonePrototype() {
                 bookmarkedIds={bookmarkedIds}
                 onToggleBookmark={loggedIn ? toggleBookmark : undefined}
               />
+            </AppShell>
+          }
+        />
+
+        {/* #345 — publicly accessible like /catalogue above (no
+            RequireAuth): a privacy policy needs to be readable before
+            someone creates an account, and the footer link that points
+            here (#337) shows on every page regardless of login state. */}
+        <Route
+          path="/privacy"
+          element={
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
+              <PrivacyScreen loggedIn={loggedIn} onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} />
             </AppShell>
           }
         />
