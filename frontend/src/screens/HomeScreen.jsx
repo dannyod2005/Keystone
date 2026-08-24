@@ -232,14 +232,15 @@ export function HomeScreen({
               // below: this learner has completed courses (visible in the
               // stat row just above this card), so "you haven't started a
               // course yet" would be actively wrong, not just unhelpful.
+              // #360 — was <span onClick>: not a real link/button.
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "10px 8px" }}>
                 Nothing in progress right now —{" "}
-                <span onClick={() => onGo("catalogue")} style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>browse the catalogue</span> to start something new.
+                <button type="button" onClick={() => onGo("catalogue")} style={{ font: "inherit", color: "var(--gold-dark)", fontWeight: 600, background: "none", border: "none", padding: 0, cursor: "pointer" }}>browse the catalogue</button> to start something new.
               </div>
             ) : (
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "10px 8px" }}>
                 You haven't started a course yet —{" "}
-                <span onClick={() => onGo("catalogue")} style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>browse the catalogue</span>.
+                <button type="button" onClick={() => onGo("catalogue")} style={{ font: "inherit", color: "var(--gold-dark)", fontWeight: 600, background: "none", border: "none", padding: 0, cursor: "pointer" }}>browse the catalogue</button>.
               </div>
             )
           ) : (
@@ -297,7 +298,8 @@ export function HomeScreen({
                   <TrendingUp size={16} color="var(--gold-dark)" />
                   <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>New on Keystone</span>
                 </div>
-                <span onClick={() => onGo("catalogue")} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" }}>View catalogue →</span>
+                {/* #360 — was <span onClick>: not a real link/button. */}
+                <button type="button" onClick={() => onGo("catalogue")} style={{ font: "inherit", fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", background: "none", border: "none", padding: 0, cursor: "pointer" }}>View catalogue →</button>
               </div>
               <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>Courses you haven't started yet.</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
@@ -336,9 +338,10 @@ export function HomeScreen({
                   You're <b>#{myRank.rank}</b> of {leaderboardEntries.length} on the leaderboard this week.
                 </span>
               </div>
-              <span onClick={() => onGo("leaderboard")} style={{ fontSize: 13, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer", whiteSpace: "nowrap" }}>
+              {/* #360 — was <span onClick>: not a real link/button. */}
+              <button type="button" onClick={() => onGo("leaderboard")} style={{ font: "inherit", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)", background: "none", border: "none", padding: 0, cursor: "pointer", whiteSpace: "nowrap" }}>
                 View leaderboard →
-              </span>
+              </button>
             </div>
           )}
         </section>
@@ -361,7 +364,8 @@ export function HomeScreen({
           <section style={{ maxWidth: 1160, margin: "0 auto", padding: "20px 28px 56px" }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
               <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 24, margin: 0 }}>Popular this month</h2>
-              <span onClick={() => onGo("catalogue")} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" }}>View catalogue →</span>
+              {/* #360 — was <span onClick>: not a real link/button. */}
+              <button type="button" onClick={() => onGo("catalogue")} style={{ font: "inherit", fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", background: "none", border: "none", padding: 0, cursor: "pointer" }}>View catalogue →</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
               {courses.slice(0, 3).map(renderCourseCard)}
