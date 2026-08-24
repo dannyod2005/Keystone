@@ -238,7 +238,10 @@ export function TrainerScreen({
   }
 
   return (
-    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080 }}>
+    // #336 — shared .ks-page-scaled primitive instead of a hardcoded
+    // maxWidth (also picks up margin:auto, which this page was missing —
+    // same centering gap #204/#212 fixed on Dashboard/Learning).
+    <div className="ks-page-enter ks-page-scaled" style={{ padding: "28px 32px", "--ks-page-base": "1080px" }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>Trainer studio</div>
         <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>

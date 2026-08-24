@@ -41,7 +41,10 @@ export function CourseAnalyticsView({ course, onBack, onFetchAnalytics }) {
   const stat = { flex: 1, minWidth: 140, padding: 16 };
 
   return (
-    <div className="ks-page-enter" style={{ padding: "28px 32px 60px", maxWidth: 900 }}>
+    // #336 — shared .ks-page-scaled primitive instead of a hardcoded
+    // maxWidth (also picks up margin:auto, which this page was missing —
+    // same centering gap #204/#212 fixed on Dashboard/Learning).
+    <div className="ks-page-enter ks-page-scaled" style={{ padding: "28px 32px 60px", "--ks-page-base": "900px" }}>
       <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", cursor: "pointer", marginBottom: 14 }}>
         <ChevronLeft size={15} /> Back to Trainer studio
       </div>

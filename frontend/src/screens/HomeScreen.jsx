@@ -272,7 +272,11 @@ export function HomeScreen({
           un-enrolled paths, not opted into the leaderboard) just sees
           fewer sections, never an empty placeholder. */}
       {loggedIn && (
-        <section style={{ maxWidth: 1160, margin: "0 auto", padding: "20px 28px 56px" }}>
+        // #336 — shared .ks-page-scaled primitive instead of a hardcoded
+        // maxWidth, so this logged-in discovery section grows at the same
+        // large breakpoint as the rest of the app. The shared marketing
+        // hero above and the logged-out sections below are unaffected.
+        <section className="ks-page-scaled" style={{ "--ks-page-base": "1160px", padding: "20px 28px 56px" }}>
           {recommended.length > 0 && (
             <div style={{ marginBottom: 32 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>

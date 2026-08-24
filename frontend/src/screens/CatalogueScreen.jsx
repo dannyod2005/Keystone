@@ -160,7 +160,10 @@ export function CatalogueScreen({
   return (
     <div className="ks-page-enter">
       {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
-      <div style={{ maxWidth: 1160, margin: "0 auto", padding: "36px 28px 60px" }}>
+      {/* #336 — shared .ks-page-scaled primitive (global.css) instead of a
+          hardcoded maxWidth, so this page grows at the same large
+          breakpoint as My Learning/Learning instead of staying fixed. */}
+      <div className="ks-page-scaled" style={{ "--ks-page-base": "1160px", padding: "36px 28px 60px" }}>
         {/* #213 — was an inline h1/p; now the shared PageHeader primitive
             (same 30px/font-display/600 title, same subtitle styling) so
             Dashboard/Discover can match this scale exactly instead of
