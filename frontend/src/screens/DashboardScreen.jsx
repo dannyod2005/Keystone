@@ -358,13 +358,20 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                 as just the "View leaderboard" link, shown once opted in —
                 opting out is what makes a learner disappear from it, so
                 there's nothing useful to view before that. */}
+            {/* #360 — was <div onClick>: not a real link/button, unreachable
+                by keyboard. Same fix as the identical control already
+                converted in Settings (#349). */}
             {leaderboardOptIn && onOpenLeaderboard && (
               <>
                 <hr className="ks-hairline" style={{ margin: "16px 0" }} />
-                <div onClick={onOpenLeaderboard} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>
+                <button
+                  type="button"
+                  onClick={onOpenLeaderboard}
+                  style={{ font: "inherit", display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--gold-dark)", fontWeight: 600, background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                >
                   <Trophy size={13} color="var(--gold-dark)" />
                   View leaderboard →
-                </div>
+                </button>
               </>
             )}
           </div>
