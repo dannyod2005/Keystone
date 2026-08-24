@@ -213,14 +213,17 @@ export function CatalogueScreen({
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+              {/* #360 — was <span onClick>: not focusable/keyboard-operable.
+                  Real button + aria-pressed, same fix as Trainer Studio's
+                  ownership filter. */}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {cats.map((c) => (
-                  <span key={c} onClick={() => setFilter(c)}
-                    style={{ fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
+                  <button key={c} type="button" onClick={() => setFilter(c)} aria-pressed={filter === c}
+                    style={{ font: "inherit", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
                       background: filter === c ? "var(--ink)" : "var(--paper-2)", color: filter === c ? "var(--paper)" : "var(--slate)",
                       border: "1px solid var(--line)" }}>
                     {c}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
