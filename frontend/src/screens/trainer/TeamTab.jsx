@@ -4,7 +4,10 @@ import { Check, Copy, RefreshCw, LogOut, X, Crown } from "lucide-react";
 
 const field = { marginBottom: 16 };
 const label = { display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink)", marginBottom: 6 };
-const rowInput = { fontFamily: "var(--font-body)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", fontSize: 13, width: "100%", background: "var(--paper-2)", outline: "none" };
+// #350 — outline:none removed; global.css's input:focus-visible rule
+// supplies a visible focus outline instead (see TrainerCourseEditor's
+// identical rowInput for the full rationale).
+const rowInput = { fontFamily: "var(--font-body)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", fontSize: 13, width: "100%", background: "var(--paper-2)" };
 
 // #139 — the "Team" tab. Deliberately separate from the course-creation
 // form: provider membership is an opt-in upgrade managed only from here,
