@@ -8,6 +8,7 @@ import { useAuth } from "./context/AuthContext";
 
 import { AppSidebar } from "./components/layout/AppSidebar";
 import { AppTopbar } from "./components/layout/AppTopbar";
+import { Footer } from "./components/layout/Footer";
 
 import { CourseDetailModal } from "./components/modals/CourseDetailModal";
 import { LearningPathDetailModal } from "./components/modals/LearningPathDetailModal";
@@ -128,6 +129,10 @@ function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notif
           />
         )}
         {children}
+        {/* #337 — site-wide footer, rendered once here so every routed
+            page picks it up automatically instead of each screen adding
+            its own. */}
+        <Footer />
       </div>
     </div>
   );
