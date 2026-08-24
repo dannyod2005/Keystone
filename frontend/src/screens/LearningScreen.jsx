@@ -769,7 +769,9 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                 onBlur={handleNoteBlur}
                 disabled={noteLoading}
                 placeholder="Jot down notes for this module — only visible to you."
-                style={{ width: "100%", minHeight: 120, border: "none", outline: "none", fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical", background: "transparent" }}
+                // #350 — outline:none removed so keyboard focus is
+                // visible (global.css's input:focus-visible rule).
+                style={{ width: "100%", minHeight: 120, border: "none", fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical", background: "transparent" }}
               />
               <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 8 }}>
                 {noteLoading
@@ -837,11 +839,14 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                               onChange={(e) => selectAnswer(q.id, e.target.value)}
                               disabled={!!quizResult}
                               placeholder="Type your answer…"
+                              // #350 — outline:none removed so keyboard
+                              // focus is visible (global.css's
+                              // input:focus-visible rule).
                               style={{
                                 fontFamily: "var(--font-body)", fontSize: 13, width: "100%", maxWidth: 360,
                                 border: `1px solid ${resultForQuestion ? (resultForQuestion.isCorrect ? "var(--success)" : "var(--coral)") : "var(--line)"}`,
                                 background: resultForQuestion ? (resultForQuestion.isCorrect ? "var(--success-tint)" : "var(--coral-tint)") : "var(--paper-2)",
-                                borderRadius: 8, padding: "8px 10px", outline: "none",
+                                borderRadius: 8, padding: "8px 10px",
                               }}
                             />
                             {resultForQuestion && (

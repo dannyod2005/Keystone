@@ -656,7 +656,11 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
 
   const field = { marginBottom: 16 };
   const label = { display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink)", marginBottom: 6 };
-  const rowInput = { fontFamily: "var(--font-body)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", fontSize: 13, width: "100%", background: "var(--paper-2)", outline: "none" };
+  // #350 — outline:none removed: it silently killed keyboard focus
+  // visibility on every input/select using this style object. The
+  // shared input:focus-visible rule in global.css now supplies a
+  // visible outline instead.
+  const rowInput = { fontFamily: "var(--font-body)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", fontSize: 13, width: "100%", background: "var(--paper-2)" };
 
   return (
     // #336 — shared .ks-page-scaled primitive instead of a hardcoded
