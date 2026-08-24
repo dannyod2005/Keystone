@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Pencil, Plus, Search, Trash2, X, BarChart3, BookOpen, Users, Milestone, UsersRound } from "lucide-react";
 
 import { CategoryDot } from "../../components/common/Primitives";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
 import { TeamTab } from "./TeamTab";
 import { LearningPathEditor } from "./LearningPathEditor";
@@ -32,6 +33,9 @@ export function TrainerScreen({
   const [deletingCourse, setDeletingCourse] = useState(null); // course pending delete confirmation, or null
   const [deleteError, setDeleteError] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  // #360 — simple conditional-mount confirm modal, no deferred-unmount
+  // state, so active ties directly to the same truthiness as the `&&`.
+  const deleteCourseDialogRef = useFocusTrap(!!deletingCourse);
   // #227 — same whole-screen-swap convention as editingId/editingPathId
   // above, but view-only (no onSave/onCancel-into-list-refresh dance
   // needed) — just which course's analytics is currently open, or null.
@@ -45,6 +49,8 @@ export function TrainerScreen({
   const [deletingPath, setDeletingPath] = useState(null);
   const [deletePathError, setDeletePathError] = useState(null);
   const [deletingPathBusy, setDeletingPathBusy] = useState(false);
+  // #360 — same reasoning as deleteCourseDialogRef above.
+  const deletePathDialogRef = useFocusTrap(!!deletingPath);
   // #139 — "Courses" (existing list/editor flow, untouched) vs "Team"
   // (provider create/join/manage). Deliberately a separate tab rather than
   // anything on the course form itself — provider scoping stays an opt-in
@@ -464,9 +470,18 @@ export function TrainerScreen({
           className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div
+            ref={deleteCourseDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            className="ks-card ks-modal-card"
+            style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ks-delete-course-modal-title"
+            tabIndex={-1}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete course?</div>
+              <div id="ks-delete-course-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete course?</div>
               {/* #258 — real button (was a bare clickable icon). */}
               <button
                 type="button"
@@ -506,9 +521,18 @@ export function TrainerScreen({
           className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div
+            ref={deletePathDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            className="ks-card ks-modal-card"
+            style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ks-delete-path-modal-title"
+            tabIndex={-1}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete learning path?</div>
+              <div id="ks-delete-path-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete learning path?</div>
               {/* #258 — real button (was a bare clickable icon). */}
               <button
                 type="button"

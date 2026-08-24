@@ -4,6 +4,7 @@ import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Meda
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 /* ---------- Screen: Dashboard ---------- */
 
 // #296 — 1500, not 300: matches the recalibrated signup default (see
@@ -22,6 +23,11 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
   const [unenrollingCourse, setUnenrollingCourse] = useState(null);
   const [unenrollError, setUnenrollError] = useState(null);
   const [unenrolling, setUnenrolling] = useState(false);
+
+  // #360 — no deferred-unmount here (unlike the standalone modal
+  // components): the modal is a simple `unenrollingCourse &&` conditional
+  // mount, so active ties directly to that same truthiness.
+  const unenrollDialogRef = useFocusTrap(!!unenrollingCourse);
 
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
@@ -520,9 +526,18 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
           className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div
+            ref={unenrollDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            className="ks-card ks-modal-card"
+            style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ks-unenroll-modal-title"
+            tabIndex={-1}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>
+              <div id="ks-unenroll-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>
                 {unenrollingCourse.isComplete ? "Retake this course?" : "Unenroll from this course?"}
               </div>
               {/* #258 — real button (was a bare clickable icon). */}

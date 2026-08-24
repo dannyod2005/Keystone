@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Check, Copy, RefreshCw, LogOut, X, Crown } from "lucide-react";
 
+import { useFocusTrap } from "../../hooks/useFocusTrap";
+
 const field = { marginBottom: 16 };
 const label = { display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink)", marginBottom: 6 };
 // #350 — outline:none removed; global.css's input:focus-visible rule
@@ -30,6 +32,9 @@ export function TeamTab({ onFetchProvider, onCreateProvider, onJoinProvider, onR
   const [copied, setCopied] = useState(false);
 
   const [confirmingLeave, setConfirmingLeave] = useState(false);
+  // #360 — simple conditional-mount confirm modal, no deferred-unmount
+  // state, so active ties directly to the same truthiness as the `&&`.
+  const leaveDialogRef = useFocusTrap(confirmingLeave);
   const [leaving, setLeaving] = useState(false);
   const [leaveError, setLeaveError] = useState(null);
 
@@ -264,9 +269,18 @@ export function TeamTab({ onFetchProvider, onCreateProvider, onJoinProvider, onR
           onClick={() => !leaving && setConfirmingLeave(false)}
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div
+            ref={leaveDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            className="ks-card"
+            style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ks-leave-provider-modal-title"
+            tabIndex={-1}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Leave provider?</div>
+              <div id="ks-leave-provider-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Leave provider?</div>
               {/* #258 — real button (was a bare clickable icon). */}
               <button
                 type="button"

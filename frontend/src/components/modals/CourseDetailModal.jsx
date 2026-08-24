@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, X, ArrowRight, BookMarked } from "lucide-react";
 
 import { Stars, CategoryDot } from "../../components/common/Primitives";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 
 
 /* ---------- Course detail modal ---------- */
@@ -55,17 +56,40 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course?.id]);
 
+  // #360 — active tied to visibleCourse (what actually controls whether
+  // this dialog's DOM node is mounted), not `course` directly — course
+  // can go truthy a render before visibleCourse (and the node) catch up.
+  const dialogRef = useFocusTrap(!!visibleCourse);
+
   if (!visibleCourse) return null;
+
+  // #360-fix — callers that pass a course object loaded with a narrower
+  // set of relations (e.g. the path-embedded course rows from
+  // LearningPathDetailModal, which don't carry modules/credits) shouldn't
+  // crash the modal; default to empty lists like the skills/faqs/reviews
+  // blocks above already do.
+  const modules = visibleCourse.modules || [];
+  const credits = visibleCourse.credits || [];
+
   return (
     <div onClick={onClose} className={`ks-modal-backdrop ${closing ? "ks-modal-closing" : ""}`} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`} style={{ width: "100%", maxWidth: 620, maxHeight: "86vh", overflowY: "auto", padding: 0 }}>
+      <div
+        ref={dialogRef}
+        onClick={(e) => e.stopPropagation()}
+        className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`}
+        style={{ width: "100%", maxWidth: 620, maxHeight: "86vh", overflowY: "auto", padding: 0 }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ks-course-modal-title"
+        tabIndex={-1}
+      >
         <div style={{ padding: "24px 28px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
               <CategoryDot color={visibleCourse.color} />
               <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{visibleCourse.category} · {visibleCourse.level}</span>
             </div>
-            <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 24, margin: 0 }}>{visibleCourse.title}</h2>
+            <h2 id="ks-course-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 24, margin: 0 }}>{visibleCourse.title}</h2>
             <div style={{ fontSize: 13, color: "var(--slate-light)", marginTop: 4 }}>{visibleCourse.provider}</div>
           </div>
           {/* #258 — real button (was a bare clickable icon). */}
@@ -126,8 +150,8 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
 
           <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 10 }}>Course agenda</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 0, marginBottom: 22 }}>
-            {visibleCourse.modules.map((m, i) => (
-              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < visibleCourse.modules.length - 1 ? "1px solid var(--line)" : "none" }}>
+            {modules.map((m, i) => (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < modules.length - 1 ? "1px solid var(--line)" : "none" }}>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--slate-light)", width: 20 }}>{String(i + 1).padStart(2, "0")}</span>
                 <span style={{ fontSize: 14 }}>{m.title}</span>
               </div>
@@ -158,8 +182,8 @@ export function CourseDetailModal({ course, onClose, onEnrol, onGoToDashboard, i
             <span style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)" }}>Sources & credits</span>
           </div>
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-            {visibleCourse.credits.map((c, i) => (
-              <li key={c.id} style={{ display: "flex", gap: 8, fontSize: 13, color: "var(--slate)", lineHeight: 1.55, padding: "5px 0", borderBottom: i < visibleCourse.credits.length - 1 ? "1px solid var(--line)" : "none" }}>
+            {credits.map((c, i) => (
+              <li key={c.id} style={{ display: "flex", gap: 8, fontSize: 13, color: "var(--slate)", lineHeight: 1.55, padding: "5px 0", borderBottom: i < credits.length - 1 ? "1px solid var(--line)" : "none" }}>
                 <span style={{ color: "var(--gold-dark)", flexShrink: 0 }}>·</span>
                 <span>{c.line}</span>
               </li>

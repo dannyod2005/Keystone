@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, BookMarked, Plus, Trash2, Save, Video, ChevronDown, ChevronUp, HelpCircle, X } from "lucide-react";
 
+import { useFocusTrap } from "../../hooks/useFocusTrap";
+
 const TRAINER_CATEGORIES = ["Technical", "Business", "Leadership"];
 const TRAINER_LEVELS = ["Beginner", "Intermediate", "Advanced"];
 const TRAINER_COLORS = ["ink", "gold", "success", "coral"];
@@ -111,6 +113,9 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
   // that exists in the DB right now, not one only added client-side
   // during this editing session) — see requestRemoveModule below.
   const [removingModuleIndex, setRemovingModuleIndex] = useState(null);
+  // #360 — simple conditional-mount confirm modal, no deferred-unmount
+  // state, so active ties directly to the same truthiness as the `&&`.
+  const removeModuleDialogRef = useFocusTrap(removingModuleIndex !== null);
 
   // Tracks the latest save request's sequence number per module, so an
   // older, slower response can never overwrite state with stale data
@@ -1030,9 +1035,18 @@ export function TrainerCourseEditor({ course, onCancel, onSave, onFetchQuizForEd
           className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div
+            ref={removeModuleDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            className="ks-card ks-modal-card"
+            style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ks-remove-module-modal-title"
+            tabIndex={-1}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Remove this module?</div>
+              <div id="ks-remove-module-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Remove this module?</div>
               <button
                 type="button"
                 aria-label="Close"

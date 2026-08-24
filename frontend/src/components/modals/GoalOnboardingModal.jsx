@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Code2, Briefcase, Compass, X } from "lucide-react";
 
+import { useFocusTrap } from "../../hooks/useFocusTrap";
+
 const OPTIONS = [
   { value: "Technical", label: "Technical", blurb: "Programming, data, and engineering skills.", icon: Code2 },
   { value: "Business", label: "Business", blurb: "Strategy, analytics, and operations.", icon: Briefcase },
@@ -40,6 +42,11 @@ export function GoalOnboardingModal({ open, onSelect, onSkip }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // #360 — active tied to `visible` (what actually controls whether
+  // this dialog's DOM node is mounted), same reasoning as
+  // CourseDetailModal's identical wiring.
+  const dialogRef = useFocusTrap(visible);
+
   if (!visible) return null;
 
   async function handleSelect(value) {
@@ -57,9 +64,17 @@ export function GoalOnboardingModal({ open, onSelect, onSkip }) {
 
   return (
     <div className={`ks-modal-backdrop ${closing ? "ks-modal-closing" : ""}`} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}>
-      <div className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`} style={{ width: "100%", maxWidth: 440, padding: "28px 28px 24px" }}>
+      <div
+        ref={dialogRef}
+        className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`}
+        style={{ width: "100%", maxWidth: 440, padding: "28px 28px 24px" }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ks-goal-modal-title"
+        tabIndex={-1}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>What brings you here?</div>
+          <div id="ks-goal-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>What brings you here?</div>
           {/* #258 — real button (was a bare clickable icon). */}
           <button
             type="button"
@@ -74,15 +89,19 @@ export function GoalOnboardingModal({ open, onSelect, onSkip }) {
           Pick a focus area — it shows up on your dashboard and helps point you at relevant courses.
         </div>
 
+        {/* #360 — was <div onClick>: not focusable. */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {OPTIONS.map((opt) => {
             const Icon = opt.icon;
             return (
-              <div
+              <button
                 key={opt.value}
+                type="button"
+                disabled={submitting}
                 onClick={() => handleSelect(opt.value)}
                 style={{
                   display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 10,
+                  width: "100%", textAlign: "left", font: "inherit",
                   border: "1px solid var(--line)", background: "var(--paper)",
                   cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.6 : 1,
                 }}
@@ -94,17 +113,20 @@ export function GoalOnboardingModal({ open, onSelect, onSkip }) {
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{opt.label}</div>
                   <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>{opt.blurb}</div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
 
-        <div
-          onClick={submitting ? undefined : onSkip}
-          style={{ textAlign: "center", fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", marginTop: 18, cursor: submitting ? "default" : "pointer" }}
+        {/* #360 — was <div onClick>: not a real link/button. */}
+        <button
+          type="button"
+          disabled={submitting}
+          onClick={onSkip}
+          style={{ display: "block", width: "100%", font: "inherit", textAlign: "center", fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", background: "none", border: "none", padding: 0, marginTop: 18, cursor: submitting ? "default" : "pointer" }}
         >
           Skip for now
-        </div>
+        </button>
       </div>
     </div>
   );

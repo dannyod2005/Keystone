@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { X, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { KeystoneMark } from "../common/Primitives";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 
 // #105 — same "always mounted, sometimes null" shape as CourseDetailModal:
 // this component doesn't unmount, it just returns null once `mode` clears.
@@ -46,6 +47,11 @@ export function AuthModal({ mode, onClose, onSubmit }) {
     // component for why `visible` must stay out of this array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  // #360 — active tied to `visible` (what actually controls whether
+  // this dialog's DOM node is mounted), same reasoning as
+  // CourseDetailModal's identical wiring.
+  const dialogRef = useFocusTrap(visible);
 
   if (!visible) return null;
 
@@ -161,7 +167,16 @@ export function AuthModal({ mode, onClose, onSubmit }) {
 
   return (
     <div onClick={onClose} className={`ks-modal-backdrop ${closing ? "ks-modal-closing" : ""}`} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`} style={{ width: "100%", maxWidth: 400, padding: 0, overflow: "hidden" }}>
+      <div
+        ref={dialogRef}
+        onClick={(e) => e.stopPropagation()}
+        className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`}
+        style={{ width: "100%", maxWidth: 400, padding: 0, overflow: "hidden" }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ks-auth-modal-title"
+        tabIndex={-1}
+      >
         <div style={{ padding: "24px 28px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -212,7 +227,7 @@ export function AuthModal({ mode, onClose, onSubmit }) {
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: "22px 28px 26px" }}>
-          <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 19, marginBottom: 4 }}>
+          <div id="ks-auth-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 19, marginBottom: 4 }}>
             {tab === "login" ? "Welcome back" : tab === "signup" ? "Start learning free" : "Reset your password"}
           </div>
           <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 20 }}>

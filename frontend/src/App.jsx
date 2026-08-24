@@ -1959,7 +1959,17 @@ function KeystonePrototype() {
         onGoToDashboard={() => { setSelectedPath(null); navigate("/dashboard"); }}
         isEnrolled={selectedPath ? pathEnrollments.some((pe) => pe.pathId === selectedPath.id) : false}
         enrolling={enrollingPath}
-        onOpenCourse={(course) => { setSelectedPath(null); setSelectedCourse(course); }}
+        onOpenCourse={(course) => {
+          setSelectedPath(null);
+          // #360-fix — path-embedded course rows only carry the lightweight
+          // relations learning-paths.service.ts loads (no modules/credits),
+          // but CourseDetailModal reads both unconditionally and crashes on
+          // undefined. Swap in the full catalogue copy when we have it;
+          // fall back to the lightweight object for the rare case where the
+          // course has since left the public catalogue.
+          const fullCourse = courses.find((c) => c.id === course.id) || course;
+          setSelectedCourse(fullCourse);
+        }}
       />
 
       <AuthModal
