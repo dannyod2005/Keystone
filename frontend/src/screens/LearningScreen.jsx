@@ -716,7 +716,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
       // #104 — single column on mobile (video/tabs above the right rail),
       // 1fr/300px from md up; column layout is the only breakpoint-dependent
       // property here.
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_300px]" style={{ gap: 22 }}>
+      //
+      // #335 — widen the right rail further at the same >=1440px point
+      // where #334 widens the page itself, so the freed-up space actually
+      // goes to the progress/grades cards instead of just the left column.
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_300px] min-[1440px]:grid-cols-[1fr_360px]" style={{ gap: 22 }}>
         <div>
           <div className="ks-card" style={{ padding: "12px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Module {activeModule + 1} of {modules.length}</div>
@@ -965,13 +969,16 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
         </div>
 
         <div>
-          <div className="ks-card" style={{ padding: 16, marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+          {/* #335 — larger card padding + a bigger, bolder progress
+              percentage give this rail more visual weight now that #334
+              frees up extra width for it. */}
+          <div className="ks-card" style={{ padding: 20, marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Course progress</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)" }}>{Math.round((Math.min(completedCount, modules.length) / modules.length) * 100)}%</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, lineHeight: 1, color: "var(--gold-dark)" }}>{Math.round((Math.min(completedCount, modules.length) / modules.length) * 100)}%</span>
             </div>
-            <div style={{ height: 8, background: "var(--line)", borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(Math.min(completedCount, modules.length) / modules.length) * 100}%`, background: "var(--gold)", borderRadius: 4, transition: "width .2s ease" }} />
+            <div style={{ height: 10, background: "var(--line)", borderRadius: 5, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${(Math.min(completedCount, modules.length) / modules.length) * 100}%`, background: "var(--gold)", borderRadius: 5, transition: "width .2s ease" }} />
             </div>
             <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 8, marginBottom: 14 }}>{Math.min(completedCount, modules.length)} of {modules.length} modules complete</div>
             <hr className="ks-hairline" style={{ margin: "0 0 10px" }} />
@@ -987,23 +994,39 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
               ))}
             </div>
           </div>
-          <div className="ks-card" style={{ padding: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+          {/* #335 — same larger-card treatment as Course progress above,
+              plus a hero-sized grade number and an explicit Pass/Below
+              pass-bar badge so this is the standout stat in the rail,
+              matching the client's callout that this section needed more
+              presence. */}
+          <div className="ks-card" style={{ padding: 20 }}>
+            <div style={{ marginBottom: courseGradePct !== null ? 16 : 10 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Grades</span>
               {/* #240 — hidden until there's at least one graded module,
                   same "hidden until non-empty" convention as the rest of
                   this app's optional cards — a fresh course with no
                   quizzes taken yet shouldn't show a misleading 0%. */}
               {courseGradePct !== null && (
-                <span
-                  style={{
-                    fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600,
-                    color: courseGradePct < PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--gold-dark)",
-                  }}
-                  title="Course grade — average quiz score across every quizzed module you've taken"
-                >
-                  {courseGradePct}%
-                </span>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 8 }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)", fontSize: 34, fontWeight: 700, lineHeight: 1,
+                      color: courseGradePct < PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--gold-dark)",
+                    }}
+                    title="Course grade — average quiz score across every quizzed module you've taken"
+                  >
+                    {courseGradePct}%
+                  </span>
+                  <span
+                    className="ks-badge"
+                    style={{
+                      background: courseGradePct < PASS_THRESHOLD_PCT ? "var(--coral-tint)" : "var(--success-tint)",
+                      color: courseGradePct < PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--success)",
+                    }}
+                  >
+                    {courseGradePct < PASS_THRESHOLD_PCT ? "Below pass bar" : "Passing"}
+                  </span>
+                </div>
               )}
             </div>
             {quizResultsLoading ? (
