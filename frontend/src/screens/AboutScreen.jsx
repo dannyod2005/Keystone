@@ -1,0 +1,48 @@
+import { PageHeader } from "../components/common/Primitives";
+import { MarketingHeader } from "../components/layout/MarketingHeader";
+
+// #346 — company/product "About us" page. Same shape as PrivacyScreen
+// (#345): publicly accessible (no RequireAuth on its route in App.jsx),
+// since this is the kind of page someone reads before signing up, not
+// after. Content below reuses the product's existing marketing voice
+// (see HomeScreen's logged-out hero copy) rather than inventing a new
+// tone — placeholder-appropriate for a prototype/demo, swap in real
+// copy once there's a finalized company description to use.
+const SECTIONS = [
+  {
+    title: "What we do",
+    body: "Keystone Learning is a workplace learning platform for growing teams — short, project-based courses in AI, data, and leadership, built so a busy person can actually finish them. Trainers author courses and guided learning paths; learners track progress, sit quizzes, and earn certificates as they go.",
+  },
+  {
+    title: "Our approach",
+    body: "We'd rather ship fewer courses that get finished than a huge catalogue that doesn't. That means realistic time estimates, clear progress tracking, and grading that reflects real understanding — not just a bar that fills up.",
+  },
+  {
+    title: "Where we're based",
+    body: "Keystone Learning is based in Singapore.",
+  },
+  {
+    title: "Get in touch",
+    body: "Questions about the product, a course, or a partnership? Reach us at hello@keystonelearning.example.",
+  },
+];
+
+export function AboutScreen({ loggedIn, onGo, onAuth }) {
+  return (
+    <div className="ks-page-enter">
+      {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
+      {/* Same narrower 760 base as PrivacyScreen — a reading page reads
+          better with a tighter line length than the app's wider grid
+          pages. */}
+      <div className="ks-page-scaled" style={{ "--ks-page-base": "760px", padding: "36px 28px 60px" }}>
+        <PageHeader title="About us" />
+        {SECTIONS.map((s) => (
+          <div key={s.title} style={{ marginBottom: 26 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{s.title}</div>
+            <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.6 }}>{s.body}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

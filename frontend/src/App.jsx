@@ -19,6 +19,7 @@ import { ResetPasswordModal } from "./components/modals/ResetPasswordModal";
 
 import { HomeScreen } from "./screens/HomeScreen";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
+import { AboutScreen } from "./screens/AboutScreen";
 import { CatalogueScreen } from "./screens/CatalogueScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
 import { LeaderboardScreen } from "./screens/LeaderboardScreen";
@@ -37,10 +38,12 @@ function screenKeyFromPath(pathname) {
   if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/trainer")) return "trainer";
-  // #345 — not a sidebar nav item (reached via the footer, not primary
-  // nav), just needs its own key so the topbar title reads "Privacy &
-  // GDPR" instead of falling through to the "home"/"Discover" default.
+  // #345/#346 — neither is a sidebar nav item (both are reached via the
+  // footer, not primary nav), just need their own key so the topbar
+  // title reads correctly instead of falling through to the
+  // "home"/"Discover" default.
   if (pathname.startsWith("/privacy")) return "privacy";
+  if (pathname.startsWith("/about")) return "about";
   return "home";
 }
 
@@ -1698,6 +1701,7 @@ function KeystonePrototype() {
     screen === "settings" ? "Account settings" :
     screen === "trainer" ? "Trainer studio" :
     screen === "privacy" ? "Privacy & GDPR" :
+    screen === "about" ? "About us" :
     screen === "home" ? "Discover" : "";
 
   if (authLoading) {
@@ -1778,6 +1782,16 @@ function KeystonePrototype() {
           element={
             <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
               <PrivacyScreen loggedIn={loggedIn} onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} />
+            </AppShell>
+          }
+        />
+
+        {/* #346 — same public-access shape as /privacy above. */}
+        <Route
+          path="/about"
+          element={
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
+              <AboutScreen loggedIn={loggedIn} onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} />
             </AppShell>
           }
         />
