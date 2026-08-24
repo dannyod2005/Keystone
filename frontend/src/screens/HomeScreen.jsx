@@ -128,9 +128,12 @@ export function HomeScreen({
   }, [loggedIn, leaderboardOptIn, onFetchLeaderboard]);
   const myRank = leaderboardEntries?.find((e) => e.isSelf) ?? null;
 
+  // #360 — was <div onClick>: not focusable. No nested interactive
+  // elements in this card, so a plain <button> wrapping the whole thing
+  // is enough.
   function renderCourseCard(c) {
     return (
-      <div key={c.id} className="ks-card" onClick={() => (onOpenCourse ? onOpenCourse(c) : onGo("catalogue"))} style={{ padding: 18, cursor: "pointer" }}>
+      <button key={c.id} type="button" className="ks-card" onClick={() => (onOpenCourse ? onOpenCourse(c) : onGo("catalogue"))} style={{ padding: 18, width: "100%", textAlign: "left", font: "inherit", cursor: "pointer" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
           <CategoryDot color={c.color} />
           <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{c.category}</span>
@@ -141,7 +144,7 @@ export function HomeScreen({
           <Stars rating={c.rating} />
           <span style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.hours}h</span>
         </div>
-      </div>
+      </button>
     );
   }
 
@@ -215,8 +218,10 @@ export function HomeScreen({
           </div>
           {loggedIn ? (
             inProgress.length > 0 ? (
+              // #360 — was <div onClick>: not focusable. No nested
+              // interactive elements, so a plain <button> is enough.
               inProgress.slice(0, 3).map((e) => (
-                <div key={e.id} onClick={() => onGo(`learning/${e.courseId}`)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, cursor: "pointer" }}>
+                <button key={e.id} type="button" onClick={() => onGo(`learning/${e.courseId}`)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, width: "100%", textAlign: "left", font: "inherit", background: "none", border: "none", cursor: "pointer" }}>
                   <KeystoneArch progress={e.progress} size={40} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600 }}>{e.course?.title ?? "Untitled course"}</div>
@@ -225,7 +230,7 @@ export function HomeScreen({
                     </div>
                   </div>
                   <ChevronRight size={15} color="var(--slate-light)" />
-                </div>
+                </button>
               ))
             ) : complete.length > 0 ? (
               // #290 — distinct from the "never started anything" case
@@ -244,8 +249,9 @@ export function HomeScreen({
               </div>
             )
           ) : (
+            // #360 — was <div onClick>: not focusable.
             courses.slice(0, 3).map((c) => (
-              <div key={c.id} onClick={() => onGo("catalogue")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, cursor: "pointer" }}>
+              <button key={c.id} type="button" onClick={() => onGo("catalogue")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, width: "100%", textAlign: "left", font: "inherit", background: "none", border: "none", cursor: "pointer" }}>
                 {/* #108 — logged-out visitors have no real enrollment/progress,
                     so this used to fake a progress ring per course id (0.62 /
                     0.1 / 0.2). A neutral "browse this course" badge instead of
@@ -258,7 +264,7 @@ export function HomeScreen({
                   <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.provider}</div>
                 </div>
                 <ChevronRight size={15} color="var(--slate-light)" />
-              </div>
+              </button>
             ))
           )}
         </div>
@@ -315,8 +321,16 @@ export function HomeScreen({
                 <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>Learning paths to explore</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 18 }}>
+                {/* #360 — was <div onClick>: not focusable. */}
                 {pathsToExplore.map((p) => (
-                  <div key={p.id} className="ks-card" onClick={() => onOpenPath && onOpenPath(p)} style={{ padding: 18, cursor: onOpenPath ? "pointer" : "default" }}>
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="ks-card"
+                    onClick={() => onOpenPath && onOpenPath(p)}
+                    disabled={!onOpenPath}
+                    style={{ padding: 18, width: "100%", textAlign: "left", font: "inherit", cursor: onOpenPath ? "pointer" : "default" }}
+                  >
                     <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 6 }}>{p.title}</div>
                     {p.description && (
                       <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, marginBottom: 14 }}>{p.description}</div>
@@ -324,7 +338,7 @@ export function HomeScreen({
                     <div style={{ fontSize: 12, color: "var(--slate-light)" }}>
                       {(p.courses ?? []).length} course{(p.courses ?? []).length === 1 ? "" : "s"}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>

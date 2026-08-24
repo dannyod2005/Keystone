@@ -461,13 +461,19 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {savedCourses.map((c) => (
                   <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div
-                      style={{ flex: 1, cursor: "pointer" }}
+                    {/* #360 — was <div onClick>: not focusable. A sibling
+                        of the remove-bookmark button below, not a parent,
+                        so a plain <button> here doesn't create the
+                        nested-button problem the Catalogue card's cover
+                        button had to work around. */}
+                    <button
+                      type="button"
                       onClick={() => onOpenCourse(c)}
+                      style={{ flex: 1, textAlign: "left", font: "inherit", background: "none", border: "none", padding: 0, cursor: "pointer" }}
                     >
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{c.title}</div>
                       <div style={{ fontSize: 11.5, color: "var(--slate-light)" }}>{c.provider}</div>
-                    </div>
+                    </button>
                     {/* #258 — real button (was a bare clickable icon);
                         every course in this list is already saved, so the
                         action here is always "remove." */}
