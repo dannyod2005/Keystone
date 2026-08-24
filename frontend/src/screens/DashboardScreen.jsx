@@ -102,8 +102,13 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
   // match Catalogue/Discover exactly (#213) — the 2fr/1fr stats+calendar
   // layout below just gets a little more breathing room at that width,
   // nothing structural needed changing.
+  //
+  // #332 — the 1160 cap held even on very large monitors, leaving a big
+  // fixed gutter either side. Moved to the shared .ks-page-wide class
+  // (global.css) so >=1440px viewports get more usable width instead;
+  // below that breakpoint this renders identically to before.
   return (
-    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1160, margin: "0 auto" }}>
+    <div className="ks-page-enter ks-page-wide" style={{ padding: "28px 32px" }}>
       {/* #213 — Dashboard had no page-level title at all (its largest
           text was this card's 15px greeting line), unlike Catalogue's
           30px h1 — PageHeader closes that gap with the same shared scale.

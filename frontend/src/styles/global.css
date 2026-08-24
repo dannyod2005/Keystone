@@ -41,6 +41,16 @@ html, body {
 .ks-btn-ghost{ background:transparent; color:var(--ink); border:1px solid var(--line); }
 .ks-btn-ghost:hover{ background:var(--paper-2); opacity:1; border-color:var(--slate-light); }
 .ks-card{ background:var(--paper-2); border:1px solid var(--line); border-radius:14px; }
+/* #332 — shared "wide page" container: keeps the existing 1160 cap up to
+   a large-desktop breakpoint, then widens further so pages don't carry a
+   big fixed gutter on large monitors. A class (not an inline style)
+   because inline maxWidth/margin values can't respond to viewport width
+   on their own — this is the pattern #5 (site-wide rollout) reuses on
+   the other screens once this one's confirmed. */
+.ks-page-wide{ max-width:1160px; margin:0 auto; }
+@media (min-width:1440px){
+  .ks-page-wide{ max-width:1480px; }
+}
 .ks-badge{ font-size:11px; font-weight:600; letter-spacing:0.02em; padding:3px 9px; border-radius:100px; text-transform:uppercase; }
 .ks-hairline{ border:none; border-top:1px solid var(--line); }
 .ks-scroll::-webkit-scrollbar{ width:6px; height:6px; }
