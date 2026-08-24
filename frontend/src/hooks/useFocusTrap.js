@@ -63,7 +63,21 @@ export function useFocusTrap(active) {
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      if (previouslyFocused.current && document.contains(previouslyFocused.current)) {
+      // #360-fix — only restore focus if it's still "ours" to give back:
+      // either still somewhere inside this dialog, or nowhere in
+      // particular (the browser parks focus on <body> when the focused
+      // element is removed from the DOM, which is what happens here for
+      // the deferred-unmount modals). If focus has already moved
+      // somewhere else, a *different* dialog has since opened and
+      // legitimately claimed it (e.g. opening a course from inside a
+      // learning path modal — the path modal doesn't finish unmounting,
+      // and this cleanup running, until 160ms after the course modal has
+      // already moved focus into itself) — stealing it back here would
+      // silently drop the user back into the page behind both modals.
+      const stillOurs =
+        document.activeElement === document.body ||
+        (container && container.contains(document.activeElement));
+      if (stillOurs && previouslyFocused.current && document.contains(previouslyFocused.current)) {
         previouslyFocused.current.focus({ preventScroll: true });
       }
     };
