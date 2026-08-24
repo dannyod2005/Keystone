@@ -126,7 +126,16 @@ function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notif
           onCloseMobile={() => setMobileNavOpen(false)}
         />
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* #347 — this column wasn't a flex column, so Footer (added in
+          #337) just sat right after {children} in normal document flow
+          instead of pinning to the bottom on any page shorter than the
+          viewport (Leaderboard, Settings, etc.) — the outer row's
+          minHeight:100vh stretched this column to full height, but
+          nothing inside it used that space. Making it a column with the
+          {children} wrapper set to flex:1 lets that wrapper grow to fill
+          the leftover space, pushing Footer down to the actual bottom
+          regardless of how much content is above it. */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {showSidebar && (
           <AppTopbar
             title={title}
@@ -136,7 +145,9 @@ function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notif
             onOpenNotification={onOpenNotification}
           />
         )}
-        {children}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {children}
+        </div>
         {/* #337 — site-wide footer, rendered once here so every routed
             page picks it up automatically instead of each screen adding
             its own. #345 — onGo reuses the same navigate-by-key function
