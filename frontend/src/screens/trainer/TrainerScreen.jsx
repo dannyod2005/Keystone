@@ -277,10 +277,41 @@ export function TrainerScreen({
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 20 }}>
-        <div className={`ks-tab ${tab === "courses" ? "active" : ""}`} onClick={() => setTab("courses")}>Courses</div>
-        <div className={`ks-tab ${tab === "paths" ? "active" : ""}`} onClick={() => setTab("paths")}>Paths</div>
-        <div className={`ks-tab ${tab === "team" ? "active" : ""}`} onClick={() => setTab("team")}>Team</div>
+      {/* #360 — was three <div onClick>: not focusable, no role/selected
+          state, so a keyboard-only user couldn't switch tabs at all. Real
+          buttons in a role="tablist", each a role="tab" with aria-selected
+          reflecting `tab` — reachable by Tab, activated with Enter/Space. */}
+      <div role="tablist" style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 20 }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "courses"}
+          className={`ks-tab ${tab === "courses" ? "active" : ""}`}
+          onClick={() => setTab("courses")}
+          style={{ background: "none", border: "none", font: "inherit" }}
+        >
+          Courses
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "paths"}
+          className={`ks-tab ${tab === "paths" ? "active" : ""}`}
+          onClick={() => setTab("paths")}
+          style={{ background: "none", border: "none", font: "inherit" }}
+        >
+          Paths
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "team"}
+          className={`ks-tab ${tab === "team" ? "active" : ""}`}
+          onClick={() => setTab("team")}
+          style={{ background: "none", border: "none", font: "inherit" }}
+        >
+          Team
+        </button>
       </div>
 
       {/* #105 — key={tab} remounts this wrapper on tab switch, replaying
@@ -300,19 +331,24 @@ export function TrainerScreen({
                 onChange={(e) => setCourseSearch(e.target.value)}
               />
             </div>
+            {/* #360 — was <span onClick>: not focusable/keyboard-operable.
+                Real button + aria-pressed so a keyboard user can Tab to and
+                switch the ownership filter. */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {["All", "Mine", "View only"].map((o) => (
-                <span
+                <button
                   key={o}
+                  type="button"
                   onClick={() => setOwnerFilter(o)}
+                  aria-pressed={ownerFilter === o}
                   style={{
-                    fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
+                    font: "inherit", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
                     background: ownerFilter === o ? "var(--ink)" : "var(--paper-2)", color: ownerFilter === o ? "var(--paper)" : "var(--slate)",
                     border: "1px solid var(--line)",
                   }}
                 >
                   {o}
-                </span>
+                </button>
               ))}
             </div>
             <div style={{ flex: 1 }} />
