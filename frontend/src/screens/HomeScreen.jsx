@@ -344,17 +344,18 @@ export function HomeScreen({
         </section>
       )}
 
-      {/* #213 — "Popular this month", the testimonials band, and the
-          demo-copy footer are all logged-out marketing content: a
-          course-recommendation strip (redundant with Catalogue's own
-          "Recommended for you" from #190 once logged in), social-proof
-          testimonials aimed at someone deciding whether to sign up, and a
-          footer that literally says "clickable prototype for demo
-          purposes." None of that belongs in front of someone who already
-          has an account — it's also the main reason this page was always
-          taller/scrollable than Dashboard or Catalogue regardless of how
-          little content a logged-in visitor actually had. Logged-out
-          behavior is completely unchanged below. */}
+      {/* #213 — "Popular this month" and the testimonials band are both
+          logged-out marketing content: a course-recommendation strip
+          (redundant with Catalogue's own "Recommended for you" from #190
+          once logged in) and social-proof testimonials aimed at someone
+          deciding whether to sign up. Neither belongs in front of someone
+          who already has an account — it's also the main reason this page
+          was always taller/scrollable than Dashboard or Catalogue
+          regardless of how little content a logged-in visitor actually
+          had. Logged-out behavior is completely unchanged below.
+          (The old demo-copy footer that used to close out this section
+          is gone — #337 replaced it with the site-wide Footer rendered
+          from AppShell, which every page including this one now gets.) */}
       {!loggedIn && (
         <>
           <section style={{ maxWidth: 1160, margin: "0 auto", padding: "20px 28px 56px" }}>
@@ -382,10 +383,6 @@ export function HomeScreen({
               </div>
             </div>
           </section>
-
-          <footer style={{ padding: "28px", textAlign: "center", fontSize: 12.5, color: "var(--slate-light)" }}>
-            Keystone Learning — clickable prototype for demo purposes.
-          </footer>
         </>
       )}
     </div>
