@@ -159,8 +159,15 @@ export function SettingsScreen({
                 maxLength={80}
               />
             </div>
-            {nameError && <div style={errorText}>{nameError}</div>}
-            {nameSaved && <div style={savedText}>Saved.</div>}
+            {/* #349 — wrapper stays mounted (aria-live regions only get
+                picked up by a screen reader if they already exist in the
+                DOM before their content changes) so success/error text
+                mounting inside it gets announced instead of silently
+                appearing. */}
+            <div aria-live="polite" role="status">
+              {nameError && <div style={errorText}>{nameError}</div>}
+              {nameSaved && <div style={savedText}>Saved.</div>}
+            </div>
           </div>
           <button type="submit" className="ks-btn ks-btn-gold" disabled={savingName || !name.trim()} style={{ opacity: savingName ? 0.7 : 1 }}>
             {savingName ? "Saving…" : "Save name"}
@@ -188,9 +195,21 @@ export function SettingsScreen({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              {showPw
-                ? <EyeOff size={15} color="var(--slate-light)" style={{ position: "absolute", right: 13, top: 12, cursor: "pointer" }} onClick={() => setShowPw(false)} />
-                : <Eye size={15} color="var(--slate-light)" style={{ position: "absolute", right: 13, top: 12, cursor: "pointer" }} onClick={() => setShowPw(true)} />}
+              {/* #349 — was a bare Eye/EyeOff icon with onClick, not focusable
+                  or announced by a screen reader. Same real-button pattern
+                  #258 already used for this exact control in
+                  ResetPasswordModal/AuthModal — #258 covered those two but
+                  missed this one, since SettingsScreen didn't exist yet. */}
+              <button
+                type="button"
+                aria-label={showPw ? "Hide password" : "Show password"}
+                onClick={() => setShowPw((v) => !v)}
+                style={{ position: "absolute", right: 13, top: 12, background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                {showPw
+                  ? <EyeOff size={15} color="var(--slate-light)" />
+                  : <Eye size={15} color="var(--slate-light)" />}
+              </button>
             </div>
             {pwTouched && !pwValid && <div style={errorText}>Password must be at least 8 characters.</div>}
           </div>
@@ -211,8 +230,12 @@ export function SettingsScreen({
             </div>
             {pwTouched && pwValid && !pwMatches && <div style={errorText}>Passwords don't match.</div>}
           </div>
-          {pwError && <div style={errorText}>{pwError}</div>}
-          {pwSaved && <div style={savedText}>Password updated.</div>}
+          {/* #349 — same always-mounted aria-live wrapper as the name form
+              above, so save success/failure is announced. */}
+          <div aria-live="polite" role="status">
+            {pwError && <div style={errorText}>{pwError}</div>}
+            {pwSaved && <div style={savedText}>Password updated.</div>}
+          </div>
           <button type="submit" className="ks-btn ks-btn-gold" disabled={savingPw} style={{ opacity: savingPw ? 0.7 : 1 }}>
             {savingPw ? "Saving…" : "Update password"}
           </button>
@@ -223,13 +246,20 @@ export function SettingsScreen({
         <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Preferences</div>
 
         <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate)", marginBottom: 8 }}>Daily goal</div>
+        {/* #349 — was <span onClick>: not focusable/keyboard-operable, and
+            the selected preset wasn't announced. Real button + aria-pressed
+            so it's reachable by Tab/Enter and a screen reader hears which
+            preset is currently selected. */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {DAILY_GOAL_PRESETS.map((m) => (
-            <span
+            <button
               key={m}
+              type="button"
               onClick={() => handlePickDailyGoal(m)}
+              disabled={savingGoal}
+              aria-pressed={m === activitySummary.dailyGoalPoints}
               style={{
-                fontSize: 12, fontWeight: 600, padding: "6px 12px", borderRadius: 100,
+                font: "inherit", fontSize: 12, fontWeight: 600, padding: "6px 12px", borderRadius: 100,
                 cursor: savingGoal ? "default" : "pointer", opacity: savingGoal ? 0.6 : 1,
                 background: m === activitySummary.dailyGoalPoints ? "var(--ink)" : "var(--paper-2)",
                 color: m === activitySummary.dailyGoalPoints ? "var(--paper)" : "var(--slate)",
@@ -237,7 +267,7 @@ export function SettingsScreen({
               }}
             >
               {m} pts
-            </span>
+            </button>
           ))}
         </div>
 
@@ -276,10 +306,17 @@ export function SettingsScreen({
             <span style={{ width: 14, height: 14, borderRadius: 99, background: "#fff", display: "block" }} />
           </span>
         </button>
+        {/* #349 — was <div onClick>: not a real link/button, so it was
+            unreachable by keyboard and invisible to a screen reader as an
+            interactive element. */}
         {leaderboardOptIn && onOpenLeaderboard && (
-          <div onClick={onOpenLeaderboard} style={{ fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, marginTop: 10, cursor: "pointer" }}>
+          <button
+            type="button"
+            onClick={onOpenLeaderboard}
+            style={{ font: "inherit", fontSize: 12, color: "var(--gold-dark)", fontWeight: 600, marginTop: 10, background: "none", border: "none", padding: 0, cursor: "pointer" }}
+          >
             View leaderboard →
-          </div>
+          </button>
         )}
       </div>
     </div>
