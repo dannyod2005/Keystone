@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Milestone, Bookmark } from "lucide-react";
+import { Search, Milestone, Bookmark, ChevronDown, ChevronUp } from "lucide-react";
 
 import { Stars, CategoryDot, PageHeader } from "../components/common/Primitives";
 import { MarketingHeader } from "../components/layout/MarketingHeader";
@@ -11,6 +11,13 @@ import { MarketingHeader } from "../components/layout/MarketingHeader";
 // slicing, so what makes the cut is at least a reasonable proxy for
 // "good," not just catalogue order.
 const RECOMMENDED_LIMIT = 6;
+
+// A batch of learning paths (e.g. 9) used to fill the whole viewport
+// above the fold, same underlying problem #344 fixed for the search bar
+// (it just moved search above this section instead of capping it). Same
+// limit/pattern as RECOMMENDED_LIMIT above — two grid rows by default,
+// with an explicit "Show all" toggle rather than silently hiding paths.
+const LEARNING_PATHS_LIMIT = 6;
 
 export function CatalogueScreen({
   loggedIn,
@@ -30,7 +37,10 @@ export function CatalogueScreen({
 }) {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [pathsExpanded, setPathsExpanded] = useState(false);
   const cats = ["All", "Technical", "Business", "Leadership"];
+
+  const visiblePaths = pathsExpanded ? learningPaths : learningPaths.slice(0, LEARNING_PATHS_LIMIT);
 
   const byCategory = filter === "All" ? courses : courses.filter((c) => c.category === filter);
   const query = search.trim().toLowerCase();
@@ -185,43 +195,14 @@ export function CatalogueScreen({
           </div>
         ) : (
           <>
-            {/* #224 — "Learning paths": its own section, entirely separate
-                from the course search/category filter below (a path isn't
-                a course, so it doesn't belong in that grid or its filter
-                predicate). Hidden while paths are still loading or there
-                simply aren't any yet. */}
-            {!pathsLoading && learningPaths.length > 0 && (
-              <div style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Learning paths</div>
-                <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>
-                  Guided, multi-course sequences curated by trainers.
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
-                  {learningPaths.map(renderPathCard)}
-                </div>
-                <hr className="ks-hairline" style={{ margin: "28px 0 0" }} />
-              </div>
-            )}
-
-            {/* #190 — "Recommended for you": additive, above the untouched
-                full grid below. Hidden entirely once search/filter narrows
-                the view, or for any learner/trainer with no goal set. */}
-            {recommended.length > 0 && (
-              <div style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Recommended for you</div>
-                <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>
-                  Based on your {goal} goal.
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
-                  {recommended.map(renderCourseCard)}
-                </div>
-                <hr className="ks-hairline" style={{ margin: "28px 0 0" }} />
-              </div>
-            )}
-
-            {/* #104 — stacked on mobile, side-by-side from md up; flex-direction
-                is the only breakpoint-dependent property here, so it's the
-                only thing on Tailwind classes. */}
+            {/* #344 — was below the Learning paths/Recommended sections, so
+                a learner had to scroll past both (worse the more paths or
+                recommended courses existed) before reaching search. Moved
+                to directly under the page header so it's always the first
+                thing visible, regardless of how much renders below it.
+                #104 — stacked on mobile, side-by-side from md up;
+                flex-direction is the only breakpoint-dependent property
+                here, so it's the only thing on Tailwind classes. */}
             <div className="flex flex-col items-stretch md:flex-row md:items-center" style={{ gap: 18, marginBottom: 24 }}>
               <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
                 <Search size={15} color="var(--slate-light)" style={{ position: "absolute", left: 13, top: 11 }} />
@@ -243,6 +224,59 @@ export function CatalogueScreen({
                 ))}
               </div>
             </div>
+
+            {/* #224 — "Learning paths": its own section, entirely separate
+                from the course search/category filter above (a path isn't
+                a course, so it doesn't belong in that grid or its filter
+                predicate). Hidden while paths are still loading or there
+                simply aren't any yet.
+                #344 — capped at LEARNING_PATHS_LIMIT (same pattern as
+                Recommended below) with an explicit "Show all" toggle, so a
+                large batch of paths doesn't fill the whole viewport above
+                the course grid. */}
+            {!pathsLoading && learningPaths.length > 0 && (
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Learning paths</div>
+                <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>
+                  Guided, multi-course sequences curated by trainers.
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
+                  {visiblePaths.map(renderPathCard)}
+                </div>
+                {learningPaths.length > LEARNING_PATHS_LIMIT && (
+                  <button
+                    type="button"
+                    onClick={() => setPathsExpanded((v) => !v)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 4, marginTop: 14,
+                      background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit",
+                      fontSize: 13, fontWeight: 600, color: "var(--gold-dark)",
+                    }}
+                  >
+                    {pathsExpanded
+                      ? <>Show fewer paths <ChevronUp size={14} /></>
+                      : <>Show all {learningPaths.length} paths <ChevronDown size={14} /></>}
+                  </button>
+                )}
+                <hr className="ks-hairline" style={{ margin: "28px 0 0" }} />
+              </div>
+            )}
+
+            {/* #190 — "Recommended for you": additive, above the untouched
+                full grid below. Hidden entirely once search/filter narrows
+                the view, or for any learner/trainer with no goal set. */}
+            {recommended.length > 0 && (
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Recommended for you</div>
+                <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>
+                  Based on your {goal} goal.
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
+                  {recommended.map(renderCourseCard)}
+                </div>
+                <hr className="ks-hairline" style={{ margin: "28px 0 0" }} />
+              </div>
+            )}
 
             {filtered.length === 0 ? (
               <div className="ks-card" style={{ padding: 24, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
