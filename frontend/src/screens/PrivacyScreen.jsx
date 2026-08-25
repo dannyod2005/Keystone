@@ -52,7 +52,13 @@ export function PrivacyScreen({ loggedIn, onGo, onAuth }) {
           tighter line length is more legible than the app's wider
           content pages. */}
       <div className="ks-page-scaled" style={{ "--ks-page-base": "760px", padding: "36px 28px 60px" }}>
-        <PageHeader title="Privacy & GDPR" subtitle="Last updated August 2026." />
+        {/* #364 — title only kept logged out (AppTopbar already shows
+            "Privacy & GDPR" for logged-in visitors, but there's no
+            topbar at all when logged out); subtitle stays either way. */}
+        <PageHeader
+          title={loggedIn ? undefined : "Privacy & GDPR"}
+          subtitle="Last updated August 2026."
+        />
         {SECTIONS.map((s) => (
           <div key={s.title} style={{ marginBottom: 26 }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{s.title}</div>

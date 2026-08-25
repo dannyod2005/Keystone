@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { User, Lock, Eye, EyeOff, Trophy } from "lucide-react";
 
-import { PageHeader } from "../components/common/Primitives";
 import { getDisplayName } from "../lib/userDisplay";
 
 // #296 — the original 150/300/450/600/900 presets (and the 300 default
@@ -137,8 +136,9 @@ export function SettingsScreen({
     // maxWidth, so this form grows (modestly, from its own 640 base) at
     // the same large breakpoint as the rest of the app.
     <div className="ks-page-enter ks-page-scaled" style={{ padding: "28px 32px", "--ks-page-base": "640px" }}>
-      <PageHeader title="Account settings" />
-
+      {/* #364 — was <PageHeader title="Account settings" />: AppTopbar
+          already shows that same text as this route's h1, so this was a
+          plain duplicate. */}
       <div className="ks-card" style={{ padding: "20px 22px", marginBottom: 20 }}>
         <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Profile</div>
         <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 16 }}>
