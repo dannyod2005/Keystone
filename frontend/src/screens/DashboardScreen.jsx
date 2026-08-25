@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Medal, Bookmark, Trophy, X } from "lucide-react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Medal, Bookmark, Trophy, X, LogOut } from "lucide-react";
 
 import { KeystoneArch, PageHeader } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
@@ -201,13 +201,21 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                     <button className="ks-btn ks-btn-gold" style={{ padding: "11px 22px", fontSize: 15 }} onClick={() => onStartLearning(c)}>
                       Start <ChevronRight size={16} />
                     </button>
+                    {/* #352 — was a full-text ghost button, equal visual
+                        weight to Start right next to it. Shrunk to
+                        icon-only now that Start/Resume carries the gold
+                        higher-hierarchy treatment (#333), so this reads as
+                        the secondary, low-emphasis action it actually is;
+                        aria-label carries the name the icon alone can't. */}
                     {onUnenrol && (
                       <button
+                        type="button"
                         className="ks-btn ks-btn-ghost"
-                        style={{ color: "var(--coral)" }}
+                        aria-label="Unenroll"
+                        style={{ color: "var(--coral)", padding: 9 }}
                         onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: false }); setUnenrollError(null); }}
                       >
-                        Unenroll
+                        <LogOut size={15} />
                       </button>
                     )}
                   </div>
@@ -243,13 +251,17 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                   <button className="ks-btn ks-btn-gold" style={{ padding: "11px 22px", fontSize: 15 }} onClick={() => onStartLearning(c)}>
                     Resume <ChevronRight size={16} />
                   </button>
+                  {/* #352 — same icon-only shrink as the Not-started
+                      row's Unenroll above. */}
                   {onUnenrol && (
                     <button
+                      type="button"
                       className="ks-btn ks-btn-ghost"
-                      style={{ color: "var(--coral)" }}
+                      aria-label="Unenroll"
+                      style={{ color: "var(--coral)", padding: 9 }}
                       onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: false }); setUnenrollError(null); }}
                     >
-                      Unenroll
+                      <LogOut size={15} />
                     </button>
                   )}
                 </div>
