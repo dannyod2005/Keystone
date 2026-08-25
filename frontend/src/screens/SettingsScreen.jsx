@@ -125,7 +125,11 @@ export function SettingsScreen({
     }
   }
 
-  const field = { marginBottom: 16 };
+  // Viewport-fit pass — trimmed the shared field/label spacing plus the
+  // per-card padding/margins below (was 16/6, cards were 20px padding +
+  // 20px gap) so the three-card form has a better shot at fitting under
+  // one viewport alongside AppTopbar/Footer on a laptop-height screen.
+  const field = { marginBottom: 14 };
   const label = { display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink)", marginBottom: 6 };
   const inputWrap = { position: "relative" };
   const errorText = { fontSize: 12, color: "var(--coral)", marginTop: 6 };
@@ -135,13 +139,13 @@ export function SettingsScreen({
     // #336 — shared .ks-page-scaled primitive instead of a hardcoded
     // maxWidth, so this form grows (modestly, from its own 640 base) at
     // the same large breakpoint as the rest of the app.
-    <div className="ks-page-enter ks-page-scaled" style={{ padding: "28px 32px", "--ks-page-base": "640px" }}>
+    <div className="ks-page-enter ks-page-scaled" style={{ padding: "22px 32px", "--ks-page-base": "640px" }}>
       {/* #364 — was <PageHeader title="Account settings" />: AppTopbar
           already shows that same text as this route's h1, so this was a
           plain duplicate. */}
-      <div className="ks-card" style={{ padding: "20px 22px", marginBottom: 20 }}>
+      <div className="ks-card" style={{ padding: "18px 22px", marginBottom: 16 }}>
         <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Profile</div>
-        <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 16 }}>
+        <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 12 }}>
           Your name appears on your own greeting, plus any forum posts or course reviews you leave.
         </div>
         <form onSubmit={handleSaveName}>
@@ -175,9 +179,9 @@ export function SettingsScreen({
         </form>
       </div>
 
-      <div className="ks-card" style={{ padding: "20px 22px", marginBottom: 20 }}>
+      <div className="ks-card" style={{ padding: "18px 22px", marginBottom: 16 }}>
         <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Password</div>
-        <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 16 }}>
+        <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginBottom: 12 }}>
           Choose a new password for your account.
         </div>
         <form onSubmit={handleSavePassword}>
@@ -242,10 +246,10 @@ export function SettingsScreen({
         </form>
       </div>
 
-      <div className="ks-card" style={{ padding: "20px 22px" }}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Preferences</div>
+      <div className="ks-card" style={{ padding: "18px 22px" }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 12 }}>Preferences</div>
 
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate)", marginBottom: 8 }}>Daily goal</div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate)", marginBottom: 6 }}>Daily goal</div>
         {/* #349 — was <span onClick>: not focusable/keyboard-operable, and
             the selected preset wasn't announced. Real button + aria-pressed
             so it's reachable by Tab/Enter and a screen reader hears which
@@ -271,7 +275,7 @@ export function SettingsScreen({
           ))}
         </div>
 
-        <hr className="ks-hairline" style={{ margin: "18px 0" }} />
+        <hr className="ks-hairline" style={{ margin: "14px 0" }} />
 
         {/* #258 — was two separate divs (label + switch) each with their own
             onClick calling the same handler; neither had a role, checked
