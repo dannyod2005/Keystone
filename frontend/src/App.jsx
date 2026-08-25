@@ -145,9 +145,15 @@ function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notif
             onOpenNotification={onOpenNotification}
           />
         )}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* #366 — was a plain div: the routed page content had no landmark
+            a screen reader user could jump straight to (Lighthouse's
+            "Document does not have a main landmark" finding). AppSidebar's
+            nav and AppTopbar above are their own landmarks (nav/header
+            equivalents), so <main> here marks the one remaining region —
+            the actual page content — without wrapping those too. */}
+        <main style={{ flex: 1, minWidth: 0 }}>
           {children}
-        </div>
+        </main>
         {/* #337 — site-wide footer, rendered once here so every routed
             page picks it up automatically instead of each screen adding
             its own. #345 — onGo reuses the same navigate-by-key function
@@ -1756,7 +1762,18 @@ function KeystonePrototype() {
                 />
               </AppShell>
             ) : (
-              <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
+              // #366 — the only route that doesn't render through AppShell
+              // (logged-out "/" renders HomeScreen standalone, right above
+              // in the loggedIn branch it's inside AppShell's own <main>),
+              // so it was the one page still missing the landmark AppShell
+              // now provides everywhere else. Wrapped here rather than
+              // inside HomeScreen itself, since HomeScreen is also used
+              // for the logged-in "/" route nested inside AppShell's
+              // <main> — a <main> in there too would nest two on that
+              // path, which is invalid.
+              <main>
+                <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
+              </main>
             )
           }
         />

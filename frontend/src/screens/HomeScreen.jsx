@@ -395,7 +395,15 @@ export function HomeScreen({
                     <Stars rating={t.rating} />
                     <p style={{ color: "#DDE2EA", fontSize: 14, lineHeight: 1.55, margin: "12px 0 16px" }}>{t.quote}</p>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--paper)" }}>{t.name}</div>
-                    <div style={{ fontSize: 12, color: "#8B93A0" }}>{t.role}</div>
+                    {/* #366 — was #8B93A0: the same pre-#351 slate-light
+                        value that failed AA on --paper (~2.8:1), copy-
+                        pasted here as a hardcoded hex rather than the
+                        (already-fixed) --slate-light token, so #351 never
+                        touched it. It happens to land at ~4.47:1 on this
+                        card's #1E2C4A background — just under the 4.5:1
+                        minimum for 12px text. #9BA6B8 holds ~5.5:1 here,
+                        same comfortable-margin approach as #351. */}
+                    <div style={{ fontSize: 12, color: "#9BA6B8" }}>{t.role}</div>
                   </div>
                 ))}
               </div>
