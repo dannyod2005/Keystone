@@ -176,7 +176,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
+function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onUnenrol }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   // #229 — a notification click-through lands here as
@@ -225,6 +225,7 @@ function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onS
       onEditPost={onEditPost}
       currentUserId={currentUserId}
       onBack={() => navigate("/dashboard")}
+      onUnenrol={onUnenrol}
       initialModuleId={searchParams.get("module")}
       initialTab={searchParams.get("tab")}
     />
@@ -1819,7 +1820,6 @@ function KeystonePrototype() {
                   onStartLearning={handleStartLearning}
                   courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
-                  onUnenrol={unenrolCourse}
                   onRetake={retakeCourse}
                   user={user}
                   goal={learnerGoal}
@@ -1900,6 +1900,7 @@ function KeystonePrototype() {
                   onCreatePost={createPost}
                   onEditPost={editPost}
                   currentUserId={user?.id}
+                  onUnenrol={unenrolCourse}
                 />
               </AppShell>
             </RequireAuth>
