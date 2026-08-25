@@ -627,6 +627,18 @@ function KeystonePrototype() {
   // — see the trigger effect below for why that matters), and resets to
   // false on logout so a stale "loaded" flag can't survive into a
   // different account's session.
+  //
+  // #fix-stale-token-onboarding-modal — used to be `res.ok ? res.json() :
+  // null`, which folded EVERY non-ok response into the same "empty
+  // profile" path as a real 404, including a 401 from a stale/expired
+  // token (e.g. another tab's global sign-out invalidating this one — see
+  // handleLogout's own fix above). That set profileRole to null and
+  // goalLoaded to true on a plain auth failure, which is exactly what the
+  // role/goal-onboarding triggers below are watching for — an
+  // unauthorized account with a real role looked identical to a brand
+  // new one. Only a genuine 404 gets treated as "no profile row yet" now;
+  // anything else throws into the existing catch, which already leaves
+  // goalLoaded false rather than misreporting an answer.
   useEffect(() => {
     if (!loggedIn || !session) {
       setLearnerGoal(null);
@@ -639,7 +651,11 @@ function KeystonePrototype() {
     fetch(`${process.env.REACT_APP_API_URL}/profiles/me`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res.ok) return res.json();
+        if (res.status === 404) return null;
+        throw new Error(`Failed to load profile (${res.status})`);
+      })
       .then((profile) => {
         setLearnerGoal(profile?.goal ?? null);
         setProfileRole(profile?.role ?? null);
@@ -1641,7 +1657,13 @@ function KeystonePrototype() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    // #fix-stale-token-onboarding-modal — signOut()'s default scope is
+    // "global", which revokes this account's session everywhere it's
+    // logged in (any other tab/device), not just this one — logging out
+    // here to switch accounts was silently kicking out every other
+    // session for the same account too. "local" only clears this tab's
+    // session, matching what "Log out" actually reads as to the user.
+    await supabase.auth.signOut({ scope: "local" });
     navigate("/");
   }
 
