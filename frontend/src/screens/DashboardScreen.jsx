@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Medal, Bookmark, Trophy, X, LogOut } from "lucide-react";
+import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Medal, Bookmark, Trophy, X } from "lucide-react";
 
 import { KeystoneArch } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
@@ -11,23 +11,24 @@ import { useFocusTrap } from "../hooks/useFocusTrap";
 // SettingsScreen's DAILY_GOAL_PRESETS comment for why).
 const DEFAULT_ACTIVITY_SUMMARY = { streak: 0, pointsThisWeek: 0, dailyGoalPoints: 1500, goalHitDays: 0, week: [] };
 
-export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, onUnenrol, onRetake, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, error = false, onRetry, calendarWeekOffset = 0, onPrevWeek, onNextWeek, leaderboardOptIn = false, onOpenLeaderboard }) {
+export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], bookmarks = [], onToggleBookmark, onOpenCourse, onStartLearning, courses, onViewCertificate, onRetake, user, goal = null, activitySummary = DEFAULT_ACTIVITY_SUMMARY, loading = false, error = false, onRetry, calendarWeekOffset = 0, onPrevWeek, onNextWeek, leaderboardOptIn = false, onOpenLeaderboard }) {
   const firstName = getFirstName(getDisplayName(user));
-  // #255 — course pending unenrol confirmation ({ enrollmentId, title,
-  // isComplete }), or null. Same three-state shape (pending item + error +
-  // busy flag) as TrainerScreen's deletingCourse/deleteError/deleting.
-  // #300 — also doubles as the pending-retake state for a completed
-  // course: isComplete effectively means "this is a retake, not a plain
-  // unenrol" now, since the Completed section below no longer offers a
-  // separate plain-unenrol action (see handleConfirmUnenroll).
-  const [unenrollingCourse, setUnenrollingCourse] = useState(null);
-  const [unenrollError, setUnenrollError] = useState(null);
-  const [unenrolling, setUnenrolling] = useState(false);
+  // #365 — was also shared with a plain Unenroll flow triggered from the
+  // Not-started/Continue-learning cards below (kebab menu, then an
+  // Edit-mode toggle). Unenroll now lives inside LearningScreen instead
+  // (opening a course is the natural place to leave it — see that
+  // screen's own header), so this state/modal only ever handles Retake
+  // on a completed course now; kept the original naming's shape (pending
+  // item + error + busy flag, same trio TrainerScreen's delete-course
+  // confirm uses) rather than introducing a parallel one.
+  const [retakingCourse, setRetakingCourse] = useState(null);
+  const [retakeError, setRetakeError] = useState(null);
+  const [retaking, setRetaking] = useState(false);
 
   // #360 — no deferred-unmount here (unlike the standalone modal
-  // components): the modal is a simple `unenrollingCourse &&` conditional
+  // components): the modal is a simple `retakingCourse &&` conditional
   // mount, so active ties directly to that same truthiness.
-  const unenrollDialogRef = useFocusTrap(!!unenrollingCourse);
+  const retakeDialogRef = useFocusTrap(!!retakingCourse);
 
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
   const complete = enrolled.filter((e) => e.status === "complete");
@@ -79,25 +80,20 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
     }
   }
 
-  // #300 — branches on isComplete: a completed course's confirm dialog
-  // calls onRetake (unenrol + re-enrol as one action, see
-  // EnrollmentsService.retake) instead of onUnenrol, since the Completed
-  // section's button is "Retake" now, not "Unenroll" — see the modal
-  // copy below for why that's not just a label swap.
-  async function handleConfirmUnenroll() {
-    setUnenrolling(true);
-    setUnenrollError(null);
+  // #300/#365 — hits the combined retake endpoint (unenrol + re-enrol as
+  // one action, see EnrollmentsService.retake). No longer branches on an
+  // isComplete flag — this modal only ever fires from the Completed
+  // section's Retake button now.
+  async function handleConfirmRetake() {
+    setRetaking(true);
+    setRetakeError(null);
     try {
-      if (unenrollingCourse.isComplete) {
-        await onRetake(unenrollingCourse.enrollmentId);
-      } else {
-        await onUnenrol(unenrollingCourse.enrollmentId);
-      }
-      setUnenrollingCourse(null);
+      await onRetake(retakingCourse.enrollmentId);
+      setRetakingCourse(null);
     } catch (err) {
-      setUnenrollError(err.message || (unenrollingCourse.isComplete ? "Failed to retake." : "Failed to unenrol."));
+      setRetakeError(err.message || "Failed to retake.");
     } finally {
-      setUnenrolling(false);
+      setRetaking(false);
     }
   }
 
@@ -184,39 +180,30 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                 const c = courses.find((x) => x.id === e.courseId);
                 if (!c) return null;
                 return (
-                  <div key={e.courseId} className="ks-card" style={{ padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
-                    <KeystoneArch progress={0} size={48} />
-                    <div style={{ flex: 1 }}>
+                  // #365 — a full-height slab, a same-row coral icon, a
+                  // per-card kebab menu, and a shared Edit-mode toggle all
+                  // fought the gold Start button for attention or added
+                  // extra clicking. Settled on: a single large gold
+                  // button, the only accent color on the card — Unenroll
+                  // moved into LearningScreen instead (opening a course is
+                  // the natural place to leave it, matching how Udemy/
+                  // Coursera keep it inside the course rather than on the
+                  // list card).
+                  <div key={e.courseId} className="ks-card" style={{ padding: "12px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
+                    <KeystoneArch progress={0} size={44} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14.5, fontWeight: 600 }}>{c.title}</div>
                       <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>
                         {c.modules.length} module{c.modules.length === 1 ? "" : "s"} · not started yet
                       </div>
                     </div>
-                    {/* #333 — was ks-btn-primary, identical weight to every
-                        other primary button in the app; gold accent + a
-                        touch more size/an arrow makes this the obvious next
-                        action on the page, matching how central starting/
-                        resuming a course is to the actual workflow here. */}
-                    <button className="ks-btn ks-btn-gold" style={{ padding: "11px 22px", fontSize: 15 }} onClick={() => onStartLearning(c)}>
-                      Start <ChevronRight size={16} />
+                    <button
+                      className="ks-btn ks-btn-gold"
+                      style={{ flexShrink: 0, padding: "14px 28px", fontSize: 15.5, fontWeight: 700, borderRadius: 10, gap: 8 }}
+                      onClick={() => onStartLearning(c)}
+                    >
+                      Start <ChevronRight size={18} />
                     </button>
-                    {/* #352 — was a full-text ghost button, equal visual
-                        weight to Start right next to it. Shrunk to
-                        icon-only now that Start/Resume carries the gold
-                        higher-hierarchy treatment (#333), so this reads as
-                        the secondary, low-emphasis action it actually is;
-                        aria-label carries the name the icon alone can't. */}
-                    {onUnenrol && (
-                      <button
-                        type="button"
-                        className="ks-btn ks-btn-ghost"
-                        aria-label="Unenroll"
-                        style={{ color: "var(--coral)", padding: 9 }}
-                        onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: false }); setUnenrollError(null); }}
-                      >
-                        <LogOut size={15} />
-                      </button>
-                    )}
                   </div>
                 );
               })}
@@ -233,9 +220,11 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
               const c = courses.find((x) => x.id === e.courseId);
               if (!c) return null;
               return (
-                <div key={e.courseId} className="ks-card" style={{ padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
-                  <KeystoneArch progress={e.progress} size={48} />
-                  <div style={{ flex: 1 }}>
+                // #365 — same single-accent treatment as the Not-started
+                // row above.
+                <div key={e.courseId} className="ks-card" style={{ padding: "12px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
+                  <KeystoneArch progress={e.progress} size={44} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14.5, fontWeight: 600 }}>{c.title}</div>
                     <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 2 }}>
                       {Math.round(e.progress * c.modules.length)} of {c.modules.length} modules · last opened {e.lastAccessed}
@@ -244,25 +233,13 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                       <div style={{ height: "100%", width: `${e.progress * 100}%`, background: "var(--gold)" }} />
                     </div>
                   </div>
-                  {/* #333 — same gold-accent treatment as the Start button
-                      above, so Resume reads as the primary action on this
-                      row instead of matching every other button. */}
-                  <button className="ks-btn ks-btn-gold" style={{ padding: "11px 22px", fontSize: 15 }} onClick={() => onStartLearning(c)}>
-                    Resume <ChevronRight size={16} />
+                  <button
+                    className="ks-btn ks-btn-gold"
+                    style={{ flexShrink: 0, padding: "14px 28px", fontSize: 15.5, fontWeight: 700, borderRadius: 10, gap: 8 }}
+                    onClick={() => onStartLearning(c)}
+                  >
+                    Resume <ChevronRight size={18} />
                   </button>
-                  {/* #352 — same icon-only shrink as the Not-started
-                      row's Unenroll above. */}
-                  {onUnenrol && (
-                    <button
-                      type="button"
-                      className="ks-btn ks-btn-ghost"
-                      aria-label="Unenroll"
-                      style={{ color: "var(--coral)", padding: 9 }}
-                      onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: false }); setUnenrollError(null); }}
-                    >
-                      <LogOut size={15} />
-                    </button>
-                  )}
                 </div>
               );
             })
@@ -285,15 +262,14 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                 {/* #300 — was "Unenroll": a finished course's most likely
                     next action is doing it again, not leaving it, and
                     "unenroll" read oddly for something already completed.
-                    Still routes through the same confirm modal (isComplete:
-                    true) and still coral — resetting progress and losing
-                    certificate access until it's completed again are real
-                    consequences worth a confirm, same as before. */}
+                    Still coral — resetting progress and losing certificate
+                    access until it's completed again are real consequences
+                    worth a confirm, same as before. */}
                 {onRetake && (
                   <button
                     className="ks-btn ks-btn-ghost"
                     style={{ color: "var(--coral)" }}
-                    onClick={() => { setUnenrollingCourse({ enrollmentId: e.id, title: c.title, isComplete: true }); setUnenrollError(null); }}
+                    onClick={() => { setRetakingCourse({ enrollmentId: e.id, title: c.title }); setRetakeError(null); }}
                   >
                     Retake
                   </button>
@@ -512,15 +488,15 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
         </div>
       </div>
 
-      {/* #255/#300/#301 — same modal shape as TrainerScreen's delete-course
-          confirmation (backdrop click/X/Cancel all close it, guarded by
-          !unenrolling so a click mid-request can't dismiss and lose the
-          error). isComplete now means "this is a retake", not just
-          "warn about the certificate" — title/body/button all branch on
-          it below. The retake copy is explicit that quiz answers/notes
-          carry over, since EnrollmentsService.retake (like remove()
-          before it) deliberately doesn't wipe them — a learner who wants
-          a clean slate has to redo each module's quiz individually.
+      {/* #255/#300/#301/#365 — same modal shape as TrainerScreen's
+          delete-course confirmation (backdrop click/X/Cancel all close
+          it, guarded by !retaking so a click mid-request can't dismiss
+          and lose the error). Retake-only now that plain Unenroll has
+          moved to LearningScreen — no more isComplete branching. The
+          copy is explicit that quiz answers/notes carry over, since
+          EnrollmentsService.retake deliberately doesn't wipe them — a
+          learner who wants a clean slate has to redo each module's quiz
+          individually.
           #301 — portaled to document.body: this screen's root div carries
           ks-page-enter for the page-load animation, which leaves a
           `transform` applied via animation-fill-mode: both even after the
@@ -531,58 +507,52 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
           of the screen instead of covering it. Rendering outside that
           subtree entirely is the durable fix, not a one-off tweak to this
           animation. */}
-      {unenrollingCourse && createPortal(
+      {retakingCourse && createPortal(
         <div
-          onClick={() => !unenrolling && setUnenrollingCourse(null)}
+          onClick={() => !retaking && setRetakingCourse(null)}
           className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
           <div
-            ref={unenrollDialogRef}
+            ref={retakeDialogRef}
             onClick={(e) => e.stopPropagation()}
             className="ks-card ks-modal-card"
             style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="ks-unenroll-modal-title"
+            aria-labelledby="ks-retake-modal-title"
             tabIndex={-1}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div id="ks-unenroll-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>
-                {unenrollingCourse.isComplete ? "Retake this course?" : "Unenroll from this course?"}
+              <div id="ks-retake-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>
+                Retake this course?
               </div>
               {/* #258 — real button (was a bare clickable icon). */}
               <button
                 type="button"
                 aria-label="Close"
-                disabled={unenrolling}
-                onClick={() => setUnenrollingCourse(null)}
-                style={{ background: "none", border: "none", padding: 0, cursor: unenrolling ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
+                disabled={retaking}
+                onClick={() => setRetakingCourse(null)}
+                style={{ background: "none", border: "none", padding: 0, cursor: retaking ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
               >
                 <X size={18} color="var(--slate)" />
               </button>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
-              {unenrollingCourse.isComplete ? (
-                <>Your progress on <strong>{unenrollingCourse.title}</strong> will reset to start it again. Your existing quiz answers and notes stay in place unless you retake each quiz individually, and you'll lose access to the current certificate until you complete the course again.</>
-              ) : (
-                <>You'll be removed from <strong>{unenrollingCourse.title}</strong> and your progress will reset if you enrol again.</>
-              )}
+              Your progress on <strong>{retakingCourse.title}</strong> will reset to start it again. Your existing quiz answers and notes stay in place unless you retake each quiz individually, and you'll lose access to the current certificate until you complete the course again.
             </div>
-            {unenrollError && (
-              <div style={{ fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>{unenrollError}</div>
+            {retakeError && (
+              <div style={{ fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>{retakeError}</div>
             )}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button className="ks-btn ks-btn-ghost" disabled={unenrolling} onClick={() => setUnenrollingCourse(null)}>Cancel</button>
+              <button className="ks-btn ks-btn-ghost" disabled={retaking} onClick={() => setRetakingCourse(null)}>Cancel</button>
               <button
                 className="ks-btn"
-                style={{ background: "var(--coral)", color: "#fff", opacity: unenrolling ? 0.7 : 1 }}
-                disabled={unenrolling}
-                onClick={handleConfirmUnenroll}
+                style={{ background: "var(--coral)", color: "#fff", opacity: retaking ? 0.7 : 1 }}
+                disabled={retaking}
+                onClick={handleConfirmRetake}
               >
-                {unenrollingCourse.isComplete
-                  ? (unenrolling ? "Retaking…" : "Retake")
-                  : (unenrolling ? "Unenrolling…" : "Unenroll")}
+                {retaking ? "Retaking…" : "Retake"}
               </button>
             </div>
           </div>
