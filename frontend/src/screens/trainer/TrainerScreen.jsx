@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Pencil, Plus, Search, Trash2, X, BarChart3, BookOpen, Users, Milestone, UsersRound } from "lucide-react";
 
-import { CategoryDot } from "../../components/common/Primitives";
+import { CategoryDot, PageHeader } from "../../components/common/Primitives";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
 import { TeamTab } from "./TeamTab";
@@ -248,16 +248,21 @@ export function TrainerScreen({
     // maxWidth (also picks up margin:auto, which this page was missing —
     // same centering gap #204/#212 fixed on Dashboard/Learning).
     <div className="ks-page-enter ks-page-scaled" style={{ padding: "28px 32px", "--ks-page-base": "1080px" }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>Trainer studio</div>
-        <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>
-          {tab === "courses"
+      {/* #364 — was a hand-rolled 15px title ("Trainer studio") above this
+          subtitle, duplicating AppTopbar's own title for this route at a
+          size wildly inconsistent with every other page's 30px
+          PageHeader. Routed through the shared PageHeader (subtitle-only,
+          same as Catalogue's dynamic subheading) instead of hand-rolling
+          a second, differently-sized subtitle style. */}
+      <PageHeader
+        subtitle={
+          tab === "courses"
             ? "Add courses, edit catalogue details, and manage module videos."
             : tab === "paths"
               ? "Bundle existing courses into an ordered, guided sequence."
-              : "Create or join a provider to share course edit access with your team."}
-        </div>
-      </div>
+              : "Create or join a provider to share course edit access with your team."
+        }
+      />
 
       {/* #259 — trainer-home stats row, same "flex row of stat cards"
           convention as DashboardScreen's In progress/Completed/Certificates

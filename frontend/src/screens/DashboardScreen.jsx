@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { PlayCircle, CheckCircle2, Award, ChevronLeft, ChevronRight, Flame, Medal, Bookmark, Trophy, X, LogOut } from "lucide-react";
 
-import { KeystoneArch, PageHeader } from "../components/common/Primitives";
+import { KeystoneArch } from "../components/common/Primitives";
 import { getDisplayName, getFirstName } from "../lib/userDisplay";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 /* ---------- Screen: Dashboard ---------- */
@@ -115,13 +115,12 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
   // below that breakpoint this renders identically to before.
   return (
     <div className="ks-page-enter ks-page-wide" style={{ padding: "28px 32px" }}>
-      {/* #213 — Dashboard had no page-level title at all (its largest
-          text was this card's 15px greeting line), unlike Catalogue's
-          30px h1 — PageHeader closes that gap with the same shared scale.
-          No subtitle: the greeting card right below already carries
-          personalized context (name, goal, streak), so a second
-          "welcome" line here would just be repetitive. */}
-      <PageHeader title="My learning" />
+      {/* #364 — was <PageHeader title="My learning" />: AppTopbar already
+          shows that exact text as this route's h1, so this was a plain
+          duplicate rather than added context (unlike Catalogue's
+          subtitle, say). Dropped entirely rather than kept as a bare
+          wrapper — the greeting card right below already carries its
+          own personalized context (name, goal, streak). */}
       <div className="ks-card" style={{ padding: "20px 24px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>Good morning, {firstName}</div>

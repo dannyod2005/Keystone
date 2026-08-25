@@ -193,9 +193,14 @@ export function CatalogueScreen({
         {/* #213 — was an inline h1/p; now the shared PageHeader primitive
             (same 30px/font-display/600 title, same subtitle styling) so
             Dashboard/Discover can match this scale exactly instead of
-            each hand-rolling their own heading size. */}
+            each hand-rolling their own heading size.
+            #364 — title only kept when logged out: logged-in visitors
+            already see "Catalogue" in AppTopbar, so repeating it here is
+            pure duplication. Logged-out visitors get no topbar at all
+            (AppShell only renders it when loggedIn), so this is their
+            only page title — keep it for that case. */}
         <PageHeader
-          title="Course catalogue"
+          title={loggedIn ? undefined : "Course catalogue"}
           subtitle={
             loading
               ? "Loading courses…"

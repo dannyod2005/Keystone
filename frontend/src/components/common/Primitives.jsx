@@ -65,12 +65,21 @@ export function CategoryDot({ color }) {
 // to standardize on. `subtitle` is optional: Dashboard's greeting card
 // already carries its own personalized context right below, so it only
 // needs a bare title here.
+// #364 — `title` is now optional too: AppTopbar renders the same text
+// as a page-level h1 for every logged-in route, so most callers stopped
+// passing it and pass only `subtitle` (if they have one) instead. Guard
+// the <h1> on `title` being present rather than always rendering it —
+// an empty h1 would still take up a line of height even with no text,
+// which defeats the point of dropping the duplicate.
 export function PageHeader({ title, subtitle }) {
+  if (!title && !subtitle) return null;
   return (
     <div style={{ marginBottom: 22 }}>
-      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 30, margin: subtitle ? "0 0 6px" : 0 }}>
-        {title}
-      </h1>
+      {title && (
+        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 30, margin: subtitle ? "0 0 6px" : 0 }}>
+          {title}
+        </h1>
+      )}
       {subtitle && <p style={{ color: "var(--slate)", fontSize: 14, margin: 0 }}>{subtitle}</p>}
     </div>
   );

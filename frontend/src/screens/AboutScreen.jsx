@@ -35,7 +35,11 @@ export function AboutScreen({ loggedIn, onGo, onAuth }) {
           better with a tighter line length than the app's wider grid
           pages. */}
       <div className="ks-page-scaled" style={{ "--ks-page-base": "760px", padding: "36px 28px 60px" }}>
-        <PageHeader title="About us" />
+        {/* #364 — only shown logged out: AppTopbar already shows "About
+            us" as the page title for logged-in visitors, and AppShell
+            has no topbar at all when logged out, so this is the only
+            title logged-out visitors get. */}
+        {!loggedIn && <PageHeader title="About us" />}
         {SECTIONS.map((s) => (
           <div key={s.title} style={{ marginBottom: 26 }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{s.title}</div>
