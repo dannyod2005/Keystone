@@ -175,7 +175,11 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
 
           {notStarted.length > 0 && (
             <>
-              <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 12 }}>Not started</div>
+              {/* #rename-not-started-section-label — "Not started" read as
+                  flat/administrative next to the warmer greeting above;
+                  same section, same contents (enrolled, progress === 0),
+                  just a more inviting label. */}
+              <div style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--slate-light)", marginBottom: 12 }}>Start my learning</div>
               {notStarted.map((e) => {
                 const c = courses.find((x) => x.id === e.courseId);
                 if (!c) return null;
