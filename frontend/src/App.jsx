@@ -1046,6 +1046,30 @@ function KeystonePrototype() {
           : e,
       ),
     );
+
+    // #wire-course-rating-to-submissions — EnrolledCourseDto (the `course`
+    // embedded on the response above) deliberately excludes rating —
+    // it's a minimal per-learner snapshot, not the catalogue shape (see
+    // its comment). And `courses` itself is only ever fetched once, on
+    // initial load (the effect above is gated on dashboardRetryTick, not
+    // on anything rating-related), so without this the Catalogue card and
+    // CourseDetailModal would keep showing the pre-submission average
+    // until a full page reload. Re-fetch just this one course (public
+    // GET /courses/:id, already includes the freshly recalculated
+    // average) and patch it into `courses` rather than re-fetching the
+    // whole catalogue. Failure here shouldn't read as "rating submission
+    // failed" — the rating itself already saved above — so this is
+    // caught and logged on its own rather than left to bubble up to
+    // LearningScreen's handleSubmitRating catch block.
+    try {
+      const courseRes = await fetch(`${process.env.REACT_APP_API_URL}/courses/${updated.courseId}`);
+      if (courseRes.ok) {
+        const freshCourse = normalizeCourse(await courseRes.json());
+        setCourses((prev) => prev.map((c) => (c.id === freshCourse.id ? freshCourse : c)));
+      }
+    } catch (err) {
+      console.error("Failed to refresh course rating after submission:", err.message);
+    }
   }
 
   // #124 — fire-and-forget ping so the backend has a per-day "this module

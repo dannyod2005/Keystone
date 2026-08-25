@@ -455,7 +455,39 @@ export class EnrollmentsService {
     enrollment.reviewText = trimmedReview ? trimmedReview : null;
     const saved = await this.enrollmentsRepo.save(enrollment);
 
+    // #wire-course-rating-to-submissions — keep the Catalogue-facing
+    // average in sync with real submissions. Previously Course.rating was
+    // a static seed-time value that never moved regardless of what
+    // learners actually rated (see the AddRatingToEnrollments migration
+    // comment, which flagged this as a deliberate, explicit gap).
+    await this.recalculateCourseRating(enrollment.course.id);
+
     return this.toResponseDto(saved);
+  }
+
+  // #wire-course-rating-to-submissions — recomputed on every submitRating
+  // call rather than read live wherever courses are listed: ratings are
+  // submitted far less often than course lists are fetched, so this keeps
+  // Catalogue/Discover/CourseDetailModal reads cheap (no join/aggregate on
+  // every fetch) at the cost of one small extra query here. Only touches
+  // Course.rating once at least one real rating exists for the course —
+  // until then the seeded baseline is left alone rather than being wiped
+  // to null.
+  private async recalculateCourseRating(courseId: string): Promise<void> {
+    const result = await this.enrollmentsRepo
+      .createQueryBuilder('enrollment')
+      .leftJoin('enrollment.course', 'course')
+      .select('AVG(enrollment.rating)', 'average')
+      .where('course.id = :courseId', { courseId })
+      .andWhere('enrollment.rating IS NOT NULL')
+      .getRawOne<{ average: string | null }>();
+
+    const average = result?.average ?? null;
+    if (average === null) return;
+
+    await this.coursesRepo.update(courseId, {
+      rating: Math.round(Number(average) * 10) / 10,
+    });
   }
 
   // #228 — public, course-scoped reviews list for CourseDetailModal: every
