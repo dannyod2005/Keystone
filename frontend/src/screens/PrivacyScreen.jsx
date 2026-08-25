@@ -50,8 +50,15 @@ export function PrivacyScreen({ loggedIn, onGo, onAuth }) {
       {/* Narrower than most pages (760 base, same as the course/path
           editors) — this is a reading page, not a grid of cards, so a
           tighter line length is more legible than the app's wider
-          content pages. */}
-      <div className="ks-page-scaled" style={{ "--ks-page-base": "760px", padding: "36px 28px 60px" }}>
+          content pages.
+          Viewport-fit pass — trimmed top/bottom padding (was 36/60) and
+          the gap between sections (was 26, headings 6) so a laptop-height
+          screen has the best shot at this + the footer fitting under one
+          viewport without scrolling. Seven real sections of body copy
+          still won't always fit on shorter screens no matter how tight
+          the spacing gets — that's fine; the goal here was closing the
+          gap, not forcing it at the cost of cramming a legal page. */}
+      <div className="ks-page-scaled" style={{ "--ks-page-base": "760px", padding: "28px 28px 40px" }}>
         {/* #364 — title only kept logged out (AppTopbar already shows
             "Privacy & GDPR" for logged-in visitors, but there's no
             topbar at all when logged out); subtitle stays either way. */}
@@ -60,8 +67,8 @@ export function PrivacyScreen({ loggedIn, onGo, onAuth }) {
           subtitle="Last updated August 2026."
         />
         {SECTIONS.map((s) => (
-          <div key={s.title} style={{ marginBottom: 26 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{s.title}</div>
+          <div key={s.title} style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{s.title}</div>
             <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.6 }}>{s.body}</div>
           </div>
         ))}
