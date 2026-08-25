@@ -26,9 +26,24 @@ html, body {
 
 :root{
   --ink:#16233D; --ink-70:#16233Db3; --paper:#F7F5EF; --paper-2:#FFFFFF;
-  --gold:#C4922F; --gold-dark:#96701F; --gold-tint:#F3E7CE;
-  --slate:#5B6472; --slate-light:#8B93A0; --line:#E4E0D6;
-  --success:#3F7D58; --success-tint:#E4EFE8; --coral:#C1573D; --coral-tint:#F6E5DF;
+  /* #351 — was #96701F (~3.7:1 on --gold-tint — the "X-day streak" pill,
+     leaderboard rank, stat-card icons, and gold text links all sit on
+     that background — and only ~4.2:1 on --paper). #805F1A holds ~4.8:1
+     on --gold-tint, ~5.4:1 on --paper, ~5.9:1 on white — same margin as
+     the --slate-light/--coral fixes above, same hue ratio preserved. */
+  --gold:#C4922F; --gold-dark:#805F1A; --gold-tint:#F3E7CE;
+  /* #351 — was #8B93A0 (~2.8:1 on --paper), well under the 4.5:1 WCAG AA
+     minimum for body-sized text. #626B7A holds ~4.9:1 on --paper (and
+     ~5.4:1 on --paper-2/white) — comfortably past the threshold rather
+     than sitting right on the edge, while staying visibly lighter than
+     --slate so the two tokens don't collapse into the same shade. */
+  --slate:#5B6472; --slate-light:#626B7A; --line:#E4E0D6;
+  /* #351 — was #C1573D (~4.1:1 on --paper, ~4.5:1 on white, ~3.7:1 on
+     --coral-tint — the "Unenroll"/"Retake" ghost-button text and the
+     white-on-coral destructive-action buttons both failed AA). #A44A34
+     holds ~5.3:1 on --paper, ~5.8:1 on white, ~4.8:1 on --coral-tint —
+     margin on the toughest of the three pairings this token appears in. */
+  --success:#3F7D58; --success-tint:#E4EFE8; --coral:#A44A34; --coral-tint:#F6E5DF;
   --font-display:'Fraunces', serif; --font-body:'Inter', sans-serif; --font-mono:'IBM Plex Mono', monospace;
 }
 .ks-root{ font-family:var(--font-body); color:var(--ink); background:var(--paper); min-height:100vh; }
