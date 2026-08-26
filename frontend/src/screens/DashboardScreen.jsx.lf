@@ -201,13 +201,14 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                         {c.modules.length} module{c.modules.length === 1 ? "" : "s"} · not started yet
                       </div>
                     </div>
-                    {/* #restyle-dashboard-start-button — dark ink fill,
-                        white text (ks-btn-primary), chosen after
-                        comparing against gold-toned variants live on
-                        this dashboard. Shared with the Resume button
-                        below. */}
+                    {/* #restyle-dashboard-start-button — trying candidate
+                        C here (soft gold pill) and candidate D on the
+                        Resume button below, so both show live on the
+                        same dashboard for a direct comparison instead of
+                        a mockup. Whichever wins, both buttons should end
+                        up matching. */}
                     <button
-                      className="ks-btn ks-btn-primary"
+                      className="ks-btn ks-btn-gold-soft"
                       style={{ flexShrink: 0, padding: "14px 28px", fontSize: 15.5, fontWeight: 700, borderRadius: 10, gap: 8 }}
                       onClick={() => onStartLearning(c)}
                     >
@@ -243,7 +244,7 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                     </div>
                   </div>
                   <button
-                    className="ks-btn ks-btn-primary"
+                    className="ks-btn ks-btn-gold-ink"
                     style={{ flexShrink: 0, padding: "14px 28px", fontSize: 15.5, fontWeight: 700, borderRadius: 10, gap: 8 }}
                     onClick={() => onStartLearning(c)}
                   >
