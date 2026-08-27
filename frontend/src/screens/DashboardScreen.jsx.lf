@@ -138,36 +138,8 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
       <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr]" style={{ gap: 20 }}>
         <div>
           {loading ? (
-            // #367 — was a single short "Loading your learning…" card,
-            // nowhere near the height of the real stat-cards + list-rows
-            // content it's replaced by once `enrolled`/`courses` resolve —
-            // Lighthouse's CLS audit flagged exactly this column
-            // (div.grid.grid-cols-1.md:grid-cols-[2fr_1fr]) as the biggest
-            // shift on this page. Can't know a learner's real row counts
-            // ahead of time, but three stat-card placeholders + three list
-            // rows approximates a typical dashboard's footprint far closer
-            // than a single line of text did, so the real content swapping
-            // in doesn't move the page by nearly as much.
-            <div aria-hidden="true">
-              <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="ks-card" style={{ flex: 1, minWidth: 140, padding: 16 }}>
-                    <div style={{ width: 30, height: 30, borderRadius: 8, background: "var(--line)", marginBottom: 10 }} />
-                    <div style={{ width: 28, height: 22, borderRadius: 4, background: "var(--line)", marginBottom: 6 }} />
-                    <div style={{ width: 70, height: 12, borderRadius: 4, background: "var(--line)" }} />
-                  </div>
-                ))}
-              </div>
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="ks-card" style={{ padding: "12px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--line)", flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ width: "55%", height: 14.5, borderRadius: 4, background: "var(--line)", marginBottom: 8 }} />
-                    <div style={{ width: "35%", height: 12.5, borderRadius: 4, background: "var(--line)" }} />
-                  </div>
-                  <div style={{ width: 110, height: 44, borderRadius: 10, background: "var(--line)", flexShrink: 0 }} />
-                </div>
-              ))}
+            <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
+              Loading your learning…
             </div>
           ) : error ? (
             // #289 — courses/enrolled failing (or just timing out — see
@@ -229,13 +201,14 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                         {c.modules.length} module{c.modules.length === 1 ? "" : "s"} · not started yet
                       </div>
                     </div>
-                    {/* #restyle-dashboard-start-button — dark ink fill,
-                        white text (ks-btn-primary), chosen after
-                        comparing against gold-toned variants live on
-                        this dashboard. Shared with the Resume button
-                        below. */}
+                    {/* #restyle-dashboard-start-button — trying candidate
+                        C here (soft gold pill) and candidate D on the
+                        Resume button below, so both show live on the
+                        same dashboard for a direct comparison instead of
+                        a mockup. Whichever wins, both buttons should end
+                        up matching. */}
                     <button
-                      className="ks-btn ks-btn-primary"
+                      className="ks-btn ks-btn-gold-soft"
                       style={{ flexShrink: 0, padding: "14px 28px", fontSize: 15.5, fontWeight: 700, borderRadius: 10, gap: 8 }}
                       onClick={() => onStartLearning(c)}
                     >
@@ -271,7 +244,7 @@ export function DashboardScreen({ enrolled, badges = [], pathEnrollments = [], b
                     </div>
                   </div>
                   <button
-                    className="ks-btn ks-btn-primary"
+                    className="ks-btn ks-btn-gold-ink"
                     style={{ flexShrink: 0, padding: "14px 28px", fontSize: 15.5, fontWeight: 700, borderRadius: 10, gap: 8 }}
                     onClick={() => onStartLearning(c)}
                   >

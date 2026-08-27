@@ -8,6 +8,7 @@ import { useAuth } from "./context/AuthContext";
 
 import { AppSidebar } from "./components/layout/AppSidebar";
 import { AppTopbar } from "./components/layout/AppTopbar";
+import { Footer } from "./components/layout/Footer";
 
 import { CourseDetailModal } from "./components/modals/CourseDetailModal";
 import { LearningPathDetailModal } from "./components/modals/LearningPathDetailModal";
@@ -16,13 +17,25 @@ import { GoalOnboardingModal } from "./components/modals/GoalOnboardingModal";
 import { RoleOnboardingModal } from "./components/modals/RoleOnboardingModal";
 import { ResetPasswordModal } from "./components/modals/ResetPasswordModal";
 
+// #367 — HomeScreen and DashboardScreen are the two most-landed-on routes
+// (logged-out "/" and the post-login default), so they stay eagerly
+// bundled to avoid adding a chunk-fetch delay to the most common first
+// paint. Everything else below is route-level code-split via React.lazy:
+// Lighthouse's "reduce unused JavaScript" finding on the Dashboard route
+// specifically flagged LearningScreen and TrainerCourseEditor (nested in
+// TrainerScreen) as shipped-but-unused bytes on that page — this is what
+// stops that. .then(m => ({ default: m.X })) is needed because these are
+// named exports, not default exports, and React.lazy only accepts a
+// loader that resolves to a `default` — no changes to the target files.
 import { HomeScreen } from "./screens/HomeScreen";
-import { CatalogueScreen } from "./screens/CatalogueScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
-import { LeaderboardScreen } from "./screens/LeaderboardScreen";
-import { SettingsScreen } from "./screens/SettingsScreen";
-import { LearningScreen } from "./screens/LearningScreen";
-import { TrainerScreen } from "./screens/trainer/TrainerScreen";
+const PrivacyScreen = React.lazy(() => import("./screens/PrivacyScreen").then((m) => ({ default: m.PrivacyScreen })));
+const AboutScreen = React.lazy(() => import("./screens/AboutScreen").then((m) => ({ default: m.AboutScreen })));
+const CatalogueScreen = React.lazy(() => import("./screens/CatalogueScreen").then((m) => ({ default: m.CatalogueScreen })));
+const LeaderboardScreen = React.lazy(() => import("./screens/LeaderboardScreen").then((m) => ({ default: m.LeaderboardScreen })));
+const SettingsScreen = React.lazy(() => import("./screens/SettingsScreen").then((m) => ({ default: m.SettingsScreen })));
+const LearningScreen = React.lazy(() => import("./screens/LearningScreen").then((m) => ({ default: m.LearningScreen })));
+const TrainerScreen = React.lazy(() => import("./screens/trainer/TrainerScreen").then((m) => ({ default: m.TrainerScreen })));
 
 /* ---------------------------------------------------------------
    KEYSTONE LEARNING — clickable prototype (now routed)
@@ -35,6 +48,12 @@ function screenKeyFromPath(pathname) {
   if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/trainer")) return "trainer";
+  // #345/#346 — neither is a sidebar nav item (both are reached via the
+  // footer, not primary nav), just need their own key so the topbar
+  // title reads correctly instead of falling through to the
+  // "home"/"Discover" default.
+  if (pathname.startsWith("/privacy")) return "privacy";
+  if (pathname.startsWith("/about")) return "about";
   return "home";
 }
 
@@ -117,7 +136,16 @@ function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notif
           onCloseMobile={() => setMobileNavOpen(false)}
         />
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* #347 — this column wasn't a flex column, so Footer (added in
+          #337) just sat right after {children} in normal document flow
+          instead of pinning to the bottom on any page shorter than the
+          viewport (Leaderboard, Settings, etc.) — the outer row's
+          minHeight:100vh stretched this column to full height, but
+          nothing inside it used that space. Making it a column with the
+          {children} wrapper set to flex:1 lets that wrapper grow to fill
+          the leftover space, pushing Footer down to the actual bottom
+          regardless of how much content is above it. */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {showSidebar && (
           <AppTopbar
             title={title}
@@ -127,7 +155,21 @@ function AppShell({ loggedIn, role, onLogout, title, children, user, goal, notif
             onOpenNotification={onOpenNotification}
           />
         )}
-        {children}
+        {/* #366 — was a plain div: the routed page content had no landmark
+            a screen reader user could jump straight to (Lighthouse's
+            "Document does not have a main landmark" finding). AppSidebar's
+            nav and AppTopbar above are their own landmarks (nav/header
+            equivalents), so <main> here marks the one remaining region —
+            the actual page content — without wrapping those too. */}
+        <main style={{ flex: 1, minWidth: 0 }}>
+          {children}
+        </main>
+        {/* #337 — site-wide footer, rendered once here so every routed
+            page picks it up automatically instead of each screen adding
+            its own. #345 — onGo reuses the same navigate-by-key function
+            passed to AppSidebar above, now that "Privacy & GDPR" has a
+            real page to link to. */}
+        <Footer onGo={go} />
       </div>
     </div>
   );
@@ -150,7 +192,7 @@ function RequireTrainer({ role, children }) {
 }
 
 /* ---------- Learning screen wrapper: resolves :courseId -> course object ---------- */
-function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId }) {
+function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onUnenrol }) {
   const { courseId } = useParams();
   const navigate = useNavigate();
   // #229 — a notification click-through lands here as
@@ -199,6 +241,7 @@ function LearningRoute({ courses, enrolled, coursesLoading, enrolledLoading, onS
       onEditPost={onEditPost}
       currentUserId={currentUserId}
       onBack={() => navigate("/dashboard")}
+      onUnenrol={onUnenrol}
       initialModuleId={searchParams.get("module")}
       initialTab={searchParams.get("tab")}
     />
@@ -594,6 +637,18 @@ function KeystonePrototype() {
   // — see the trigger effect below for why that matters), and resets to
   // false on logout so a stale "loaded" flag can't survive into a
   // different account's session.
+  //
+  // #fix-stale-token-onboarding-modal — used to be `res.ok ? res.json() :
+  // null`, which folded EVERY non-ok response into the same "empty
+  // profile" path as a real 404, including a 401 from a stale/expired
+  // token (e.g. another tab's global sign-out invalidating this one — see
+  // handleLogout's own fix above). That set profileRole to null and
+  // goalLoaded to true on a plain auth failure, which is exactly what the
+  // role/goal-onboarding triggers below are watching for — an
+  // unauthorized account with a real role looked identical to a brand
+  // new one. Only a genuine 404 gets treated as "no profile row yet" now;
+  // anything else throws into the existing catch, which already leaves
+  // goalLoaded false rather than misreporting an answer.
   useEffect(() => {
     if (!loggedIn || !session) {
       setLearnerGoal(null);
@@ -606,7 +661,11 @@ function KeystonePrototype() {
     fetch(`${process.env.REACT_APP_API_URL}/profiles/me`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res.ok) return res.json();
+        if (res.status === 404) return null;
+        throw new Error(`Failed to load profile (${res.status})`);
+      })
       .then((profile) => {
         setLearnerGoal(profile?.goal ?? null);
         setProfileRole(profile?.role ?? null);
@@ -997,6 +1056,30 @@ function KeystonePrototype() {
           : e,
       ),
     );
+
+    // #wire-course-rating-to-submissions — EnrolledCourseDto (the `course`
+    // embedded on the response above) deliberately excludes rating —
+    // it's a minimal per-learner snapshot, not the catalogue shape (see
+    // its comment). And `courses` itself is only ever fetched once, on
+    // initial load (the effect above is gated on dashboardRetryTick, not
+    // on anything rating-related), so without this the Catalogue card and
+    // CourseDetailModal would keep showing the pre-submission average
+    // until a full page reload. Re-fetch just this one course (public
+    // GET /courses/:id, already includes the freshly recalculated
+    // average) and patch it into `courses` rather than re-fetching the
+    // whole catalogue. Failure here shouldn't read as "rating submission
+    // failed" — the rating itself already saved above — so this is
+    // caught and logged on its own rather than left to bubble up to
+    // LearningScreen's handleSubmitRating catch block.
+    try {
+      const courseRes = await fetch(`${process.env.REACT_APP_API_URL}/courses/${updated.courseId}`);
+      if (courseRes.ok) {
+        const freshCourse = normalizeCourse(await courseRes.json());
+        setCourses((prev) => prev.map((c) => (c.id === freshCourse.id ? freshCourse : c)));
+      }
+    } catch (err) {
+      console.error("Failed to refresh course rating after submission:", err.message);
+    }
   }
 
   // #124 — fire-and-forget ping so the backend has a per-day "this module
@@ -1608,7 +1691,13 @@ function KeystonePrototype() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    // #fix-stale-token-onboarding-modal — signOut()'s default scope is
+    // "global", which revokes this account's session everywhere it's
+    // logged in (any other tab/device), not just this one — logging out
+    // here to switch accounts was silently kicking out every other
+    // session for the same account too. "local" only clears this tab's
+    // session, matching what "Log out" actually reads as to the user.
+    await supabase.auth.signOut({ scope: "local" });
     navigate("/");
   }
 
@@ -1685,6 +1774,8 @@ function KeystonePrototype() {
     screen === "leaderboard" ? "Leaderboard" :
     screen === "settings" ? "Account settings" :
     screen === "trainer" ? "Trainer studio" :
+    screen === "privacy" ? "Privacy & GDPR" :
+    screen === "about" ? "About us" :
     screen === "home" ? "Discover" : "";
 
   if (authLoading) {
@@ -1697,6 +1788,17 @@ function KeystonePrototype() {
 
   return (
     <div className="ks-root">
+      {/* #367 — single Suspense boundary for every lazy-loaded route above;
+          a route-level fallback (rather than one per-screen) since only one
+          route is ever mounted at a time here. Kept visually consistent
+          with the authLoading state above it. */}
+      <React.Suspense
+        fallback={
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
+            <div style={{ fontSize: 13, color: "var(--slate-light)" }}>Loading…</div>
+          </div>
+        }
+      >
       <Routes>
         <Route
           path="/"
@@ -1724,10 +1826,22 @@ function KeystonePrototype() {
                   enrolledPathIds={pathEnrollments.map((pe) => pe.pathId)}
                   leaderboardOptIn={leaderboardOptIn}
                   onFetchLeaderboard={fetchLeaderboard}
+                  loading={coursesLoading}
                 />
               </AppShell>
             ) : (
-              <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
+              // #366 — the only route that doesn't render through AppShell
+              // (logged-out "/" renders HomeScreen standalone, right above
+              // in the loggedIn branch it's inside AppShell's own <main>),
+              // so it was the one page still missing the landmark AppShell
+              // now provides everywhere else. Wrapped here rather than
+              // inside HomeScreen itself, since HomeScreen is also used
+              // for the logged-in "/" route nested inside AppShell's
+              // <main> — a <main> in there too would nest two on that
+              // path, which is invalid.
+              <main>
+                <HomeScreen onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} courses={courses} loggedIn={loggedIn} user={user} enrolled={enrolled} />
+              </main>
             )
           }
         />
@@ -1756,6 +1870,29 @@ function KeystonePrototype() {
           }
         />
 
+        {/* #345 — publicly accessible like /catalogue above (no
+            RequireAuth): a privacy policy needs to be readable before
+            someone creates an account, and the footer link that points
+            here (#337) shows on every page regardless of login state. */}
+        <Route
+          path="/privacy"
+          element={
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
+              <PrivacyScreen loggedIn={loggedIn} onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} />
+            </AppShell>
+          }
+        />
+
+        {/* #346 — same public-access shape as /privacy above. */}
+        <Route
+          path="/about"
+          element={
+            <AppShell loggedIn={loggedIn} role={role} onLogout={handleLogout} title={shellTitle} user={user} goal={learnerGoal} notifications={notifications} unreadCount={unreadCount} onOpenNotification={handleOpenNotification}>
+              <AboutScreen loggedIn={loggedIn} onGo={(key) => navigate(key === "home" ? "/" : `/${key}`)} onAuth={openAuth} />
+            </AppShell>
+          }
+        />
+
         <Route
           path="/dashboard"
           element={
@@ -1768,7 +1905,6 @@ function KeystonePrototype() {
                   onStartLearning={handleStartLearning}
                   courses={coursesForLearners}
                   onViewCertificate={viewCertificate}
-                  onUnenrol={unenrolCourse}
                   onRetake={retakeCourse}
                   user={user}
                   goal={learnerGoal}
@@ -1849,6 +1985,7 @@ function KeystonePrototype() {
                   onCreatePost={createPost}
                   onEditPost={editPost}
                   currentUserId={user?.id}
+                  onUnenrol={unenrolCourse}
                 />
               </AppShell>
             </RequireAuth>
@@ -1890,6 +2027,7 @@ function KeystonePrototype() {
         {/* Fallback: unknown paths go home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </React.Suspense>
 
       <CourseDetailModal
         course={selectedCourse}
@@ -1908,7 +2046,17 @@ function KeystonePrototype() {
         onGoToDashboard={() => { setSelectedPath(null); navigate("/dashboard"); }}
         isEnrolled={selectedPath ? pathEnrollments.some((pe) => pe.pathId === selectedPath.id) : false}
         enrolling={enrollingPath}
-        onOpenCourse={(course) => { setSelectedPath(null); setSelectedCourse(course); }}
+        onOpenCourse={(course) => {
+          setSelectedPath(null);
+          // #360-fix — path-embedded course rows only carry the lightweight
+          // relations learning-paths.service.ts loads (no modules/credits),
+          // but CourseDetailModal reads both unconditionally and crashes on
+          // undefined. Swap in the full catalogue copy when we have it;
+          // fall back to the lightweight object for the rare case where the
+          // course has since left the public catalogue.
+          const fullCourse = courses.find((c) => c.id === course.id) || course;
+          setSelectedCourse(fullCourse);
+        }}
       />
 
       <AuthModal

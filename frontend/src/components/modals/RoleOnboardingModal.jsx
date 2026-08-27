@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { GraduationCap, Presentation } from "lucide-react";
 
+import { useFocusTrap } from "../../hooks/useFocusTrap";
+
 const OPTIONS = [
   { value: "learner", label: "Learner", blurb: "Take courses and track your own progress.", icon: GraduationCap },
   { value: "trainer", label: "Trainer", blurb: "Create courses and manage a team's access.", icon: Presentation },
@@ -39,6 +41,11 @@ export function RoleOnboardingModal({ open, onSelect }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // #360 — active tied to `visible` (what actually controls whether
+  // this dialog's DOM node is mounted), same reasoning as
+  // CourseDetailModal's identical wiring.
+  const dialogRef = useFocusTrap(visible);
+
   if (!visible) return null;
 
   async function handleSelect(value) {
@@ -56,23 +63,35 @@ export function RoleOnboardingModal({ open, onSelect }) {
 
   return (
     <div className={`ks-modal-backdrop ${closing ? "ks-modal-closing" : ""}`} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}>
-      <div className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`} style={{ width: "100%", maxWidth: 440, padding: "28px 28px 24px" }}>
-        <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20, marginBottom: 6 }}>
+      <div
+        ref={dialogRef}
+        className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`}
+        style={{ width: "100%", maxWidth: 440, padding: "28px 28px 24px" }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ks-role-modal-title"
+        tabIndex={-1}
+      >
+        <div id="ks-role-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20, marginBottom: 6 }}>
           How will you use Keystone?
         </div>
         <div style={{ fontSize: 13.5, color: "var(--slate)", marginBottom: 20 }}>
           One quick choice - this decides what you see next.
         </div>
 
+        {/* #360 — was <div onClick>: not focusable. */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {OPTIONS.map((opt) => {
             const Icon = opt.icon;
             return (
-              <div
+              <button
                 key={opt.value}
+                type="button"
+                disabled={submitting}
                 onClick={() => handleSelect(opt.value)}
                 style={{
                   display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 10,
+                  width: "100%", textAlign: "left", font: "inherit",
                   border: "1px solid var(--line)", background: "var(--paper)",
                   cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.6 : 1,
                 }}
@@ -84,7 +103,7 @@ export function RoleOnboardingModal({ open, onSelect }) {
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{opt.label}</div>
                   <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>{opt.blurb}</div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

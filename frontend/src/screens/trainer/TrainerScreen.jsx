@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Pencil, Plus, Search, Trash2, X, BarChart3, BookOpen, Users, Milestone, UsersRound } from "lucide-react";
 
-import { CategoryDot } from "../../components/common/Primitives";
+import { CategoryDot, PageHeader } from "../../components/common/Primitives";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { TrainerCourseEditor } from "./TrainerCourseEditor";
 import { TeamTab } from "./TeamTab";
 import { LearningPathEditor } from "./LearningPathEditor";
@@ -32,6 +33,9 @@ export function TrainerScreen({
   const [deletingCourse, setDeletingCourse] = useState(null); // course pending delete confirmation, or null
   const [deleteError, setDeleteError] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  // #360 — simple conditional-mount confirm modal, no deferred-unmount
+  // state, so active ties directly to the same truthiness as the `&&`.
+  const deleteCourseDialogRef = useFocusTrap(!!deletingCourse);
   // #227 — same whole-screen-swap convention as editingId/editingPathId
   // above, but view-only (no onSave/onCancel-into-list-refresh dance
   // needed) — just which course's analytics is currently open, or null.
@@ -45,6 +49,8 @@ export function TrainerScreen({
   const [deletingPath, setDeletingPath] = useState(null);
   const [deletePathError, setDeletePathError] = useState(null);
   const [deletingPathBusy, setDeletingPathBusy] = useState(false);
+  // #360 — same reasoning as deleteCourseDialogRef above.
+  const deletePathDialogRef = useFocusTrap(!!deletingPath);
   // #139 — "Courses" (existing list/editor flow, untouched) vs "Team"
   // (provider create/join/manage). Deliberately a separate tab rather than
   // anything on the course form itself — provider scoping stays an opt-in
@@ -238,17 +244,25 @@ export function TrainerScreen({
   }
 
   return (
-    <div className="ks-page-enter" style={{ padding: "28px 32px", maxWidth: 1080 }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>Trainer studio</div>
-        <div style={{ fontSize: 13, color: "var(--slate)", marginTop: 2 }}>
-          {tab === "courses"
+    // #336 — shared .ks-page-scaled primitive instead of a hardcoded
+    // maxWidth (also picks up margin:auto, which this page was missing —
+    // same centering gap #204/#212 fixed on Dashboard/Learning).
+    <div className="ks-page-enter ks-page-scaled" style={{ padding: "28px 32px", "--ks-page-base": "1080px" }}>
+      {/* #364 — was a hand-rolled 15px title ("Trainer studio") above this
+          subtitle, duplicating AppTopbar's own title for this route at a
+          size wildly inconsistent with every other page's 30px
+          PageHeader. Routed through the shared PageHeader (subtitle-only,
+          same as Catalogue's dynamic subheading) instead of hand-rolling
+          a second, differently-sized subtitle style. */}
+      <PageHeader
+        subtitle={
+          tab === "courses"
             ? "Add courses, edit catalogue details, and manage module videos."
             : tab === "paths"
               ? "Bundle existing courses into an ordered, guided sequence."
-              : "Create or join a provider to share course edit access with your team."}
-        </div>
-      </div>
+              : "Create or join a provider to share course edit access with your team."
+        }
+      />
 
       {/* #259 — trainer-home stats row, same "flex row of stat cards"
           convention as DashboardScreen's In progress/Completed/Certificates
@@ -274,10 +288,41 @@ export function TrainerScreen({
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 20 }}>
-        <div className={`ks-tab ${tab === "courses" ? "active" : ""}`} onClick={() => setTab("courses")}>Courses</div>
-        <div className={`ks-tab ${tab === "paths" ? "active" : ""}`} onClick={() => setTab("paths")}>Paths</div>
-        <div className={`ks-tab ${tab === "team" ? "active" : ""}`} onClick={() => setTab("team")}>Team</div>
+      {/* #360 — was three <div onClick>: not focusable, no role/selected
+          state, so a keyboard-only user couldn't switch tabs at all. Real
+          buttons in a role="tablist", each a role="tab" with aria-selected
+          reflecting `tab` — reachable by Tab, activated with Enter/Space. */}
+      <div role="tablist" style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 20 }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "courses"}
+          className={`ks-tab ${tab === "courses" ? "active" : ""}`}
+          onClick={() => setTab("courses")}
+          style={{ background: "none", border: "none", font: "inherit" }}
+        >
+          Courses
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "paths"}
+          className={`ks-tab ${tab === "paths" ? "active" : ""}`}
+          onClick={() => setTab("paths")}
+          style={{ background: "none", border: "none", font: "inherit" }}
+        >
+          Paths
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "team"}
+          className={`ks-tab ${tab === "team" ? "active" : ""}`}
+          onClick={() => setTab("team")}
+          style={{ background: "none", border: "none", font: "inherit" }}
+        >
+          Team
+        </button>
       </div>
 
       {/* #105 — key={tab} remounts this wrapper on tab switch, replaying
@@ -297,19 +342,24 @@ export function TrainerScreen({
                 onChange={(e) => setCourseSearch(e.target.value)}
               />
             </div>
+            {/* #360 — was <span onClick>: not focusable/keyboard-operable.
+                Real button + aria-pressed so a keyboard user can Tab to and
+                switch the ownership filter. */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {["All", "Mine", "View only"].map((o) => (
-                <span
+                <button
                   key={o}
+                  type="button"
                   onClick={() => setOwnerFilter(o)}
+                  aria-pressed={ownerFilter === o}
                   style={{
-                    fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
+                    font: "inherit", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
                     background: ownerFilter === o ? "var(--ink)" : "var(--paper-2)", color: ownerFilter === o ? "var(--paper)" : "var(--slate)",
                     border: "1px solid var(--line)",
                   }}
                 >
                   {o}
-                </span>
+                </button>
               ))}
             </div>
             <div style={{ flex: 1 }} />
@@ -425,9 +475,18 @@ export function TrainerScreen({
           className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div
+            ref={deleteCourseDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            className="ks-card ks-modal-card"
+            style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ks-delete-course-modal-title"
+            tabIndex={-1}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete course?</div>
+              <div id="ks-delete-course-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete course?</div>
               {/* #258 — real button (was a bare clickable icon). */}
               <button
                 type="button"
@@ -467,9 +526,18 @@ export function TrainerScreen({
           className="ks-modal-backdrop"
           style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="ks-card ks-modal-card" style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}>
+          <div
+            ref={deletePathDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            className="ks-card ks-modal-card"
+            style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ks-delete-path-modal-title"
+            tabIndex={-1}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete learning path?</div>
+              <div id="ks-delete-path-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>Delete learning path?</div>
               {/* #258 — real button (was a bare clickable icon). */}
               <button
                 type="button"

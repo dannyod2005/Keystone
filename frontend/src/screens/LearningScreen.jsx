@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star, AlertTriangle } from "lucide-react";
+import { createPortal } from "react-dom";
+import { PlayCircle, CheckCircle2, XCircle, ChevronLeft, Star, AlertTriangle, X } from "lucide-react";
+
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 // #240/#254 — a module's quiz score has to clear this to count as
 // "passed." Purely a comparison bar for display/nudging, never a gate on
@@ -26,10 +29,23 @@ export const PASS_THRESHOLD_PCT = 70;
 // triggers a save, long enough not to fire a request on every keystroke.
 const NOTE_AUTOSAVE_DEBOUNCE_MS = 1200;
 
-export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack, initialModuleId = null, initialTab = null }) {
+export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRating, onLogModuleView, onFetchQuiz, onSubmitQuiz, onFetchQuizResults, onFetchNote, onSaveNote, onFetchPosts, onCreatePost, onEditPost, currentUserId, onBack, onUnenrol, initialModuleId = null, initialTab = null }) {
   // #229 — a notification click-through wants a specific tab (always
   // "forum" today) rather than the usual video-first default.
   const [tab, setTab] = useState(initialTab || "video");
+
+  // #365 — Unenroll used to live on the Dashboard's course cards (first
+  // as an icon next to Start/Resume, then behind an Edit-mode toggle);
+  // both fought the gold Start/Resume button for attention. Moved here
+  // instead — opening a course is the natural place to leave it, same as
+  // Udemy/Coursera keep "unenroll"/"leave course" inside the course
+  // itself rather than on the list card. Same confirm-modal shape
+  // DashboardScreen's Retake dialog uses (pending flag + error + busy
+  // state), just simpler since there's no isComplete branch here.
+  const [confirmingUnenroll, setConfirmingUnenroll] = useState(false);
+  const [unenrollError, setUnenrollError] = useState(null);
+  const [unenrolling, setUnenrolling] = useState(false);
+  const unenrollDialogRef = useFocusTrap(confirmingUnenroll);
 
   const modules = course?.modules ?? [];
 
@@ -372,6 +388,25 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
     }
   }
 
+  // #365 — once unenrolled, this course entry no longer exists for the
+  // learner (same DELETE-then-refetch shape as DashboardScreen's old
+  // unenrolCourse call), so there's nothing left here to show — navigate
+  // straight back to My learning on success rather than leaving them on
+  // a now-stale course page.
+  async function handleConfirmUnenroll() {
+    if (!enrollment || !onUnenrol) return;
+
+    setUnenrolling(true);
+    setUnenrollError(null);
+    try {
+      await onUnenrol(enrollment.id);
+      onBack();
+    } catch (err) {
+      setUnenrollError(err.message || "Failed to unenrol.");
+      setUnenrolling(false);
+    }
+  }
+
   function selectAnswer(questionId, optionId) {
     if (quizResult) return; // locked once submitted
     setSelectedAnswers((prev) => ({ ...prev, [questionId]: optionId }));
@@ -633,12 +668,37 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
   // #212 — same fix as Dashboard (#204): maxWidth alone doesn't center a
   // block-level element, it just caps its width, so on a wide viewport
   // this hugged the left edge instead of centering like Catalogue/
-  // Discover (which both pair maxWidth with margin: "0 auto"). maxWidth
-  // stays 1080, unchanged.
+  // Discover (which both pair maxWidth with margin: "0 auto").
+  //
+  // #334 — replaced the fixed 1080 cap with the shared .ks-page-wide
+  // class (introduced in #332 for My Learning) so this page carries the
+  // same large-breakpoint width policy instead of its own one-off value.
   return (
-    <div className="ks-page-enter" style={{ padding: "22px 32px 40px", maxWidth: 1080, margin: "0 auto" }}>
-      <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", cursor: "pointer", marginBottom: 14 }}>
-        <ChevronLeft size={15} /> Back to My learning
+    <div className="ks-page-enter ks-page-wide" style={{ padding: "22px 32px 40px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        {/* #360 — was <div onClick>: not a real link/button, unreachable by
+            keyboard. */}
+        <button
+          type="button"
+          onClick={onBack}
+          style={{ font: "inherit", display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+        >
+          <ChevronLeft size={15} /> Back to My learning
+        </button>
+
+        {/* #365 — moved here from the Dashboard course card (see that
+            screen's #365 comments for why): plain text, not an icon,
+            since it's reached rarely enough that it doesn't need to be
+            compact, and text is self-explanatory without an aria-label. */}
+        {enrollment && onUnenrol && (
+          <button
+            type="button"
+            onClick={() => setConfirmingUnenroll(true)}
+            style={{ font: "inherit", fontSize: 13, fontWeight: 600, color: "var(--coral)", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+          >
+            Unenroll
+          </button>
+        )}
       </div>
 
       {!hasModules ? (
@@ -713,7 +773,11 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
       // #104 — single column on mobile (video/tabs above the right rail),
       // 1fr/300px from md up; column layout is the only breakpoint-dependent
       // property here.
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_300px]" style={{ gap: 22 }}>
+      //
+      // #335 — widen the right rail further at the same >=1440px point
+      // where #334 widens the page itself, so the freed-up space actually
+      // goes to the progress/grades cards instead of just the left column.
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_300px] min-[1440px]:grid-cols-[1fr_360px]" style={{ gap: 22 }}>
         <div>
           <div className="ks-card" style={{ padding: "12px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Module {activeModule + 1} of {modules.length}</div>
@@ -740,9 +804,22 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
             {currentModule.videoUrl ? currentModule.title : `12:40 · ${currentModule.title}`}
           </div>
 
-          <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 16 }}>
+          {/* #360 — was <div onClick>: not focusable, no role/selected
+              state. Real button, role="tab" + aria-selected inside a
+              role="tablist", same fix as Trainer Studio's tab switcher. */}
+          <div role="tablist" style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)", marginBottom: 16 }}>
             {["video", "notes", "quiz", "forum"].map((t) => (
-              <div key={t} className={`ks-tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)} style={{ textTransform: "capitalize" }}>{t}</div>
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={tab === t}
+                className={`ks-tab ${tab === t ? "active" : ""}`}
+                onClick={() => setTab(t)}
+                style={{ background: "none", border: "none", font: "inherit", textTransform: "capitalize" }}
+              >
+                {t}
+              </button>
             ))}
           </div>
 
@@ -762,7 +839,9 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                 onBlur={handleNoteBlur}
                 disabled={noteLoading}
                 placeholder="Jot down notes for this module — only visible to you."
-                style={{ width: "100%", minHeight: 120, border: "none", outline: "none", fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical", background: "transparent" }}
+                // #350 — outline:none removed so keyboard focus is
+                // visible (global.css's input:focus-visible rule).
+                style={{ width: "100%", minHeight: 120, border: "none", fontFamily: "var(--font-body)", fontSize: 13.5, resize: "vertical", background: "transparent" }}
               />
               <div style={{ fontSize: 11.5, color: "var(--slate-light)", marginTop: 8 }}>
                 {noteLoading
@@ -830,11 +909,14 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
                               onChange={(e) => selectAnswer(q.id, e.target.value)}
                               disabled={!!quizResult}
                               placeholder="Type your answer…"
+                              // #350 — outline:none removed so keyboard
+                              // focus is visible (global.css's
+                              // input:focus-visible rule).
                               style={{
                                 fontFamily: "var(--font-body)", fontSize: 13, width: "100%", maxWidth: 360,
                                 border: `1px solid ${resultForQuestion ? (resultForQuestion.isCorrect ? "var(--success)" : "var(--coral)") : "var(--line)"}`,
                                 background: resultForQuestion ? (resultForQuestion.isCorrect ? "var(--success-tint)" : "var(--coral-tint)") : "var(--paper-2)",
-                                borderRadius: 8, padding: "8px 10px", outline: "none",
+                                borderRadius: 8, padding: "8px 10px",
                               }}
                             />
                             {resultForQuestion && (
@@ -962,13 +1044,16 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
         </div>
 
         <div>
-          <div className="ks-card" style={{ padding: 16, marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+          {/* #335 — larger card padding + a bigger, bolder progress
+              percentage give this rail more visual weight now that #334
+              frees up extra width for it. */}
+          <div className="ks-card" style={{ padding: 20, marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Course progress</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)" }}>{Math.round((Math.min(completedCount, modules.length) / modules.length) * 100)}%</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, lineHeight: 1, color: "var(--gold-dark)" }}>{Math.round((Math.min(completedCount, modules.length) / modules.length) * 100)}%</span>
             </div>
-            <div style={{ height: 8, background: "var(--line)", borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(Math.min(completedCount, modules.length) / modules.length) * 100}%`, background: "var(--gold)", borderRadius: 4, transition: "width .2s ease" }} />
+            <div style={{ height: 10, background: "var(--line)", borderRadius: 5, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${(Math.min(completedCount, modules.length) / modules.length) * 100}%`, background: "var(--gold)", borderRadius: 5, transition: "width .2s ease" }} />
             </div>
             <div style={{ fontSize: 12.5, color: "var(--slate-light)", marginTop: 8, marginBottom: 14 }}>{Math.min(completedCount, modules.length)} of {modules.length} modules complete</div>
             <hr className="ks-hairline" style={{ margin: "0 0 10px" }} />
@@ -984,23 +1069,39 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
               ))}
             </div>
           </div>
-          <div className="ks-card" style={{ padding: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+          {/* #335 — same larger-card treatment as Course progress above,
+              plus a hero-sized grade number and an explicit Pass/Below
+              pass-bar badge so this is the standout stat in the rail,
+              matching the client's callout that this section needed more
+              presence. */}
+          <div className="ks-card" style={{ padding: 20 }}>
+            <div style={{ marginBottom: courseGradePct !== null ? 16 : 10 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Grades</span>
               {/* #240 — hidden until there's at least one graded module,
                   same "hidden until non-empty" convention as the rest of
                   this app's optional cards — a fresh course with no
                   quizzes taken yet shouldn't show a misleading 0%. */}
               {courseGradePct !== null && (
-                <span
-                  style={{
-                    fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600,
-                    color: courseGradePct < PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--gold-dark)",
-                  }}
-                  title="Course grade — average quiz score across every quizzed module you've taken"
-                >
-                  {courseGradePct}%
-                </span>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 8 }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)", fontSize: 34, fontWeight: 700, lineHeight: 1,
+                      color: courseGradePct < PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--gold-dark)",
+                    }}
+                    title="Course grade — average quiz score across every quizzed module you've taken"
+                  >
+                    {courseGradePct}%
+                  </span>
+                  <span
+                    className="ks-badge"
+                    style={{
+                      background: courseGradePct < PASS_THRESHOLD_PCT ? "var(--coral-tint)" : "var(--success-tint)",
+                      color: courseGradePct < PASS_THRESHOLD_PCT ? "var(--coral)" : "var(--success)",
+                    }}
+                  >
+                    {courseGradePct < PASS_THRESHOLD_PCT ? "Below pass bar" : "Passing"}
+                  </span>
+                </div>
               )}
             </div>
             {quizResultsLoading ? (
@@ -1034,6 +1135,65 @@ export function LearningScreen({ course, enrollment, onSaveProgress, onSubmitRat
           </div>
         </div>
       </div>
+      )}
+
+      {/* #365 — same confirm-modal shape as DashboardScreen's Retake
+          dialog (backdrop click/X/Cancel all close it, guarded by
+          !unenrolling; portaled to document.body for the same reason
+          that screen's modal is — this root div carries ks-page-enter's
+          animation-fill-mode transform, which would otherwise become the
+          fixed backdrop's containing block and size it to the page
+          instead of the viewport). */}
+      {confirmingUnenroll && createPortal(
+        <div
+          onClick={() => !unenrolling && setConfirmingUnenroll(false)}
+          className="ks-modal-backdrop"
+          style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}
+        >
+          <div
+            ref={unenrollDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            className="ks-card ks-modal-card"
+            style={{ width: "100%", maxWidth: 400, padding: "24px 26px" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ks-unenroll-modal-title"
+            tabIndex={-1}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div id="ks-unenroll-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>
+                Unenroll from this course?
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={unenrolling}
+                onClick={() => setConfirmingUnenroll(false)}
+                style={{ background: "none", border: "none", padding: 0, cursor: unenrolling ? "default" : "pointer", display: "inline-flex", lineHeight: 0 }}
+              >
+                <X size={18} color="var(--slate)" />
+              </button>
+            </div>
+            <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginBottom: 20 }}>
+              You'll be removed from <strong>{course.title}</strong> and your progress will reset if you enrol again.
+            </div>
+            {unenrollError && (
+              <div style={{ fontSize: 12.5, color: "var(--coral)", marginBottom: 14 }}>{unenrollError}</div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button className="ks-btn ks-btn-ghost" disabled={unenrolling} onClick={() => setConfirmingUnenroll(false)}>Cancel</button>
+              <button
+                className="ks-btn"
+                style={{ background: "var(--coral)", color: "#fff", opacity: unenrolling ? 0.7 : 1 }}
+                disabled={unenrolling}
+                onClick={handleConfirmUnenroll}
+              >
+                {unenrolling ? "Unenrolling…" : "Unenroll"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

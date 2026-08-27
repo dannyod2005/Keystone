@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { X, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { KeystoneMark } from "../common/Primitives";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 
 // #105 — same "always mounted, sometimes null" shape as CourseDetailModal:
 // this component doesn't unmount, it just returns null once `mode` clears.
@@ -46,6 +47,11 @@ export function AuthModal({ mode, onClose, onSubmit }) {
     // component for why `visible` must stay out of this array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  // #360 — active tied to `visible` (what actually controls whether
+  // this dialog's DOM node is mounted), same reasoning as
+  // CourseDetailModal's identical wiring.
+  const dialogRef = useFocusTrap(visible);
 
   if (!visible) return null;
 
@@ -161,7 +167,16 @@ export function AuthModal({ mode, onClose, onSubmit }) {
 
   return (
     <div onClick={onClose} className={`ks-modal-backdrop ${closing ? "ks-modal-closing" : ""}`} style={{ position: "fixed", inset: 0, background: "#16233Db3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`} style={{ width: "100%", maxWidth: 400, padding: 0, overflow: "hidden" }}>
+      <div
+        ref={dialogRef}
+        onClick={(e) => e.stopPropagation()}
+        className={`ks-card ks-modal-card ${closing ? "ks-modal-closing" : ""}`}
+        style={{ width: "100%", maxWidth: 400, padding: 0, overflow: "hidden" }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ks-auth-modal-title"
+        tabIndex={-1}
+      >
         <div style={{ padding: "24px 28px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -182,16 +197,37 @@ export function AuthModal({ mode, onClose, onSubmit }) {
           {/* #187 — tab strip hides itself on the forgot-password tab: it's
               reached from within "Log in", not a peer of it, and "Back to
               log in" below covers the way back out. */}
+          {/* #360 — was two <div onClick>: not focusable, no role/selected
+              state. Real button, role="tab" + aria-selected inside a
+              role="tablist", same fix as Trainer Studio/Learning screen. */}
           {tab !== "forgot" && (
-            <div style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)" }}>
-              <div className={`ks-tab ${tab === "login" ? "active" : ""}`} onClick={() => switchTab("login")}>Log in</div>
-              <div className={`ks-tab ${tab === "signup" ? "active" : ""}`} onClick={() => switchTab("signup")}>Create account</div>
+            <div role="tablist" style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--line)" }}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "login"}
+                className={`ks-tab ${tab === "login" ? "active" : ""}`}
+                onClick={() => switchTab("login")}
+                style={{ background: "none", border: "none", font: "inherit" }}
+              >
+                Log in
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "signup"}
+                className={`ks-tab ${tab === "signup" ? "active" : ""}`}
+                onClick={() => switchTab("signup")}
+                style={{ background: "none", border: "none", font: "inherit" }}
+              >
+                Create account
+              </button>
             </div>
           )}
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: "22px 28px 26px" }}>
-          <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 19, marginBottom: 4 }}>
+          <div id="ks-auth-modal-title" style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 19, marginBottom: 4 }}>
             {tab === "login" ? "Welcome back" : tab === "signup" ? "Start learning free" : "Reset your password"}
           </div>
           <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 20 }}>
@@ -217,17 +253,19 @@ export function AuthModal({ mode, onClose, onSubmit }) {
           {tab === "signup" && (
             <div style={field}>
               <label style={label}>Account type</label>
+              {/* #360 — was <span onClick>: not focusable/keyboard-operable.
+                  Real button + aria-pressed. */}
               <div style={{ display: "flex", gap: 8 }}>
                 {[["learner", "Learner"], ["trainer", "Trainer"]].map(([v, l]) => (
-                  <span key={v} onClick={() => update("role", v)}
+                  <button key={v} type="button" onClick={() => update("role", v)} aria-pressed={values.role === v}
                     style={{
-                      flex: 1, textAlign: "center", fontSize: 13, fontWeight: 600, padding: "9px 0", borderRadius: 8, cursor: "pointer",
+                      flex: 1, textAlign: "center", font: "inherit", fontSize: 13, fontWeight: 600, padding: "9px 0", borderRadius: 8, cursor: "pointer",
                       border: "1px solid var(--line)",
                       background: values.role === v ? "var(--ink)" : "var(--paper-2)",
                       color: values.role === v ? "var(--paper)" : "var(--slate)",
                     }}>
                     {l}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -247,7 +285,16 @@ export function AuthModal({ mode, onClose, onSubmit }) {
             <div style={{ ...field, marginBottom: 6 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <label style={label} htmlFor="ks-pw">Password</label>
-                {tab === "login" && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer", marginBottom: 6 }} onClick={() => switchTab("forgot")}>Forgot password?</span>}
+                {/* #360 — was <span onClick>: not a real link/button. */}
+                {tab === "login" && (
+                  <button
+                    type="button"
+                    onClick={() => switchTab("forgot")}
+                    style={{ font: "inherit", fontSize: 12, fontWeight: 600, color: "var(--gold-dark)", background: "none", border: "none", padding: 0, cursor: "pointer", marginBottom: 6 }}
+                  >
+                    Forgot password?
+                  </button>
+                )}
               </div>
               <div style={inputWrap}>
                 <Lock size={15} color="var(--slate-light)" style={{ position: "absolute", left: 13, top: 12 }} />

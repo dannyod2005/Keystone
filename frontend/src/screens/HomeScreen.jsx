@@ -32,6 +32,13 @@ export function HomeScreen({
   enrolledPathIds = [],
   leaderboardOptIn = false,
   onFetchLeaderboard,
+  // #367 — courses hasn't resolved yet (App.jsx's one-time fetch on
+  // mount). Used only to size a same-footprint skeleton for the two
+  // course-grid sections below while that's in flight, so they don't pop
+  // in at full height once the fetch resolves (a measured CLS finding).
+  // Not threaded anywhere else on this screen — Popular/Continue-learning
+  // etc. already render fine against an empty `courses`/`enrolled` array.
+  loading = false,
 }) {
   const firstName = loggedIn ? getFirstName(getDisplayName(user)) : null;
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
@@ -128,9 +135,12 @@ export function HomeScreen({
   }, [loggedIn, leaderboardOptIn, onFetchLeaderboard]);
   const myRank = leaderboardEntries?.find((e) => e.isSelf) ?? null;
 
+  // #360 — was <div onClick>: not focusable. No nested interactive
+  // elements in this card, so a plain <button> wrapping the whole thing
+  // is enough.
   function renderCourseCard(c) {
     return (
-      <div key={c.id} className="ks-card" onClick={() => (onOpenCourse ? onOpenCourse(c) : onGo("catalogue"))} style={{ padding: 18, cursor: "pointer" }}>
+      <button key={c.id} type="button" className="ks-card" onClick={() => (onOpenCourse ? onOpenCourse(c) : onGo("catalogue"))} style={{ padding: 18, width: "100%", textAlign: "left", font: "inherit", cursor: "pointer" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
           <CategoryDot color={c.color} />
           <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--slate-light)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{c.category}</span>
@@ -140,6 +150,28 @@ export function HomeScreen({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <Stars rating={c.rating} />
           <span style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.hours}h</span>
+        </div>
+      </button>
+    );
+  }
+
+  // #367 — same padding/line-count/shape as renderCourseCard above so a
+  // real card swapping in doesn't change the grid's height (the whole
+  // point of showing this at all). Purely decorative — aria-hidden so
+  // screen readers don't announce empty placeholder text.
+  function renderCourseCardSkeleton(i) {
+    return (
+      <div key={i} className="ks-card" aria-hidden="true" style={{ padding: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--line)" }} />
+          <div style={{ width: 64, height: 11, borderRadius: 4, background: "var(--line)" }} />
+        </div>
+        <div style={{ width: "85%", height: 15.5, borderRadius: 4, background: "var(--line)", marginBottom: 8 }} />
+        <div style={{ width: "100%", height: 13, borderRadius: 4, background: "var(--line)", marginBottom: 6 }} />
+        <div style={{ width: "70%", height: 13, borderRadius: 4, background: "var(--line)", marginBottom: 14 }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ width: 70, height: 12, borderRadius: 4, background: "var(--line)" }} />
+          <div style={{ width: 24, height: 12, borderRadius: 4, background: "var(--line)" }} />
         </div>
       </div>
     );
@@ -215,8 +247,10 @@ export function HomeScreen({
           </div>
           {loggedIn ? (
             inProgress.length > 0 ? (
+              // #360 — was <div onClick>: not focusable. No nested
+              // interactive elements, so a plain <button> is enough.
               inProgress.slice(0, 3).map((e) => (
-                <div key={e.id} onClick={() => onGo(`learning/${e.courseId}`)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, cursor: "pointer" }}>
+                <button key={e.id} type="button" onClick={() => onGo(`learning/${e.courseId}`)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, width: "100%", textAlign: "left", font: "inherit", background: "none", border: "none", cursor: "pointer" }}>
                   <KeystoneArch progress={e.progress} size={40} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600 }}>{e.course?.title ?? "Untitled course"}</div>
@@ -225,26 +259,28 @@ export function HomeScreen({
                     </div>
                   </div>
                   <ChevronRight size={15} color="var(--slate-light)" />
-                </div>
+                </button>
               ))
             ) : complete.length > 0 ? (
               // #290 — distinct from the "never started anything" case
               // below: this learner has completed courses (visible in the
               // stat row just above this card), so "you haven't started a
               // course yet" would be actively wrong, not just unhelpful.
+              // #360 — was <span onClick>: not a real link/button.
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "10px 8px" }}>
                 Nothing in progress right now —{" "}
-                <span onClick={() => onGo("catalogue")} style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>browse the catalogue</span> to start something new.
+                <button type="button" onClick={() => onGo("catalogue")} style={{ font: "inherit", color: "var(--gold-dark)", fontWeight: 600, background: "none", border: "none", padding: 0, cursor: "pointer" }}>browse the catalogue</button> to start something new.
               </div>
             ) : (
               <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "10px 8px" }}>
                 You haven't started a course yet —{" "}
-                <span onClick={() => onGo("catalogue")} style={{ color: "var(--gold-dark)", fontWeight: 600, cursor: "pointer" }}>browse the catalogue</span>.
+                <button type="button" onClick={() => onGo("catalogue")} style={{ font: "inherit", color: "var(--gold-dark)", fontWeight: 600, background: "none", border: "none", padding: 0, cursor: "pointer" }}>browse the catalogue</button>.
               </div>
             )
           ) : (
+            // #360 — was <div onClick>: not focusable.
             courses.slice(0, 3).map((c) => (
-              <div key={c.id} onClick={() => onGo("catalogue")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, cursor: "pointer" }}>
+              <button key={c.id} type="button" onClick={() => onGo("catalogue")} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderRadius: 10, width: "100%", textAlign: "left", font: "inherit", background: "none", border: "none", cursor: "pointer" }}>
                 {/* #108 — logged-out visitors have no real enrollment/progress,
                     so this used to fake a progress ring per course id (0.62 /
                     0.1 / 0.2). A neutral "browse this course" badge instead of
@@ -257,7 +293,7 @@ export function HomeScreen({
                   <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.provider}</div>
                 </div>
                 <ChevronRight size={15} color="var(--slate-light)" />
-              </div>
+              </button>
             ))
           )}
         </div>
@@ -272,8 +308,17 @@ export function HomeScreen({
           un-enrolled paths, not opted into the leaderboard) just sees
           fewer sections, never an empty placeholder. */}
       {loggedIn && (
-        <section style={{ maxWidth: 1160, margin: "0 auto", padding: "20px 28px 56px" }}>
-          {recommended.length > 0 && (
+        // #336 — shared .ks-page-scaled primitive instead of a hardcoded
+        // maxWidth, so this logged-in discovery section grows at the same
+        // large breakpoint as the rest of the app. The shared marketing
+        // hero above and the logged-out sections below are unaffected.
+        <section className="ks-page-scaled" style={{ "--ks-page-base": "1160px", padding: "20px 28px 56px" }}>
+          {/* #367 — goal is known synchronously (part of the already-loaded
+              profile), so a skeleton here only shows for a learner who's
+              actually going to get a real "Recommended for you" section
+              once `courses` resolves — not for one who'd never see this
+              section at all. */}
+          {(recommended.length > 0 || (loading && goal)) && (
             <div style={{ marginBottom: 32 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                 <Sparkles size={16} color="var(--gold-dark)" />
@@ -281,23 +326,24 @@ export function HomeScreen({
               </div>
               <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>Based on your {goal} goal.</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
-                {recommended.map(renderCourseCard)}
+                {loading ? [0, 1, 2].map(renderCourseCardSkeleton) : recommended.map(renderCourseCard)}
               </div>
             </div>
           )}
 
-          {trending.length > 0 && (
+          {(trending.length > 0 || loading) && (
             <div style={{ marginBottom: 32 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <TrendingUp size={16} color="var(--gold-dark)" />
                   <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>New on Keystone</span>
                 </div>
-                <span onClick={() => onGo("catalogue")} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" }}>View catalogue →</span>
+                {/* #360 — was <span onClick>: not a real link/button. */}
+                <button type="button" onClick={() => onGo("catalogue")} style={{ font: "inherit", fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", background: "none", border: "none", padding: 0, cursor: "pointer" }}>View catalogue →</button>
               </div>
               <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>Courses you haven't started yet.</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
-                {trending.map(renderCourseCard)}
+                {loading ? [0, 1, 2].map(renderCourseCardSkeleton) : trending.map(renderCourseCard)}
               </div>
             </div>
           )}
@@ -309,8 +355,16 @@ export function HomeScreen({
                 <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20 }}>Learning paths to explore</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 18 }}>
+                {/* #360 — was <div onClick>: not focusable. */}
                 {pathsToExplore.map((p) => (
-                  <div key={p.id} className="ks-card" onClick={() => onOpenPath && onOpenPath(p)} style={{ padding: 18, cursor: onOpenPath ? "pointer" : "default" }}>
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="ks-card"
+                    onClick={() => onOpenPath && onOpenPath(p)}
+                    disabled={!onOpenPath}
+                    style={{ padding: 18, width: "100%", textAlign: "left", font: "inherit", cursor: onOpenPath ? "pointer" : "default" }}
+                  >
                     <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 6 }}>{p.title}</div>
                     {p.description && (
                       <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, marginBottom: 14 }}>{p.description}</div>
@@ -318,7 +372,7 @@ export function HomeScreen({
                     <div style={{ fontSize: 12, color: "var(--slate-light)" }}>
                       {(p.courses ?? []).length} course{(p.courses ?? []).length === 1 ? "" : "s"}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -332,31 +386,34 @@ export function HomeScreen({
                   You're <b>#{myRank.rank}</b> of {leaderboardEntries.length} on the leaderboard this week.
                 </span>
               </div>
-              <span onClick={() => onGo("leaderboard")} style={{ fontSize: 13, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer", whiteSpace: "nowrap" }}>
+              {/* #360 — was <span onClick>: not a real link/button. */}
+              <button type="button" onClick={() => onGo("leaderboard")} style={{ font: "inherit", fontSize: 13, fontWeight: 600, color: "var(--gold-dark)", background: "none", border: "none", padding: 0, cursor: "pointer", whiteSpace: "nowrap" }}>
                 View leaderboard →
-              </span>
+              </button>
             </div>
           )}
         </section>
       )}
 
-      {/* #213 — "Popular this month", the testimonials band, and the
-          demo-copy footer are all logged-out marketing content: a
-          course-recommendation strip (redundant with Catalogue's own
-          "Recommended for you" from #190 once logged in), social-proof
-          testimonials aimed at someone deciding whether to sign up, and a
-          footer that literally says "clickable prototype for demo
-          purposes." None of that belongs in front of someone who already
-          has an account — it's also the main reason this page was always
-          taller/scrollable than Dashboard or Catalogue regardless of how
-          little content a logged-in visitor actually had. Logged-out
-          behavior is completely unchanged below. */}
+      {/* #213 — "Popular this month" and the testimonials band are both
+          logged-out marketing content: a course-recommendation strip
+          (redundant with Catalogue's own "Recommended for you" from #190
+          once logged in) and social-proof testimonials aimed at someone
+          deciding whether to sign up. Neither belongs in front of someone
+          who already has an account — it's also the main reason this page
+          was always taller/scrollable than Dashboard or Catalogue
+          regardless of how little content a logged-in visitor actually
+          had. Logged-out behavior is completely unchanged below.
+          (The old demo-copy footer that used to close out this section
+          is gone — #337 replaced it with the site-wide Footer rendered
+          from AppShell, which every page including this one now gets.) */}
       {!loggedIn && (
         <>
           <section style={{ maxWidth: 1160, margin: "0 auto", padding: "20px 28px 56px" }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
               <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 24, margin: 0 }}>Popular this month</h2>
-              <span onClick={() => onGo("catalogue")} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", cursor: "pointer" }}>View catalogue →</span>
+              {/* #360 — was <span onClick>: not a real link/button. */}
+              <button type="button" onClick={() => onGo("catalogue")} style={{ font: "inherit", fontSize: 13.5, fontWeight: 600, color: "var(--gold-dark)", background: "none", border: "none", padding: 0, cursor: "pointer" }}>View catalogue →</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
               {courses.slice(0, 3).map(renderCourseCard)}
@@ -372,16 +429,20 @@ export function HomeScreen({
                     <Stars rating={t.rating} />
                     <p style={{ color: "#DDE2EA", fontSize: 14, lineHeight: 1.55, margin: "12px 0 16px" }}>{t.quote}</p>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--paper)" }}>{t.name}</div>
-                    <div style={{ fontSize: 12, color: "#8B93A0" }}>{t.role}</div>
+                    {/* #366 — was #8B93A0: the same pre-#351 slate-light
+                        value that failed AA on --paper (~2.8:1), copy-
+                        pasted here as a hardcoded hex rather than the
+                        (already-fixed) --slate-light token, so #351 never
+                        touched it. It happens to land at ~4.47:1 on this
+                        card's #1E2C4A background — just under the 4.5:1
+                        minimum for 12px text. #9BA6B8 holds ~5.5:1 here,
+                        same comfortable-margin approach as #351. */}
+                    <div style={{ fontSize: 12, color: "#9BA6B8" }}>{t.role}</div>
                   </div>
                 ))}
               </div>
             </div>
           </section>
-
-          <footer style={{ padding: "28px", textAlign: "center", fontSize: 12.5, color: "var(--slate-light)" }}>
-            Keystone Learning — clickable prototype for demo purposes.
-          </footer>
         </>
       )}
     </div>

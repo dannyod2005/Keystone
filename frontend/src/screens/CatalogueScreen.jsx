@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Milestone, Bookmark } from "lucide-react";
+import { Search, Milestone, Bookmark, ChevronDown, ChevronUp } from "lucide-react";
 
 import { Stars, CategoryDot, PageHeader } from "../components/common/Primitives";
 import { MarketingHeader } from "../components/layout/MarketingHeader";
@@ -11,6 +11,13 @@ import { MarketingHeader } from "../components/layout/MarketingHeader";
 // slicing, so what makes the cut is at least a reasonable proxy for
 // "good," not just catalogue order.
 const RECOMMENDED_LIMIT = 6;
+
+// A batch of learning paths (e.g. 9) used to fill the whole viewport
+// above the fold, same underlying problem #344 fixed for the search bar
+// (it just moved search above this section instead of capping it). Same
+// limit/pattern as RECOMMENDED_LIMIT above — two grid rows by default,
+// with an explicit "Show all" toggle rather than silently hiding paths.
+const LEARNING_PATHS_LIMIT = 6;
 
 export function CatalogueScreen({
   loggedIn,
@@ -30,7 +37,10 @@ export function CatalogueScreen({
 }) {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [pathsExpanded, setPathsExpanded] = useState(false);
   const cats = ["All", "Technical", "Business", "Leadership"];
+
+  const visiblePaths = pathsExpanded ? learningPaths : learningPaths.slice(0, LEARNING_PATHS_LIMIT);
 
   const byCategory = filter === "All" ? courses : courses.filter((c) => c.category === filter);
   const query = search.trim().toLowerCase();
@@ -91,7 +101,22 @@ export function CatalogueScreen({
     // card renders exactly as it did before this feature.
     const isBookmarked = bookmarkedIds.includes(c.id);
     return (
-      <div key={c.id} className="ks-card" onClick={() => onOpenCourse(c)} style={{ padding: 18, cursor: "pointer", display: "flex", flexDirection: "column" }}>
+      <div key={c.id} className="ks-card" style={{ padding: 18, display: "flex", flexDirection: "column", position: "relative" }}>
+        {/* #360 — "stretched button": an invisible button covering the
+            whole card is the real Tab stop / Enter-Space target for
+            opening the course. Can't just make the whole card a <button>
+            because the bookmark toggle below is already its own real,
+            independently-focusable <button> — a button nested inside
+            another button is invalid HTML and screen readers handle it
+            inconsistently. zIndex keeps this under the bookmark button
+            (which gets its own zIndex bump below) so bookmarking still
+            works as its own independent click/Tab stop. */}
+        <button
+          type="button"
+          onClick={() => onOpenCourse(c)}
+          aria-label={`Open ${c.title}`}
+          style={{ position: "absolute", inset: 0, background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", zIndex: 1 }}
+        />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <CategoryDot color={c.color} />
@@ -101,19 +126,16 @@ export function CatalogueScreen({
             {isEnrolled && <span className="ks-badge" style={{ background: "var(--success-tint)", color: "var(--success)" }}>Enrolled</span>}
             {/* #258 — real button (was a bare clickable icon); aria-label
                 reflects current saved state, same reasoning as the
-                password-visibility toggles. */}
+                password-visibility toggles.
+                #360 — position/zIndex sit this above the card-cover button
+                above so it stays independently clickable/tabbable. */}
             {onToggleBookmark && (
               <button
                 type="button"
                 aria-label={isBookmarked ? "Remove bookmark" : "Save course"}
                 aria-pressed={isBookmarked}
-                onClick={(e) => {
-                  // Doesn't bubble to the card's own onClick — toggling a
-                  // bookmark should never also open the course detail modal.
-                  e.stopPropagation();
-                  onToggleBookmark(c, isBookmarked);
-                }}
-                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
+                onClick={() => onToggleBookmark(c, isBookmarked)}
+                style={{ position: "relative", zIndex: 2, background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", lineHeight: 0 }}
               >
                 <Bookmark
                   size={16}
@@ -136,14 +158,49 @@ export function CatalogueScreen({
     );
   }
 
+  // #367 — same padding/line-count/shape as renderCourseCard above, for the
+  // same reason as HomeScreen/DashboardScreen's skeletons: this page's
+  // whole content area (search bar aside) used to swap from a single
+  // "Loading catalogue…" line straight to a full grid once `courses`
+  // resolved — the single biggest layout shift Lighthouse could have
+  // flagged here, worse than Home's since the whole grid (not just two
+  // sections) was appearing at once. Six placeholders approximates a
+  // first screenful at the 3-column breakpoint without knowing the real
+  // (filtered) count ahead of time.
+  function renderCourseCardSkeleton(i) {
+    return (
+      <div key={i} className="ks-card" aria-hidden="true" style={{ padding: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--line)" }} />
+            <div style={{ width: 64, height: 11, borderRadius: 4, background: "var(--line)" }} />
+          </div>
+        </div>
+        <div style={{ width: "80%", height: 15.5, borderRadius: 4, background: "var(--line)", marginBottom: 6 }} />
+        <div style={{ width: "45%", height: 12.5, borderRadius: 4, background: "var(--line)", marginBottom: 12 }} />
+        <div style={{ width: "100%", height: 13, borderRadius: 4, background: "var(--line)", marginBottom: 6 }} />
+        <div style={{ width: "70%", height: 13, borderRadius: 4, background: "var(--line)", marginBottom: 16 }} />
+        <hr className="ks-hairline" style={{ margin: "0 0 12px" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ width: 70, height: 12, borderRadius: 4, background: "var(--line)" }} />
+          <div style={{ width: 50, height: 12, borderRadius: 4, background: "var(--line)" }} />
+        </div>
+      </div>
+    );
+  }
+
   // #224 — a slimmer card than renderCourseCard: no rating/hours/level
   // line since a path doesn't carry any of its own (those are per-course),
   // just how many courses it bundles plus whatever description the
   // trainer wrote.
   function renderPathCard(p) {
     const isEnrolled = enrolledPathIds.includes(p.id);
+    // #360 — was <div onClick>: not focusable. No nested interactive
+    // elements in this card (unlike renderCourseCard's bookmark button),
+    // so a plain <button> wrapping the whole thing is enough — no need
+    // for the stretched-button trick.
     return (
-      <div key={p.id} className="ks-card" onClick={() => onOpenPath(p)} style={{ padding: 18, cursor: "pointer", display: "flex", flexDirection: "column" }}>
+      <button key={p.id} type="button" className="ks-card" onClick={() => onOpenPath(p)} style={{ padding: 18, display: "flex", flexDirection: "column", width: "100%", textAlign: "left", font: "inherit", cursor: "pointer" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Milestone size={13} color="var(--gold-dark)" />
@@ -153,20 +210,28 @@ export function CatalogueScreen({
         </div>
         <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 4, lineHeight: 1.3 }}>{p.title}</div>
         <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, flex: 1 }}>{p.description}</div>
-      </div>
+      </button>
     );
   }
 
   return (
     <div className="ks-page-enter">
       {!loggedIn && <MarketingHeader onGo={onGo} onAuth={onAuth} />}
-      <div style={{ maxWidth: 1160, margin: "0 auto", padding: "36px 28px 60px" }}>
+      {/* #336 — shared .ks-page-scaled primitive (global.css) instead of a
+          hardcoded maxWidth, so this page grows at the same large
+          breakpoint as My Learning/Learning instead of staying fixed. */}
+      <div className="ks-page-scaled" style={{ "--ks-page-base": "1160px", padding: "36px 28px 60px" }}>
         {/* #213 — was an inline h1/p; now the shared PageHeader primitive
             (same 30px/font-display/600 title, same subtitle styling) so
             Dashboard/Discover can match this scale exactly instead of
-            each hand-rolling their own heading size. */}
+            each hand-rolling their own heading size.
+            #364 — title only kept when logged out: logged-in visitors
+            already see "Catalogue" in AppTopbar, so repeating it here is
+            pure duplication. Logged-out visitors get no topbar at all
+            (AppShell only renders it when loggedIn), so this is their
+            only page title — keep it for that case. */}
         <PageHeader
-          title="Course catalogue"
+          title={loggedIn ? undefined : "Course catalogue"}
           subtitle={
             loading
               ? "Loading courses…"
@@ -176,17 +241,59 @@ export function CatalogueScreen({
           }
         />
 
+        {/* #344 — was below the Learning paths/Recommended sections, so a
+            learner had to scroll past both (worse the more paths or
+            recommended courses existed) before reaching search. Moved to
+            directly under the page header so it's always the first thing
+            visible, regardless of how much renders below it.
+            #104 — stacked on mobile, side-by-side from md up; flex-
+            direction is the only breakpoint-dependent property here, so
+            it's the only thing on Tailwind classes.
+            #367 — pulled out of the `loading` branch below: search/filter
+            depend only on local state (`cats` is a static list), not on
+            `courses`, so there's no reason this couldn't render — and stay
+            interactive — immediately instead of waiting behind the same
+            gate as the course grid. */}
+        <div className="flex flex-col items-stretch md:flex-row md:items-center" style={{ gap: 18, marginBottom: 24 }}>
+          <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
+            <Search size={15} color="var(--slate-light)" style={{ position: "absolute", left: 13, top: 11 }} />
+            <input
+              className="ks-input"
+              placeholder="Search by title or provider"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {/* #360 — was <span onClick>: not focusable/keyboard-operable.
+              Real button + aria-pressed, same fix as Trainer Studio's
+              ownership filter. */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {cats.map((c) => (
+              <button key={c} type="button" onClick={() => setFilter(c)} aria-pressed={filter === c}
+                style={{ font: "inherit", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
+                  background: filter === c ? "var(--ink)" : "var(--paper-2)", color: filter === c ? "var(--paper)" : "var(--slate)",
+                  border: "1px solid var(--line)" }}>
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {loading ? (
-          <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
-            Loading catalogue…
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
+            {[0, 1, 2, 3, 4, 5].map(renderCourseCardSkeleton)}
           </div>
         ) : (
           <>
             {/* #224 — "Learning paths": its own section, entirely separate
-                from the course search/category filter below (a path isn't
+                from the course search/category filter above (a path isn't
                 a course, so it doesn't belong in that grid or its filter
                 predicate). Hidden while paths are still loading or there
-                simply aren't any yet. */}
+                simply aren't any yet.
+                #344 — capped at LEARNING_PATHS_LIMIT (same pattern as
+                Recommended below) with an explicit "Show all" toggle, so a
+                large batch of paths doesn't fill the whole viewport above
+                the course grid. */}
             {!pathsLoading && learningPaths.length > 0 && (
               <div style={{ marginBottom: 32 }}>
                 <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Learning paths</div>
@@ -194,8 +301,23 @@ export function CatalogueScreen({
                   Guided, multi-course sequences curated by trainers.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
-                  {learningPaths.map(renderPathCard)}
+                  {visiblePaths.map(renderPathCard)}
                 </div>
+                {learningPaths.length > LEARNING_PATHS_LIMIT && (
+                  <button
+                    type="button"
+                    onClick={() => setPathsExpanded((v) => !v)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 4, marginTop: 14,
+                      background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit",
+                      fontSize: 13, fontWeight: 600, color: "var(--gold-dark)",
+                    }}
+                  >
+                    {pathsExpanded
+                      ? <>Show fewer paths <ChevronUp size={14} /></>
+                      : <>Show all {learningPaths.length} paths <ChevronDown size={14} /></>}
+                  </button>
+                )}
                 <hr className="ks-hairline" style={{ margin: "28px 0 0" }} />
               </div>
             )}
@@ -215,31 +337,6 @@ export function CatalogueScreen({
                 <hr className="ks-hairline" style={{ margin: "28px 0 0" }} />
               </div>
             )}
-
-            {/* #104 — stacked on mobile, side-by-side from md up; flex-direction
-                is the only breakpoint-dependent property here, so it's the
-                only thing on Tailwind classes. */}
-            <div className="flex flex-col items-stretch md:flex-row md:items-center" style={{ gap: 18, marginBottom: 24 }}>
-              <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
-                <Search size={15} color="var(--slate-light)" style={{ position: "absolute", left: 13, top: 11 }} />
-                <input
-                  className="ks-input"
-                  placeholder="Search by title or provider"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {cats.map((c) => (
-                  <span key={c} onClick={() => setFilter(c)}
-                    style={{ fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
-                      background: filter === c ? "var(--ink)" : "var(--paper-2)", color: filter === c ? "var(--paper)" : "var(--slate)",
-                      border: "1px solid var(--line)" }}>
-                    {c}
-                  </span>
-                ))}
-              </div>
-            </div>
 
             {filtered.length === 0 ? (
               <div className="ks-card" style={{ padding: 24, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
