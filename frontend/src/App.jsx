@@ -17,15 +17,25 @@ import { GoalOnboardingModal } from "./components/modals/GoalOnboardingModal";
 import { RoleOnboardingModal } from "./components/modals/RoleOnboardingModal";
 import { ResetPasswordModal } from "./components/modals/ResetPasswordModal";
 
+// #367 — HomeScreen and DashboardScreen are the two most-landed-on routes
+// (logged-out "/" and the post-login default), so they stay eagerly
+// bundled to avoid adding a chunk-fetch delay to the most common first
+// paint. Everything else below is route-level code-split via React.lazy:
+// Lighthouse's "reduce unused JavaScript" finding on the Dashboard route
+// specifically flagged LearningScreen and TrainerCourseEditor (nested in
+// TrainerScreen) as shipped-but-unused bytes on that page — this is what
+// stops that. .then(m => ({ default: m.X })) is needed because these are
+// named exports, not default exports, and React.lazy only accepts a
+// loader that resolves to a `default` — no changes to the target files.
 import { HomeScreen } from "./screens/HomeScreen";
-import { PrivacyScreen } from "./screens/PrivacyScreen";
-import { AboutScreen } from "./screens/AboutScreen";
-import { CatalogueScreen } from "./screens/CatalogueScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
-import { LeaderboardScreen } from "./screens/LeaderboardScreen";
-import { SettingsScreen } from "./screens/SettingsScreen";
-import { LearningScreen } from "./screens/LearningScreen";
-import { TrainerScreen } from "./screens/trainer/TrainerScreen";
+const PrivacyScreen = React.lazy(() => import("./screens/PrivacyScreen").then((m) => ({ default: m.PrivacyScreen })));
+const AboutScreen = React.lazy(() => import("./screens/AboutScreen").then((m) => ({ default: m.AboutScreen })));
+const CatalogueScreen = React.lazy(() => import("./screens/CatalogueScreen").then((m) => ({ default: m.CatalogueScreen })));
+const LeaderboardScreen = React.lazy(() => import("./screens/LeaderboardScreen").then((m) => ({ default: m.LeaderboardScreen })));
+const SettingsScreen = React.lazy(() => import("./screens/SettingsScreen").then((m) => ({ default: m.SettingsScreen })));
+const LearningScreen = React.lazy(() => import("./screens/LearningScreen").then((m) => ({ default: m.LearningScreen })));
+const TrainerScreen = React.lazy(() => import("./screens/trainer/TrainerScreen").then((m) => ({ default: m.TrainerScreen })));
 
 /* ---------------------------------------------------------------
    KEYSTONE LEARNING — clickable prototype (now routed)
@@ -1778,6 +1788,17 @@ function KeystonePrototype() {
 
   return (
     <div className="ks-root">
+      {/* #367 — single Suspense boundary for every lazy-loaded route above;
+          a route-level fallback (rather than one per-screen) since only one
+          route is ever mounted at a time here. Kept visually consistent
+          with the authLoading state above it. */}
+      <React.Suspense
+        fallback={
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
+            <div style={{ fontSize: 13, color: "var(--slate-light)" }}>Loading…</div>
+          </div>
+        }
+      >
       <Routes>
         <Route
           path="/"
@@ -1805,6 +1826,7 @@ function KeystonePrototype() {
                   enrolledPathIds={pathEnrollments.map((pe) => pe.pathId)}
                   leaderboardOptIn={leaderboardOptIn}
                   onFetchLeaderboard={fetchLeaderboard}
+                  loading={coursesLoading}
                 />
               </AppShell>
             ) : (
@@ -2005,6 +2027,7 @@ function KeystonePrototype() {
         {/* Fallback: unknown paths go home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </React.Suspense>
 
       <CourseDetailModal
         course={selectedCourse}
