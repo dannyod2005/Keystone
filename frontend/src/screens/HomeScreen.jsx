@@ -32,6 +32,13 @@ export function HomeScreen({
   enrolledPathIds = [],
   leaderboardOptIn = false,
   onFetchLeaderboard,
+  // #367 — courses hasn't resolved yet (App.jsx's one-time fetch on
+  // mount). Used only to size a same-footprint skeleton for the two
+  // course-grid sections below while that's in flight, so they don't pop
+  // in at full height once the fetch resolves (a measured CLS finding).
+  // Not threaded anywhere else on this screen — Popular/Continue-learning
+  // etc. already render fine against an empty `courses`/`enrolled` array.
+  loading = false,
 }) {
   const firstName = loggedIn ? getFirstName(getDisplayName(user)) : null;
   const inProgress = enrolled.filter((e) => e.status === "in-progress");
@@ -145,6 +152,28 @@ export function HomeScreen({
           <span style={{ fontSize: 12, color: "var(--slate-light)" }}>{c.hours}h</span>
         </div>
       </button>
+    );
+  }
+
+  // #367 — same padding/line-count/shape as renderCourseCard above so a
+  // real card swapping in doesn't change the grid's height (the whole
+  // point of showing this at all). Purely decorative — aria-hidden so
+  // screen readers don't announce empty placeholder text.
+  function renderCourseCardSkeleton(i) {
+    return (
+      <div key={i} className="ks-card" aria-hidden="true" style={{ padding: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--line)" }} />
+          <div style={{ width: 64, height: 11, borderRadius: 4, background: "var(--line)" }} />
+        </div>
+        <div style={{ width: "85%", height: 15.5, borderRadius: 4, background: "var(--line)", marginBottom: 8 }} />
+        <div style={{ width: "100%", height: 13, borderRadius: 4, background: "var(--line)", marginBottom: 6 }} />
+        <div style={{ width: "70%", height: 13, borderRadius: 4, background: "var(--line)", marginBottom: 14 }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ width: 70, height: 12, borderRadius: 4, background: "var(--line)" }} />
+          <div style={{ width: 24, height: 12, borderRadius: 4, background: "var(--line)" }} />
+        </div>
+      </div>
     );
   }
 
@@ -284,7 +313,12 @@ export function HomeScreen({
         // large breakpoint as the rest of the app. The shared marketing
         // hero above and the logged-out sections below are unaffected.
         <section className="ks-page-scaled" style={{ "--ks-page-base": "1160px", padding: "20px 28px 56px" }}>
-          {recommended.length > 0 && (
+          {/* #367 — goal is known synchronously (part of the already-loaded
+              profile), so a skeleton here only shows for a learner who's
+              actually going to get a real "Recommended for you" section
+              once `courses` resolves — not for one who'd never see this
+              section at all. */}
+          {(recommended.length > 0 || (loading && goal)) && (
             <div style={{ marginBottom: 32 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                 <Sparkles size={16} color="var(--gold-dark)" />
@@ -292,12 +326,12 @@ export function HomeScreen({
               </div>
               <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>Based on your {goal} goal.</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
-                {recommended.map(renderCourseCard)}
+                {loading ? [0, 1, 2].map(renderCourseCardSkeleton) : recommended.map(renderCourseCard)}
               </div>
             </div>
           )}
 
-          {trending.length > 0 && (
+          {(trending.length > 0 || loading) && (
             <div style={{ marginBottom: 32 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -309,7 +343,7 @@ export function HomeScreen({
               </div>
               <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 14 }}>Courses you haven't started yet.</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
-                {trending.map(renderCourseCard)}
+                {loading ? [0, 1, 2].map(renderCourseCardSkeleton) : trending.map(renderCourseCard)}
               </div>
             </div>
           )}

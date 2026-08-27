@@ -158,6 +158,37 @@ export function CatalogueScreen({
     );
   }
 
+  // #367 — same padding/line-count/shape as renderCourseCard above, for the
+  // same reason as HomeScreen/DashboardScreen's skeletons: this page's
+  // whole content area (search bar aside) used to swap from a single
+  // "Loading catalogue…" line straight to a full grid once `courses`
+  // resolved — the single biggest layout shift Lighthouse could have
+  // flagged here, worse than Home's since the whole grid (not just two
+  // sections) was appearing at once. Six placeholders approximates a
+  // first screenful at the 3-column breakpoint without knowing the real
+  // (filtered) count ahead of time.
+  function renderCourseCardSkeleton(i) {
+    return (
+      <div key={i} className="ks-card" aria-hidden="true" style={{ padding: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--line)" }} />
+            <div style={{ width: 64, height: 11, borderRadius: 4, background: "var(--line)" }} />
+          </div>
+        </div>
+        <div style={{ width: "80%", height: 15.5, borderRadius: 4, background: "var(--line)", marginBottom: 6 }} />
+        <div style={{ width: "45%", height: 12.5, borderRadius: 4, background: "var(--line)", marginBottom: 12 }} />
+        <div style={{ width: "100%", height: 13, borderRadius: 4, background: "var(--line)", marginBottom: 6 }} />
+        <div style={{ width: "70%", height: 13, borderRadius: 4, background: "var(--line)", marginBottom: 16 }} />
+        <hr className="ks-hairline" style={{ margin: "0 0 12px" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ width: 70, height: 12, borderRadius: 4, background: "var(--line)" }} />
+          <div style={{ width: 50, height: 12, borderRadius: 4, background: "var(--line)" }} />
+        </div>
+      </div>
+    );
+  }
+
   // #224 — a slimmer card than renderCourseCard: no rating/hours/level
   // line since a path doesn't carry any of its own (those are per-course),
   // just how many courses it bundles plus whatever description the
@@ -210,45 +241,50 @@ export function CatalogueScreen({
           }
         />
 
+        {/* #344 — was below the Learning paths/Recommended sections, so a
+            learner had to scroll past both (worse the more paths or
+            recommended courses existed) before reaching search. Moved to
+            directly under the page header so it's always the first thing
+            visible, regardless of how much renders below it.
+            #104 — stacked on mobile, side-by-side from md up; flex-
+            direction is the only breakpoint-dependent property here, so
+            it's the only thing on Tailwind classes.
+            #367 — pulled out of the `loading` branch below: search/filter
+            depend only on local state (`cats` is a static list), not on
+            `courses`, so there's no reason this couldn't render — and stay
+            interactive — immediately instead of waiting behind the same
+            gate as the course grid. */}
+        <div className="flex flex-col items-stretch md:flex-row md:items-center" style={{ gap: 18, marginBottom: 24 }}>
+          <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
+            <Search size={15} color="var(--slate-light)" style={{ position: "absolute", left: 13, top: 11 }} />
+            <input
+              className="ks-input"
+              placeholder="Search by title or provider"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {/* #360 — was <span onClick>: not focusable/keyboard-operable.
+              Real button + aria-pressed, same fix as Trainer Studio's
+              ownership filter. */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {cats.map((c) => (
+              <button key={c} type="button" onClick={() => setFilter(c)} aria-pressed={filter === c}
+                style={{ font: "inherit", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
+                  background: filter === c ? "var(--ink)" : "var(--paper-2)", color: filter === c ? "var(--paper)" : "var(--slate)",
+                  border: "1px solid var(--line)" }}>
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {loading ? (
-          <div className="ks-card" style={{ padding: 40, fontSize: 13.5, color: "var(--slate-light)", textAlign: "center" }}>
-            Loading catalogue…
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3" style={{ gap: 18 }}>
+            {[0, 1, 2, 3, 4, 5].map(renderCourseCardSkeleton)}
           </div>
         ) : (
           <>
-            {/* #344 — was below the Learning paths/Recommended sections, so
-                a learner had to scroll past both (worse the more paths or
-                recommended courses existed) before reaching search. Moved
-                to directly under the page header so it's always the first
-                thing visible, regardless of how much renders below it.
-                #104 — stacked on mobile, side-by-side from md up;
-                flex-direction is the only breakpoint-dependent property
-                here, so it's the only thing on Tailwind classes. */}
-            <div className="flex flex-col items-stretch md:flex-row md:items-center" style={{ gap: 18, marginBottom: 24 }}>
-              <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
-                <Search size={15} color="var(--slate-light)" style={{ position: "absolute", left: 13, top: 11 }} />
-                <input
-                  className="ks-input"
-                  placeholder="Search by title or provider"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              {/* #360 — was <span onClick>: not focusable/keyboard-operable.
-                  Real button + aria-pressed, same fix as Trainer Studio's
-                  ownership filter. */}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {cats.map((c) => (
-                  <button key={c} type="button" onClick={() => setFilter(c)} aria-pressed={filter === c}
-                    style={{ font: "inherit", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 100, cursor: "pointer",
-                      background: filter === c ? "var(--ink)" : "var(--paper-2)", color: filter === c ? "var(--paper)" : "var(--slate)",
-                      border: "1px solid var(--line)" }}>
-                    {c}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* #224 — "Learning paths": its own section, entirely separate
                 from the course search/category filter above (a path isn't
                 a course, so it doesn't belong in that grid or its filter

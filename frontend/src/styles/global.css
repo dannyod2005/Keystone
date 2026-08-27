@@ -1,4 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
+/* #367 — this @import moved to a <link> in public/index.html so the
+   browser can discover and start the font request from the initial HTML
+   parse instead of only after fetching and parsing this stylesheet
+   (CSS @import is render-blocking and was adding a hop to Lighthouse's
+   critical request chain). Same font families/weights, just loaded from
+   the document <head> now. */
 
 /* #104 — Preflight is disabled (see tailwind.config.js), so this only
    adds Tailwind's utility classes (including responsive sm:/md:/lg:
